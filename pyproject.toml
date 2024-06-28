@@ -36,7 +36,7 @@ per-file-ignores = {"tests/*" = ["D100","D101","D102","D103","D104"]}
 max-complexity = 10
 
 [tool.codespell]
-skip = "build,lib,venv,icon.svg,.tox,.git,.mypy_cache,.ruff_cache,.coverage,configs"
+skip = ["build","lib","venv","icon.svg",".tox",".git",".mypy_cache",".ruff_cache",".coverage","configs"]
 
 [tool.pyright]
 include = ["src/**.py"]
