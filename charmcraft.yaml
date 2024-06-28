@@ -1,0 +1,41 @@
+# This file configures Charmcraft.
+# See https://juju.is/docs/sdk/charmcraft-config for guidance.
+
+name: gocert
+type: charm
+title: GoCert
+summary: charming certificate management made easy
+
+description: |
+  pretend this is a great description
+
+provides:
+  certificates:
+    interface: tls-certificates
+
+bases:
+  - build-on:
+    - name: ubuntu
+      channel: "22.04"
+    run-on:
+    - name: ubuntu
+      channel: "22.04"
+
+containers:
+  gocert:
+    resource: gocert-image
+
+resources:
+  gocert-image:
+    type: oci-image
+    description: OCI image for the 'GoCert' application
+    upstream-source: ghcr.io/canonical/gocert:0.0.2
+  
+parts:
+  charm:
+    build-packages:
+      - libffi-dev
+      - libssl-dev
+      - rustc
+      - cargo
+      - pkg-config
