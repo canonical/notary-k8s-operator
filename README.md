@@ -10,14 +10,12 @@ Manage your certificates in charms
 Charmhub package name: gocert
 More information: https://charmhub.io/gocert
 
-Describe your charm in one or two sentences.
+GoCert can help you manage your certificates, from simple all the way up to enterprise deployments.
 
 ## Other resources
 
-<!-- If your charm is documented somewhere else other than Charmhub, provide a link separately. -->
+- [Read more](https://github.com/canonical/gocert/blob/main/README.md)
 
-- [Read more](https://example.com)
-
-- [Contributing](CONTRIBUTING.md) <!-- or link to other contribution documentation -->
+- [Contributing](CONTRIBUTING.md)
 
 - See the [Juju SDK documentation](https://juju.is/docs/sdk) for more information about developing and improving charms.
