@@ -15,6 +15,14 @@ jobs:
         - name: Checkout
           uses: actions/checkout@v4
 
+        - name: Store Cert & PK secrets
+          env:
+            CERT: ${{ secrets.TEST_CERTIFICATE }}
+            PK: ${{ secrets.TEST_CERTIFICATE_PK }}
+          run: |
+            echo $CERT > src/configs/cert.pem
+            echo $PK > src/configs/key.pem
+
         - name: Setup operator environment
           uses: charmed-kubernetes/actions-operator@main
           with:
