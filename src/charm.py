@@ -45,7 +45,7 @@ class GocertCharm(ops.CharmBase):
             self.container.replan()
 
     def _on_collect_status(self, event: ops.CollectStatusEvent):
-        event.add_status(ops.ActiveStatus)
+        event.add_status(ops.ActiveStatus())
 
     def _on_new_certificate(self, event: CertificateCreationRequestEvent):
         csr = event.certificate_signing_request
