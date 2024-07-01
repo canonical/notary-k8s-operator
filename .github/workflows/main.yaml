@@ -1,4 +1,4 @@
-name: CI
+name: main
 
 on:
   pull_request:
@@ -9,37 +9,37 @@ on:
       - main
 
 jobs:
-  tox:
+  tests:
     runs-on: ubuntu-22.04
     steps:
-        - name: Checkout
+        - name: checkout
           uses: actions/checkout@v4
-        - name: Setup operator environment
+        - name: setup operator environment
           uses: charmed-kubernetes/actions-operator@main
           with:
             provider: microk8s
             channel: 1.29-strict/stable
             juju-channel: 3.4/stable
             lxd-channel: 5.20/stable
-        - name: Format
+        - name: format
           run: |
             tox -e format
-        - name: Lint
+        - name: lint
           run: |
             tox -e lint
-        - name: Static
+        - name: static
           run: |
             tox -e static
-        - name: Store Cert & PK secrets
+        - name: store cert & pk secrets
           env:
             CERT: ${{ secrets.TEST_CERTIFICATE }}
             PK: ${{ secrets.TEST_CERTIFICATE_PK }}
           run: |
             echo $CERT > src/configs/cert.pem
             echo $PK > src/configs/key.pem
-        - name: Unit Tests
+        - name: unit tests
           run: |
             tox -e unit
-        - name: Run integration tests
+        - name: integration tests
           run: |
             tox -e integration
