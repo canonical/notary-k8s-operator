@@ -1,7 +1,7 @@
 # This file configures Charmcraft.
 # See https://juju.is/docs/sdk/charmcraft-config for guidance.
 
-name: gocert
+name: gocert-k8s
 type: charm
 title: GoCert
 summary: charming certificate management made easy

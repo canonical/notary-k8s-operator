@@ -21,29 +21,31 @@ class GocertCharm(ops.CharmBase):
 
     def __init__(self, framework: ops.Framework):
         super().__init__(framework)
-
+        self.container = self.unit.get_container("gocert")
         self.tls = TLSCertificatesProvidesV3(self, relationship_name="certificates")
+
         framework.observe(self.on["gocert"].pebble_ready, self._on_gocert_pebble_ready)
         framework.observe(self.on["gocert"].pebble_custom_notice, self._on_gocert_notify)
         framework.observe(self.tls.on.certificate_creation_request, self._on_new_certificate)
         framework.observe(self.on.config_changed, self._on_config_changed)
+        framework.observe(self.on.collect_unit_status, self._on_collect_status)
 
     def _on_gocert_pebble_ready(self, event: ops.PebbleReadyEvent):
-        """Handle pebble-ready event."""
-        container = event.workload
         try:
-            container.pull("/etc/config/config.yaml")
+            self.container.pull("/etc/config/config.yaml")
         except ops.pebble.PathError:
             config_file = open("src/configs/config.yaml").read()
             cert_file = open("src/configs/cert.pem").read()
             key_file = open("src/configs/key.pem").read()
-            container.make_dir(path="/etc/config", make_parents=True)
-            container.push(path="/etc/config/config.yaml", source=config_file)
-            container.push(path="/etc/config/cert.pem", source=cert_file)
-            container.push(path="/etc/config/key.pem", source=key_file)
-            container.add_layer("gocert", self._pebble_layer, combine=True)
-            container.replan()
-        self.unit.status = ops.ActiveStatus()
+            self.container.make_dir(path="/etc/config", make_parents=True)
+            self.container.push(path="/etc/config/config.yaml", source=config_file)
+            self.container.push(path="/etc/config/cert.pem", source=cert_file)
+            self.container.push(path="/etc/config/key.pem", source=key_file)
+            self.container.add_layer("gocert", self._pebble_layer, combine=True)
+            self.container.replan()
+
+    def _on_collect_status(self, event: ops.CollectStatusEvent):
+        event.add_status(ops.ActiveStatus)
 
     def _on_new_certificate(self, event: CertificateCreationRequestEvent):
         csr = event.certificate_signing_request
