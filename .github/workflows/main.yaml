@@ -21,9 +21,15 @@ jobs:
             channel: 1.29-strict/stable
             juju-channel: 3.4/stable
             lxd-channel: 5.20/stable
-        - name: Run Tox
+        - name: Format
           run: |
-            tox
+            tox -e format
+        - name: Lint
+          run: |
+            tox -e lint
+        - name: Static
+          run: |
+            tox -e static
         - name: Store Cert & PK secrets
           env:
             CERT: ${{ secrets.TEST_CERTIFICATE }}
@@ -31,6 +37,9 @@ jobs:
           run: |
             echo $CERT > src/configs/cert.pem
             echo $PK > src/configs/key.pem
+        - name: Unit Tests
+          run: |
+            tox -e unit
         - name: Run integration tests
           run: |
             tox -e integration
