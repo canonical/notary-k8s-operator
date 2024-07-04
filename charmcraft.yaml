@@ -7,7 +7,9 @@ title: GoCert
 summary: charming certificate management made easy
 
 description: |
-  pretend this is a great description
+  GoCert is an application that helps you manage certificate requests and their associated certificates.
+  Charmed GoCert can help you automatically receive CSRs and distribute certificates to the applications
+  you've deployed in your model.
 
 provides:
   certificates:
