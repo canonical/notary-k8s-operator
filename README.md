@@ -10,7 +10,7 @@ Manage your certificates in charms
 Charmhub package name: gocert
 More information: https://charmhub.io/gocert
 
-GoCert can help you manage your certificates, from simple all the way up to enterprise deployments.
+GoCert helps you manage your certificates, from simple all the way up to enterprise deployments.
 
 ## Other resources
 
