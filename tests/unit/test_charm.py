@@ -5,13 +5,14 @@ import ops
 import ops.testing
 import pytest
 from charm import GocertCharm
+from scenario import Context, Event, State
 
 
 class TestCharm:
     @pytest.fixture(scope="function", autouse=True)
-    def setUp(self):
-        self.harness = ops.testing.Harness(GocertCharm)
+    def context(self):
+        yield Context(GocertCharm)
 
-    def test_start_charm(self):
-        self.harness.begin_with_initial_hooks()
-        assert self.harness.model.unit.status == ops.ActiveStatus()
+    def test_start_charm(self, context):
+        out = context.run(Event("start"), State())
+        assert out.unit_status == ops.ActiveStatus()

@@ -24,13 +24,14 @@ class GocertCharm(ops.CharmBase):
         self.container = self.unit.get_container("gocert")
         self.tls = TLSCertificatesProvidesV3(self, relationship_name="certificates")
 
-        framework.observe(self.on["gocert"].pebble_ready, self._on_gocert_pebble_ready)
+        self.port = 2111
+
+        framework.observe(self.on["gocert"].pebble_ready, self._install)
         framework.observe(self.on["gocert"].pebble_custom_notice, self._on_gocert_notify)
         framework.observe(self.tls.on.certificate_creation_request, self._on_new_certificate)
-        framework.observe(self.on.config_changed, self._on_config_changed)
         framework.observe(self.on.collect_unit_status, self._on_collect_status)
 
-    def _on_gocert_pebble_ready(self, event: ops.PebbleReadyEvent):
+    def _install(self, event: ops.PebbleReadyEvent):
         try:
             self.container.pull("/etc/config/config.yaml")
         except ops.pebble.PathError:
@@ -50,14 +51,16 @@ class GocertCharm(ops.CharmBase):
     def _on_new_certificate(self, event: CertificateCreationRequestEvent):
         csr = event.certificate_signing_request
         requests.post(
-            url="https://localhost:2111/api/v1/certificate_requests",
+            url=f"https://localhost:{self.port}/api/v1/certificate_requests",
             data=csr,
             headers={"Content-Type": "text/plain"},
             verify=False,
         )
 
     def _on_gocert_notify(self, event: ops.PebbleCustomNoticeEvent):
-        r = requests.get(url="https://localhost:2111/api/v1/certificate_requests", verify=False)
+        r = requests.get(
+            url=f"https://localhost:{self.port}/api/v1/certificate_requests", verify=False
+        )
         response_data = r.json()
         for relation in self.model.relations["certificates"]:
             unfulfilled_csrs = self.tls.get_outstanding_certificate_requests(
@@ -75,9 +78,6 @@ class GocertCharm(ops.CharmBase):
                             chain=[cert],
                             relation_id=relation.id,
                         )
-
-    def _on_config_changed(self, event: ops.ConfigChangedEvent):
-        self.unit.status = ops.ActiveStatus()
 
     @property
     def _pebble_layer(self) -> ops.pebble.LayerDict:
