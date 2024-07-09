@@ -6,7 +6,7 @@ summary: Certificate management made easy
 
 description: |
   GoCert helps you manage certificate requests and their associated certificates.
-  Charmed GoCert can help you automatically receive CSRs and distribute certificates to the applications
+  Charmed GoCert helps you automatically receive CSRs and distribute certificates to the applications
   you've deployed in your model.
 
 provides:
