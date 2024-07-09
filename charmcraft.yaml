@@ -2,7 +2,7 @@
 name: gocert-k8s
 type: charm
 title: GoCert
-summary: charming certificate management made easy
+summary: Certificate management made easy
 
 description: |
   GoCert is an application that helps you manage certificate requests and their associated certificates.
