@@ -1,5 +1,5 @@
-key_path:  "/etc/config/key.pem"
-cert_path: "/etc/config/cert.pem"
+key_path:  "/etc/config/private_key.pem"
+cert_path: "/etc/config/certificate.pem"
 db_path: "/etc/database/certs.db"
 port: 2111
 pebble_notifications: true

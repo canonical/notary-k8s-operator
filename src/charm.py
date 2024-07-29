@@ -5,6 +5,7 @@
 """Charm the application."""
 
 import logging
+from dataclasses import dataclass
 from typing import Tuple
 
 import ops
@@ -14,13 +15,32 @@ from charms.tls_certificates_interface.v3.tls_certificates import (
     TLSCertificatesProvidesV3,
     generate_ca,
     generate_certificate,
+    generate_csr,
     generate_private_key,
+    x509,
 )
 
 logger = logging.getLogger(__name__)
 
-DB_PATH = "/etc/database"
-CONFIG_PATH = "/etc/config"
+DB_MOUNT = "database"
+CONFIG_MOUNT = "config"
+CHARM_PATH = "/var/lib/juju/storage"
+WORKLOAD_PATH = "/etc"
+
+SELF_SIGNED_CA_COMMON_NAME = "GoCert Self Signed Root CA"
+SELF_SIGNED_CA_SECRET_LABEL = "Self Signed Root CA"
+
+
+@dataclass
+class CertificateSecret:
+    """The format of the secret for the certificate that will be used for https connections to GoCert."""
+
+    certificate: str
+    private_key: str
+
+    def to_dict(self) -> dict[str, str]:
+        """Return a dict version of the secret."""
+        return {"certificate": self.certificate, "private-key": self.private_key}
 
 
 class GocertCharm(ops.CharmBase):
@@ -28,23 +48,32 @@ class GocertCharm(ops.CharmBase):
 
     def __init__(self, framework: ops.Framework):
         super().__init__(framework)
+
         self.container = self.unit.get_container("gocert")
         self.tls = TLSCertificatesProvidesV3(self, relationship_name="certificates")
 
         self.port = 2111
 
-        framework.observe(self.on["gocert"].pebble_ready, self._install)
         framework.observe(self.on["gocert"].pebble_custom_notice, self._on_gocert_notify)
         framework.observe(self.tls.on.certificate_creation_request, self._on_new_certificate)
 
+        framework.observe(self.on["gocert"].pebble_ready, self.configure)
         framework.observe(self.on.config_storage_attached, self.configure)
         framework.observe(self.on.database_storage_attached, self.configure)
+        framework.observe(self.on.update_status, self.configure)
+        framework.observe(self.on.start, self.configure)
 
         framework.observe(self.on.collect_unit_status, self._on_collect_status)
 
     def configure(self, event: ops.EventBase):
         """Handle configuration events."""
-        self._reconfigure_workload()
+        self._configure_gocert_config_file()
+        self._configure_access_certificates()
+        self.container.add_layer("gocert", self._pebble_layer, combine=True)
+        try:
+            self.container.replan()
+        except ops.pebble.ChangeError:
+            pass
 
     def _install(self, event: ops.PebbleReadyEvent):
         try:
@@ -61,23 +90,27 @@ class GocertCharm(ops.CharmBase):
             self.container.replan()
 
     def _on_collect_status(self, event: ops.CollectStatusEvent):
-        # storage attached
-        # gocert status available
-        # gocert status initialized
+        if not self._storages_attached():
+            event.add_status(ops.BlockedStatus("storages not yet available"))
+        if not self._gocert_available():
+            event.add_status(ops.BlockedStatus("GoCert server not yet available"))
+        if not self._gocert_initialized():
+            event.add_status(ops.WaitingStatus("GoCert initialization required"))
         event.add_status(ops.ActiveStatus())
 
     def _on_new_certificate(self, event: CertificateCreationRequestEvent):
         csr = event.certificate_signing_request
         requests.post(
-            url=f"https://localhost:{self.port}/api/v1/certificate_requests",
+            url=f"https://{self._application_bind_address}:{self.port}/api/v1/certificate_requests",
             data=csr,
             headers={"Content-Type": "text/plain"},
-            verify=False,
+            verify=f"{CHARM_PATH}/{CONFIG_MOUNT}/0/ca.pem",
         )
 
     def _on_gocert_notify(self, event: ops.PebbleCustomNoticeEvent):
         r = requests.get(
-            url=f"https://localhost:{self.port}/api/v1/certificate_requests", verify=False
+            url=f"https://{self._application_bind_address}:{self.port}/api/v1/certificate_requests",
+            verify=f"{CHARM_PATH}/{CONFIG_MOUNT}/0/ca.pem",
         )
         response_data = r.json()
         for relation in self.model.relations["certificates"]:
@@ -97,13 +130,25 @@ class GocertCharm(ops.CharmBase):
                             relation_id=relation.id,
                         )
 
-    def _reconfigure_workload(self):
+    ## Configure Dependencies ##
+    def _configure_gocert_config_file(self):
+        """Push the config file."""
+        logger.info("[GoCert] Configuring the config file.")
+        try:
+            self.container.pull("/etc/config/config.yaml")
+            logger.info("[GoCert] Config file already created.")
+        except ops.pebble.PathError:
+            config_file = open("src/config/config.yaml").read()
+            self.container.make_dir(path="/etc/config", make_parents=True)
+            self.container.push(path="/etc/config/config.yaml", source=config_file)
+            logger.info("[GoCert] Config file created.")
+
+    def _configure_access_certificates(self):
         """Update the config files for gocert and replan if required."""
-        if not (certificate_secret := self._get_certificate_and_pk_from_secret()):
-            pass
-        cert, pk = certificate_secret
-        self.container.add_layer("gocert", self._pebble_layer, combine=True)
-        self.container.replan()
+        logger.info("[GoCert] Configuring certificates.")
+        if not self._self_signed_certificates_generated():
+            self._generate_self_signed_certificates()
+        logger.info("[GoCert] Certificates configured.")
 
     @property
     def _pebble_layer(self) -> ops.pebble.LayerDict:
@@ -121,18 +166,101 @@ class GocertCharm(ops.CharmBase):
             },
         }
 
+    @property
+    def _application_bind_address(self) -> str:
+        binding = self.model.get_binding("juju-info")
+        return binding.network.bind_address
+
     ## Status Checks ##
     def _storages_attached(self) -> bool:
         """Return if the storages are attached."""
-        return self.container.isdir("/etc/config") and self.container.isdir("/etc/database")
+        return self.container.exists("/etc/config") and self.container.exists("/etc/database")
 
     def _gocert_available(self) -> bool:
         """Return if the gocert server is reachable."""
         try:
-            req = requests.get(f"https://localhost:{self.port}/status")
-        except requests.RequestException:
+            req = requests.get(
+                f"https://{self._application_bind_address}:{self.port}/status",
+                verify=f"{CHARM_PATH}/{CONFIG_MOUNT}/0/ca.pem",
+            )
+        except (requests.RequestException, OSError) as e:
+            logger.warning(e)
+            return False
+        if req.status_code != 200:
             return False
         return True
+
+    def _gocert_initialized(self) -> bool:
+        """Return if gocert is initialized."""
+        try:
+            req = requests.get(
+                f"https://{self._application_bind_address}:{self.port}/status",
+                verify=f"{CHARM_PATH}/{CONFIG_MOUNT}/0/ca.pem",
+            )
+        except (requests.RequestException, OSError) as e:
+            logger.warning(e)
+            return False
+        if req.status_code != 200:
+            return False
+        body = req.json()
+        return body["initialized"]
+
+    ## Helpers ##
+    def _generate_self_signed_certificates(self) -> None:
+        """Generate self signed certificates and saves them to secrets and the charm."""
+        logger.info("[GoCert] Creating self signed certificates.")
+        if not self._application_bind_address:
+            logger.warning("[GoCert] unit IP not found.")
+            return
+        ca, ca_pk = self._get_ca_certificate()
+        pk = generate_private_key()
+        csr = generate_csr(
+            private_key=pk,
+            subject="GoCert Self Signed Certificate",
+            sans_ip=[self._application_bind_address],
+        )
+        cert = generate_certificate(csr=csr, ca=ca, ca_key=ca_pk)
+
+        self.container.push(f"{WORKLOAD_PATH}/{CONFIG_MOUNT}/ca.pem", ca)
+        self.container.push(f"{WORKLOAD_PATH}/{CONFIG_MOUNT}/certificate.pem", cert)
+        self.container.push(f"{WORKLOAD_PATH}/{CONFIG_MOUNT}/private_key.pem", pk)
+
+        logger.info("[GoCert] Created self signed certificates.")
+
+    def _self_signed_certificates_generated(self) -> bool:
+        """Check if the workload certificate was generated and was self signed."""
+        try:
+            existing_cert = self.container.pull(f"{WORKLOAD_PATH}/{CONFIG_MOUNT}/certificate.pem")
+        except ops.pebble.PathError:
+            return False
+        try:
+            certificate = x509.load_pem_x509_certificate(existing_cert.read().encode())
+            common_name = certificate.issuer.get_attributes_for_oid(x509.NameOID.COMMON_NAME)[0]
+        except (ValueError, TypeError):
+            return False
+        if common_name.value != SELF_SIGNED_CA_COMMON_NAME:
+            logger.warning(common_name.value)
+            logger.warning(SELF_SIGNED_CA_COMMON_NAME)
+            return False
+        return True
+
+    def _get_ca_certificate(self) -> Tuple[bytes, bytes]:
+        """Get the CA certificate from secrets. Create one if it doesn't exist."""
+        try:
+            secret = self.model.get_secret(label=SELF_SIGNED_CA_SECRET_LABEL)
+            secret_content = secret.get_content(refresh=True)
+            ca_cert = secret_content.get("certificate")
+            ca_pk = secret_content.get("private-key")
+            content = CertificateSecret(
+                certificate=ca_cert,
+                private_key=ca_pk,
+            )
+        except ops.SecretNotFoundError:
+            pk = generate_private_key()
+            ca = generate_ca(private_key=pk, subject=SELF_SIGNED_CA_COMMON_NAME)
+            content = CertificateSecret(certificate=ca.decode(), private_key=pk.decode())
+            self.app.add_secret(label=SELF_SIGNED_CA_SECRET_LABEL, content=content.to_dict())
+        return content.certificate.encode(), content.private_key.encode()
 
 
 if __name__ == "__main__":  # pragma: nocover
