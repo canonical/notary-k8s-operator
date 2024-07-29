@@ -24,6 +24,21 @@ bases:
 containers:
   gocert:
     resource: gocert-image
+    mounts:
+    - storage: config
+      location: /etc/config
+    - storage: database
+      location: /etc/database
+
+storage:
+  config:
+    type: filesystem
+    minimum-size: 5M
+  database:
+    type: filesystem
+    minimum-size: 1G
+
+
 
 resources:
   gocert-image:

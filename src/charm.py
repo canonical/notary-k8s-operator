@@ -5,15 +5,22 @@
 """Charm the application."""
 
 import logging
+from typing import Tuple
 
 import ops
 import requests
 from charms.tls_certificates_interface.v3.tls_certificates import (
     CertificateCreationRequestEvent,
     TLSCertificatesProvidesV3,
+    generate_ca,
+    generate_certificate,
+    generate_private_key,
 )
 
 logger = logging.getLogger(__name__)
+
+DB_PATH = "/etc/database"
+CONFIG_PATH = "/etc/config"
 
 
 class GocertCharm(ops.CharmBase):
@@ -29,7 +36,15 @@ class GocertCharm(ops.CharmBase):
         framework.observe(self.on["gocert"].pebble_ready, self._install)
         framework.observe(self.on["gocert"].pebble_custom_notice, self._on_gocert_notify)
         framework.observe(self.tls.on.certificate_creation_request, self._on_new_certificate)
+
+        framework.observe(self.on.config_storage_attached, self.configure)
+        framework.observe(self.on.database_storage_attached, self.configure)
+
         framework.observe(self.on.collect_unit_status, self._on_collect_status)
+
+    def configure(self, event: ops.EventBase):
+        """Handle configuration events."""
+        self._reconfigure_workload()
 
     def _install(self, event: ops.PebbleReadyEvent):
         try:
@@ -46,6 +61,9 @@ class GocertCharm(ops.CharmBase):
             self.container.replan()
 
     def _on_collect_status(self, event: ops.CollectStatusEvent):
+        # storage attached
+        # gocert status available
+        # gocert status initialized
         event.add_status(ops.ActiveStatus())
 
     def _on_new_certificate(self, event: CertificateCreationRequestEvent):
@@ -79,6 +97,14 @@ class GocertCharm(ops.CharmBase):
                             relation_id=relation.id,
                         )
 
+    def _reconfigure_workload(self):
+        """Update the config files for gocert and replan if required."""
+        if not (certificate_secret := self._get_certificate_and_pk_from_secret()):
+            pass
+        cert, pk = certificate_secret
+        self.container.add_layer("gocert", self._pebble_layer, combine=True)
+        self.container.replan()
+
     @property
     def _pebble_layer(self) -> ops.pebble.LayerDict:
         """Return a dictionary representing a Pebble layer."""
@@ -94,6 +120,19 @@ class GocertCharm(ops.CharmBase):
                 }
             },
         }
+
+    ## Status Checks ##
+    def _storages_attached(self) -> bool:
+        """Return if the storages are attached."""
+        return self.container.isdir("/etc/config") and self.container.isdir("/etc/database")
+
+    def _gocert_available(self) -> bool:
+        """Return if the gocert server is reachable."""
+        try:
+            req = requests.get(f"https://localhost:{self.port}/status")
+        except requests.RequestException:
+            return False
+        return True
 
 
 if __name__ == "__main__":  # pragma: nocover
