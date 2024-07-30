@@ -1,0 +1,5 @@
+ops ~= 2.5
+jsonschema
+cryptography >= 42.0.0
+requests
+rpds-py==0.18.0
