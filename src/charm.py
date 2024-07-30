@@ -57,13 +57,18 @@ class GocertCharm(ops.CharmBase):
         framework.observe(self.on["gocert"].pebble_custom_notice, self._on_gocert_notify)
         framework.observe(self.tls.on.certificate_creation_request, self._on_new_certificate)
 
-        framework.observe(self.on["gocert"].pebble_ready, self.configure)
-        framework.observe(self.on.config_storage_attached, self.configure)
-        framework.observe(self.on.database_storage_attached, self.configure)
-        framework.observe(self.on.update_status, self.configure)
-        framework.observe(self.on.start, self.configure)
-
         framework.observe(self.on.collect_unit_status, self._on_collect_status)
+
+        [
+            framework.observe(event, self.configure)
+            for event in [
+                self.on["gocert"].pebble_ready,
+                self.on.config_storage_attached,
+                self.on.database_storage_attached,
+                self.on.update_status,
+                self.on.start,
+            ]
+        ]
 
     def configure(self, event: ops.EventBase):
         """Handle configuration events."""
@@ -75,23 +80,11 @@ class GocertCharm(ops.CharmBase):
         except ops.pebble.ChangeError:
             pass
 
-    def _install(self, event: ops.PebbleReadyEvent):
-        try:
-            self.container.pull("/etc/config/config.yaml")
-        except ops.pebble.PathError:
-            config_file = open("src/configs/config.yaml").read()
-            cert_file = open("src/configs/cert.pem").read()
-            key_file = open("src/configs/key.pem").read()
-            self.container.make_dir(path="/etc/config", make_parents=True)
-            self.container.push(path="/etc/config/config.yaml", source=config_file)
-            self.container.push(path="/etc/config/cert.pem", source=cert_file)
-            self.container.push(path="/etc/config/key.pem", source=key_file)
-            self.container.add_layer("gocert", self._pebble_layer, combine=True)
-            self.container.replan()
-
     def _on_collect_status(self, event: ops.CollectStatusEvent):
         if not self._storages_attached():
             event.add_status(ops.BlockedStatus("storages not yet available"))
+        if not self._self_signed_certificates_generated():
+            event.add_status(ops.BlockedStatus("access certificates not yet created"))
         if not self._gocert_available():
             event.add_status(ops.BlockedStatus("GoCert server not yet available"))
         if not self._gocert_initialized():
@@ -150,6 +143,7 @@ class GocertCharm(ops.CharmBase):
             self._generate_self_signed_certificates()
         logger.info("[GoCert] Certificates configured.")
 
+    ## Properties ##
     @property
     def _pebble_layer(self) -> ops.pebble.LayerDict:
         """Return a dictionary representing a Pebble layer."""
@@ -167,9 +161,15 @@ class GocertCharm(ops.CharmBase):
         }
 
     @property
-    def _application_bind_address(self) -> str:
+    def _application_bind_address(self) -> str | None:
         binding = self.model.get_binding("juju-info")
-        return binding.network.bind_address
+        if not binding:
+            return None
+        if not binding.network:
+            return None
+        if not binding.network.bind_address:
+            return None
+        return str(binding.network.bind_address)
 
     ## Status Checks ##
     def _storages_attached(self) -> bool:
@@ -249,8 +249,8 @@ class GocertCharm(ops.CharmBase):
         try:
             secret = self.model.get_secret(label=SELF_SIGNED_CA_SECRET_LABEL)
             secret_content = secret.get_content(refresh=True)
-            ca_cert = secret_content.get("certificate")
-            ca_pk = secret_content.get("private-key")
+            ca_cert = secret_content.get("certificate", "")
+            ca_pk = secret_content.get("private-key", "")
             content = CertificateSecret(
                 certificate=ca_cert,
                 private_key=ca_pk,
