@@ -7,6 +7,7 @@
 import logging
 from dataclasses import dataclass
 from typing import Tuple
+from contextlib import suppress
 
 import ops
 import requests
@@ -58,13 +59,14 @@ class GocertCharm(ops.CharmBase):
         framework.observe(self.tls.on.certificate_creation_request, self._on_new_certificate)
 
         framework.observe(self.on.collect_unit_status, self._on_collect_status)
-
+        framework.observe(self.on.collect_app_status, self._on_collect_status)
         [
             framework.observe(event, self.configure)
             for event in [
                 self.on["gocert"].pebble_ready,
                 self.on.config_storage_attached,
                 self.on.database_storage_attached,
+                self.on.config_changed,
                 self.on.update_status,
                 self.on.start,
             ]
@@ -72,25 +74,35 @@ class GocertCharm(ops.CharmBase):
 
     def configure(self, event: ops.EventBase):
         """Handle configuration events."""
+        if not self.unit.is_leader():
+            return
+        if not self.container.can_connect():
+            return
         self._configure_gocert_config_file()
         self._configure_access_certificates()
         self.container.add_layer("gocert", self._pebble_layer, combine=True)
-        try:
+        with suppress(ops.pebble.ChangeError):
             self.container.replan()
-        except ops.pebble.ChangeError:
-            pass
 
     def _on_collect_status(self, event: ops.CollectStatusEvent):
+        if not self.unit.is_leader():
+            event.add_status(ops.WaitingStatus("multiple units not supported"))
+            return
         if not self.container.can_connect():
-            event.add_status(ops.BlockedStatus("container not yet connectable"))
+            event.add_status(ops.WaitingStatus("container not yet connectable"))
+            return
         if not self._storages_attached():
-            event.add_status(ops.BlockedStatus("storages not yet available"))
+            event.add_status(ops.WaitingStatus("storages not yet available"))
+            return
         if not self._self_signed_certificates_generated():
-            event.add_status(ops.BlockedStatus("access certificates not yet created"))
+            event.add_status(ops.WaitingStatus("certificates not yet created"))
+            return
         if not self._gocert_available():
-            event.add_status(ops.BlockedStatus("GoCert server not yet available"))
+            event.add_status(ops.WaitingStatus("GoCert server not yet available"))
+            return
         if not self._gocert_initialized():
-            event.add_status(ops.WaitingStatus("GoCert initialization required"))
+            event.add_status(ops.BlockedStatus("Please initialize GoCert"))
+            return
         event.add_status(ops.ActiveStatus())
 
     def _on_new_certificate(self, event: CertificateCreationRequestEvent):
@@ -176,7 +188,7 @@ class GocertCharm(ops.CharmBase):
     ## Status Checks ##
     def _storages_attached(self) -> bool:
         """Return if the storages are attached."""
-        return self.container.exists("/etc/config") and self.container.exists("/etc/database")
+        return self.model.storages.get("config") and self.model.storages.get("database")
 
     def _gocert_available(self) -> bool:
         """Return if the gocert server is reachable."""
@@ -185,8 +197,7 @@ class GocertCharm(ops.CharmBase):
                 f"https://{self._application_bind_address}:{self.port}/status",
                 verify=f"{CHARM_PATH}/{CONFIG_MOUNT}/0/ca.pem",
             )
-        except (requests.RequestException, OSError) as e:
-            logger.warning(e)
+        except (requests.RequestException, OSError):
             return False
         if req.status_code != 200:
             return False
@@ -199,13 +210,12 @@ class GocertCharm(ops.CharmBase):
                 f"https://{self._application_bind_address}:{self.port}/status",
                 verify=f"{CHARM_PATH}/{CONFIG_MOUNT}/0/ca.pem",
             )
-        except (requests.RequestException, OSError) as e:
-            logger.warning(e)
+        except (requests.RequestException, OSError):
             return False
         if req.status_code != 200:
             return False
         body = req.json()
-        return body["initialized"]
+        return body.get("initialized", False)
 
     ## Helpers ##
     def _generate_self_signed_certificates(self) -> None:
@@ -224,7 +234,9 @@ class GocertCharm(ops.CharmBase):
         cert = generate_certificate(csr=csr, ca=ca, ca_key=ca_pk)
 
         self.container.push(f"{WORKLOAD_PATH}/{CONFIG_MOUNT}/ca.pem", ca, make_dirs=True)
-        self.container.push(f"{WORKLOAD_PATH}/{CONFIG_MOUNT}/certificate.pem", cert, make_dirs=True)
+        self.container.push(
+            f"{WORKLOAD_PATH}/{CONFIG_MOUNT}/certificate.pem", cert, make_dirs=True
+        )
         self.container.push(f"{WORKLOAD_PATH}/{CONFIG_MOUNT}/private_key.pem", pk, make_dirs=True)
 
         logger.info("[GoCert] Created self signed certificates.")

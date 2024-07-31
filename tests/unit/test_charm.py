@@ -1,107 +1,134 @@
 # Copyright 2024 Canonical Ltd.
 # See LICENSE file for licensing details.
 
-from typing import Dict, List
-from unittest.mock import patch
+from typing import Dict, List, Literal
+from unittest.mock import Mock, patch
 
 import ops
 import ops.testing
 import pytest
+import requests
 from charm import GocertCharm
 from scenario import Container, Context, Event, Network, Relation, State, Storage
 
+# https://res.cloudinary.com/canonical/image/fetch/f_auto,q_auto/https://discourse-charmhub-io.s3.eu-west-2.amazonaws.com/original/2X/4/4ac42dc8a238a003c7d56fe282246ca102dd594f.png
+
 
 class TestCharm:
-    @pytest.fixture(scope="function", autouse=True)
+    @pytest.fixture(scope="function")
     def context(self):
         yield Context(GocertCharm)
 
     @pytest.mark.parametrize(
-        "storages_state",
+        "storages_state,storage_ready",
         [
-            pytest.param([{"name": "config"}], id="config-storage"),
-            pytest.param([{"name": "database"}], id="database-storage"),
-            pytest.param([{"name": "config"}, {"name": "database"}], id="both-storages"),
+            pytest.param([Storage(name="config")], False, id="config_storage"),
+            pytest.param([Storage(name="database")], False, id="database_storage"),
+            pytest.param(
+                [Storage(name="config"), Storage(name="database")], True, id="both_storages"
+            ),
         ],
     )
     @pytest.mark.parametrize(
-        "containers_state",
+        "containers_state,container_ready",
         [
-            pytest.param([{"name": "gocert", "can_connect": True}], id="container-can-connect"),
+            pytest.param(
+                [Container(name="gocert", can_connect=False)], False, id="container_cant_connect"
+            ),
+            pytest.param(
+                [Container(name="gocert", can_connect=True)], True, id="container_can_connect"
+            ),
         ],
     )
-    def test_storage_attached_event_happy_path(
-        self,
-        storages_state: List[Dict[str, str]],
-        containers_state: List[Dict[str, str]],
-        context: Context,
-    ):
-        state = State(
-            storage=[Storage(name=storage.get("name")) for storage in storages_state],
-            containers=[
-                Container(name=container.get("name"), can_connect=container.get("can_connect"))
-                for container in containers_state
-            ],
-            leader=True,
-        )
-        for storage in storages_state:
-            out = context.run(
-                Event(
-                    f"{storage.get('name')}-storage-attached",
-                    storage=Storage(name=storage.get("name")),
+    @pytest.mark.parametrize(
+        "networks_state,network_ready",
+        [
+            pytest.param({"juju-info": Network([], [], [])}, False, id="network_not_available"),
+            pytest.param({"juju-info": Network.default()}, True, id="network_available"),
+        ],
+    )
+    @pytest.mark.parametrize(
+        "gocert_state,gocert_ready",
+        [
+            pytest.param(
+                Mock(side_effect=requests.ConnectionError), "not-running", id="gocert_not_running"
+            ),
+            pytest.param(
+                Mock(
+                    **{"json.return_value": {"initialized": False}, "status_code": 200},
                 ),
-                state,
-            )
-            assert out.unit_status == ops.BlockedStatus("storages not yet available")
-
-    @pytest.mark.parametrize(
-        "storages_state",
-        [
-            pytest.param([{"name": "config"}], id="config-storage"),
-            pytest.param([{"name": "database"}], id="database-storage"),
-            pytest.param([{"name": "config"}, {"name": "database"}], id="both-storages"),
+                "running",
+                id="gocert_running",
+            ),
+            pytest.param(
+                Mock(
+                    **{"json.return_value": {"initialized": True}, "status_code": 200},
+                ),
+                "initialized",
+                id="gocert_initialized",
+            ),
         ],
     )
-    @pytest.mark.parametrize(
-        "containers_state",
-        [
-            # this SHOULD fail, it's ok
-            pytest.param([], id="no-containers"),
-            # this SHOULD NOT fail, it currently fails because your charm is missing a leader guard (there's a bug!)
-            pytest.param([{"name": "gocert", "can_connect": False}], id="container-cant-connect"),
-        ],
-    )
-    def test_storage_attached_event_errors(
+    def test_configure_handler(
         self,
-        storages_state: List[Dict[str, str]],
-        containers_state: List[Dict[str, str]],
+        storages_state: List[Storage],
+        storage_ready: bool,
+        containers_state: List[Container],
+        container_ready: bool,
+        networks_state: Dict[str, Network],
+        network_ready,
+        gocert_state: Mock,
+        gocert_ready: Literal["not-running", "running", "initialized"],
         context: Context,
     ):
         state = State(
-            storage=[Storage(name=storage.get("name")) for storage in storages_state],
-            containers=[
-                Container(name=container.get("name"), can_connect=container.get("can_connect"))
-                for container in containers_state
-            ],
+            storage=storages_state,
+            containers=containers_state,
+            networks=networks_state,
             leader=True,
         )
-        for storage in storages_state:
-            # todo catch specific exception
-            with pytest.raises(Exception):
-                out = context.run(
-                    Event(
-                        f"{storage.get('name')}-storage-attached",
-                        storage=Storage(name=storage.get("name")),
-                    ),
-                    state,
-                )
 
+        with patch("requests.get", return_value=gocert_state):
+            out = context.run(Event("config-changed"), state)
 
-    def test_config_changed_event(self, context: Context):
+        if not storage_ready and not container_ready:
+            assert out.unit_status == ops.WaitingStatus("container not yet connectable")
+        if storage_ready and not container_ready:
+            assert out.unit_status == ops.WaitingStatus("container not yet connectable")
+        if not storage_ready and container_ready:
+            assert out.unit_status == ops.WaitingStatus("storages not yet available")
+        if storage_ready and container_ready and not network_ready:
+            assert len(out.secrets) == 0
+            root = out.containers[0].get_filesystem(context)
+            assert (root / "etc/config/config.yaml").open("r")
+            assert not (root / "etc/config/certificate.pem").exists()
+            assert not ((root / "etc/config/private_key.pem").exists())
+            assert out.unit_status == ops.WaitingStatus("certificates not yet created")
+        if storage_ready and container_ready and network_ready and gocert_ready == "not-running":
+            assert out.secrets[0].contents.get(0).get("certificate")
+            assert out.secrets[0].contents.get(0).get("private-key")
+            root = out.containers[0].get_filesystem(context)
+            assert (root / "etc/config/config.yaml").open("r")
+            assert (
+                (root / "etc/config/certificate.pem")
+                .open("r")
+                .read()
+                .startswith("-----BEGIN CERTIFICATE-----")
+            )
+            assert (
+                (root / "etc/config/private_key.pem")
+                .open("r")
+                .read()
+                .startswith("-----BEGIN RSA PRIVATE KEY-----")
+            )
+            assert out.unit_status == ops.WaitingStatus("GoCert server not yet available")
+        if storage_ready and container_ready and network_ready and gocert_ready == "running":
+            assert out.unit_status == ops.BlockedStatus("Please initialize GoCert")
+        if storage_ready and container_ready and network_ready and gocert_ready == "initialized":
+            assert out.unit_status == ops.ActiveStatus()
+
+    def test_on_gocert_notify_handler():
         pass
 
-    def test_start_event(self, context: Context):
+    def test_on_certificate_request_handler():
         pass
-        # state = State()
-        # out = context.run(Event("start"), state)
-        # assert out.unit_status == ops.ActiveStatus()
