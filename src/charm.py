@@ -223,9 +223,9 @@ class GocertCharm(ops.CharmBase):
         )
         cert = generate_certificate(csr=csr, ca=ca, ca_key=ca_pk)
 
-        self.container.push(f"{WORKLOAD_PATH}/{CONFIG_MOUNT}/ca.pem", ca)
-        self.container.push(f"{WORKLOAD_PATH}/{CONFIG_MOUNT}/certificate.pem", cert)
-        self.container.push(f"{WORKLOAD_PATH}/{CONFIG_MOUNT}/private_key.pem", pk)
+        self.container.push(f"{WORKLOAD_PATH}/{CONFIG_MOUNT}/ca.pem", ca, make_dirs=True)
+        self.container.push(f"{WORKLOAD_PATH}/{CONFIG_MOUNT}/certificate.pem", cert, make_dirs=True)
+        self.container.push(f"{WORKLOAD_PATH}/{CONFIG_MOUNT}/private_key.pem", pk, make_dirs=True)
 
         logger.info("[GoCert] Created self signed certificates.")
 
