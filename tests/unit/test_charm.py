@@ -14,9 +14,7 @@ from scenario import Container, Context, Event, Network, Relation, State, Storag
 class TestCharm:
     @pytest.fixture(scope="function", autouse=True)
     def context(self):
-        # prevent the charm from writing to your host machine filesystem
-        with patch.object(GocertCharm, "_configure_gocert_config_file"):
-            yield Context(GocertCharm)
+        yield Context(GocertCharm)
 
     @pytest.mark.parametrize(
         "storages_state",
