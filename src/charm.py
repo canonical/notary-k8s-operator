@@ -81,6 +81,8 @@ class GocertCharm(ops.CharmBase):
             pass
 
     def _on_collect_status(self, event: ops.CollectStatusEvent):
+        if not self.container.can_connect():
+            event.add_status(ops.BlockedStatus("container not yet connectable"))
         if not self._storages_attached():
             event.add_status(ops.BlockedStatus("storages not yet available"))
         if not self._self_signed_certificates_generated():
