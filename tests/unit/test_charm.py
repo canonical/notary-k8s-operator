@@ -48,7 +48,7 @@ class TestCharm:
         ],
     )
     @pytest.mark.parametrize(
-        "gocert_state,gocert_ready",
+        "gocert_state,gocert_status",
         [
             pytest.param(
                 Mock(side_effect=requests.ConnectionError), "not-running", id="gocert_not_running"
@@ -76,9 +76,9 @@ class TestCharm:
         containers_state: List[Container],
         container_ready: bool,
         networks_state: Dict[str, Network],
-        network_ready,
+        network_ready: bool,
         gocert_state: Mock,
-        gocert_ready: Literal["not-running", "running", "initialized"],
+        gocert_status: Literal["not-running", "running", "initialized"],
         context: Context,
     ):
         state = State(
@@ -104,7 +104,7 @@ class TestCharm:
             assert not (root / "etc/config/certificate.pem").exists()
             assert not ((root / "etc/config/private_key.pem").exists())
             assert out.unit_status == ops.WaitingStatus("certificates not yet created")
-        if storage_ready and container_ready and network_ready and gocert_ready == "not-running":
+        if storage_ready and container_ready and network_ready and gocert_status == "not-running":
             assert out.secrets[0].contents.get(0).get("certificate")
             assert out.secrets[0].contents.get(0).get("private-key")
             root = out.containers[0].get_filesystem(context)
@@ -122,9 +122,9 @@ class TestCharm:
                 .startswith("-----BEGIN RSA PRIVATE KEY-----")
             )
             assert out.unit_status == ops.WaitingStatus("GoCert server not yet available")
-        if storage_ready and container_ready and network_ready and gocert_ready == "running":
+        if storage_ready and container_ready and network_ready and gocert_status == "running":
             assert out.unit_status == ops.BlockedStatus("Please initialize GoCert")
-        if storage_ready and container_ready and network_ready and gocert_ready == "initialized":
+        if storage_ready and container_ready and network_ready and gocert_status == "initialized":
             assert out.unit_status == ops.ActiveStatus()
 
     def test_on_gocert_notify_handler():
