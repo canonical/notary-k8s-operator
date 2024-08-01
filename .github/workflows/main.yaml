@@ -30,13 +30,6 @@ jobs:
         - name: static
           run: |
             tox -e static
-        - name: store cert & pk secrets
-          env:
-            CERT: ${{ secrets.TEST_CERTIFICATE }}
-            PK: ${{ secrets.TEST_CERTIFICATE_PK }}
-          run: |
-            echo $CERT > src/configs/cert.pem
-            echo $PK > src/configs/key.pem
         - name: unit tests
           run: |
             tox -e unit
