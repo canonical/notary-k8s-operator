@@ -5,15 +5,13 @@
 """Charm the application."""
 
 import logging
-from dataclasses import dataclass
-from typing import Tuple, List
 from contextlib import suppress
-from itertools import chain
+from dataclasses import dataclass
+from typing import List, Tuple
 
 import ops
 import requests
 from charms.tls_certificates_interface.v3.tls_certificates import (
-    CertificateCreationRequestEvent,
     TLSCertificatesProvidesV3,
     generate_ca,
     generate_certificate,
@@ -105,21 +103,23 @@ class GocertCharm(ops.CharmBase):
 
     def _on_gocert_notify(self, event: ops.PebbleCustomNoticeEvent):
         gocert_csrs = self._certificate_requests_table
+        assert gocert_csrs  # TODO: error checking
         databag_csrs = self.tls.get_requirer_csrs()
         for csr in databag_csrs:
-            if csr not in [row.get("CSR") for row in gocert_csrs]:
+            if csr.csr not in [row.get("CSR", "") for row in gocert_csrs]:
                 # TODO: error checking and signing up to gocert
                 requests.post(
                     url=f"https://{self._application_bind_address}:{self.port}/api/v1/certificate_requests",
-                    data=csr,
+                    data=csr.csr,
                     headers={"Content-Type": "text/plain", "Authorization": "Bearer {token}"},
                     verify=f"{CHARM_PATH}/{CONFIG_MOUNT}/0/ca.pem",
                 )
 
         gocert_csrs = self._certificate_requests_table
+        assert gocert_csrs  # TODO: error checking
         for row in gocert_csrs:
             gocert_csr = row.get("CSR")
-            gocert_cert = row.get("Certificate")
+            # gocert_cert = row.get("Certificate")
             for databag_csr in databag_csrs:
                 if not databag_csr != gocert_csr:
                     continue
@@ -199,7 +199,7 @@ class GocertCharm(ops.CharmBase):
     ## Status Checks ##
     def _storages_attached(self) -> bool:
         """Return if the storages are attached."""
-        return self.model.storages.get("config") and self.model.storages.get("database")
+        return self.model.storages.get("config") and self.model.storages.get("database")  # type: ignore
 
     def _gocert_available(self) -> bool:
         """Return if the gocert server is reachable."""
