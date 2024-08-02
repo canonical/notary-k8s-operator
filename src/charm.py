@@ -157,7 +157,9 @@ class GocertCharm(ops.CharmBase):
     ## Status Checks ##
     def _storages_attached(self) -> bool:
         """Return if the storages are attached."""
-        return self.model.storages.get("config") and self.model.storages.get("database")  # type: ignore
+        return bool(self.model.storages.get("config")) and bool(
+            self.model.storages.get("database")
+        )
 
     def _gocert_available(self) -> bool:
         """Return if the gocert server is reachable."""
