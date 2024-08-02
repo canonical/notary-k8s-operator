@@ -1,7 +1,6 @@
 # Copyright 2024 Canonical Ltd.
 # See LICENSE file for licensing details.
 
-from typing import Dict, List, Literal
 from unittest.mock import Mock, patch
 
 import ops
