@@ -101,30 +101,6 @@ class GocertCharm(ops.CharmBase):
             return
         event.add_status(ops.ActiveStatus())
 
-    def _on_gocert_notify(self, event: ops.PebbleCustomNoticeEvent):
-        gocert_csrs = self._certificate_requests_table
-        assert gocert_csrs  # TODO: error checking
-        databag_csrs = self.tls.get_requirer_csrs()
-        for csr in databag_csrs:
-            if csr.csr not in [row.get("CSR", "") for row in gocert_csrs]:
-                # TODO: error checking and signing up to gocert
-                requests.post(
-                    url=f"https://{self._application_bind_address}:{self.port}/api/v1/certificate_requests",
-                    data=csr.csr,
-                    headers={"Content-Type": "text/plain", "Authorization": "Bearer {token}"},
-                    verify=f"{CHARM_PATH}/{CONFIG_MOUNT}/0/ca.pem",
-                )
-
-        gocert_csrs = self._certificate_requests_table
-        assert gocert_csrs  # TODO: error checking
-        for row in gocert_csrs:
-            gocert_csr = row.get("CSR")
-            # gocert_cert = row.get("Certificate")
-            for databag_csr in databag_csrs:
-                if not databag_csr != gocert_csr:
-                    continue
-                # TODO: if certificate in gocert does not match our provider side, update
-
     ## Configure Dependencies ##
     def _configure_gocert_config_file(self):
         """Push the config file."""
@@ -157,6 +133,28 @@ class GocertCharm(ops.CharmBase):
         First get all of the CSR's and certificates from GoCert. Loop over all of the requirer CSR's,
         and make sure their certificate is up to date coming from GoCert.
         """
+        gocert_csrs = self._certificate_requests_table
+        assert gocert_csrs  # TODO: error checking
+        databag_csrs = self.tls.get_requirer_csrs()
+        for csr in databag_csrs:
+            if csr.csr not in [row.get("CSR", "") for row in gocert_csrs]:
+                # TODO: error checking and signing up to gocert
+                requests.post(
+                    url=f"https://{self._application_bind_address}:{self.port}/api/v1/certificate_requests",
+                    data=csr.csr,
+                    headers={"Content-Type": "text/plain", "Authorization": "Bearer {token}"},
+                    verify=f"{CHARM_PATH}/{CONFIG_MOUNT}/0/ca.pem",
+                )
+
+        gocert_csrs = self._certificate_requests_table
+        assert gocert_csrs  # TODO: error checking
+        for row in gocert_csrs:
+            gocert_csr = row.get("CSR")
+            # gocert_cert = row.get("Certificate")
+            for databag_csr in databag_csrs:
+                if not databag_csr != gocert_csr:
+                    continue
+                # TODO: if certificate in gocert does not match our provider side, update
 
     ## Properties ##
     @property
