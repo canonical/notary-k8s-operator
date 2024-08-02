@@ -7,7 +7,7 @@
 import logging
 from contextlib import suppress
 from dataclasses import dataclass
-from typing import List, Tuple
+from typing import Tuple
 
 import ops
 import requests
@@ -78,7 +78,6 @@ class GocertCharm(ops.CharmBase):
             return
         self._configure_gocert_config_file()
         self._configure_access_certificates()
-        self._configure_certificate_relations()
 
     def _on_collect_status(self, event: ops.CollectStatusEvent):
         if not self.unit.is_leader():
@@ -127,35 +126,6 @@ class GocertCharm(ops.CharmBase):
             with suppress(ops.pebble.ChangeError):
                 self.container.replan()
 
-    def _configure_certificate_relations(self):
-        """Process all of the certificate relations that are pending an action.
-
-        First get all of the CSR's and certificates from GoCert. Loop over all of the requirer CSR's,
-        and make sure their certificate is up to date coming from GoCert.
-        """
-        gocert_csrs = self._certificate_requests_table
-        assert gocert_csrs  # TODO: error checking
-        databag_csrs = self.tls.get_requirer_csrs()
-        for csr in databag_csrs:
-            if csr.csr not in [row.get("CSR", "") for row in gocert_csrs]:
-                # TODO: error checking and signing up to gocert
-                requests.post(
-                    url=f"https://{self._application_bind_address}:{self.port}/api/v1/certificate_requests",
-                    data=csr.csr,
-                    headers={"Content-Type": "text/plain", "Authorization": "Bearer {token}"},
-                    verify=f"{CHARM_PATH}/{CONFIG_MOUNT}/0/ca.pem",
-                )
-
-        gocert_csrs = self._certificate_requests_table
-        assert gocert_csrs  # TODO: error checking
-        for row in gocert_csrs:
-            gocert_csr = row.get("CSR")
-            # gocert_cert = row.get("Certificate")
-            for databag_csr in databag_csrs:
-                if not databag_csr != gocert_csr:
-                    continue
-                # TODO: if certificate in gocert does not match our provider side, update
-
     ## Properties ##
     @property
     def _pebble_layer(self) -> ops.pebble.LayerDict:
@@ -183,16 +153,6 @@ class GocertCharm(ops.CharmBase):
         if not binding.network.bind_address:
             return None
         return str(binding.network.bind_address)
-
-    @property
-    def _certificate_requests_table(self) -> List[dict[str, str]] | None:
-        # TODO: Error checking
-        r = requests.get(
-            url=f"https://{self._application_bind_address}:{self.port}/api/v1/certificate_requests",
-            verify=f"{CHARM_PATH}/{CONFIG_MOUNT}/0/ca.pem",
-        )
-        gocert_csrs = r.json()
-        return gocert_csrs
 
     ## Status Checks ##
     def _storages_attached(self) -> bool:
