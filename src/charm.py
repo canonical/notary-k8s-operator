@@ -221,8 +221,6 @@ class GocertCharm(ops.CharmBase):
         except (ValueError, TypeError):
             return False
         if common_name.value != SELF_SIGNED_CA_COMMON_NAME:
-            logger.warning(common_name.value)
-            logger.warning(SELF_SIGNED_CA_COMMON_NAME)
             return False
         return True
 
