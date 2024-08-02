@@ -103,7 +103,6 @@ class GocertCharm(ops.CharmBase):
     ## Configure Dependencies ##
     def _configure_gocert_config_file(self):
         """Push the config file."""
-        logger.info("Configuring the config file.")
         try:
             self.container.pull(f"{WORKLOAD_CONFIG_PATH}/config/config.yaml")
             logger.info("Config file already created.")
@@ -117,7 +116,6 @@ class GocertCharm(ops.CharmBase):
 
     def _configure_access_certificates(self):
         """Update the config files for gocert and replan if required."""
-        logger.info("Configuring certificates.")
         certificates_changed = False
         if not self._self_signed_certificates_generated():
             certificates_changed = True
@@ -193,7 +191,6 @@ class GocertCharm(ops.CharmBase):
     ## Helpers ##
     def _generate_self_signed_certificates(self) -> None:
         """Generate self signed certificates and saves them to secrets and the charm."""
-        logger.info("Creating self signed certificates.")
         if not self._application_bind_address:
             logger.warning("unit IP not found.")
             return
