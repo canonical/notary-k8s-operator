@@ -103,24 +103,24 @@ class GocertCharm(ops.CharmBase):
     ## Configure Dependencies ##
     def _configure_gocert_config_file(self):
         """Push the config file."""
-        logger.info("[GoCert] Configuring the config file.")
+        logger.info("Configuring the config file.")
         try:
             self.container.pull(f"{WORKLOAD_PATH}/config/config.yaml")
-            logger.info("[GoCert] Config file already created.")
+            logger.info("Config file already created.")
         except ops.pebble.PathError:
             config_file = open("src/config/config.yaml").read()
             self.container.make_dir(path=f"{WORKLOAD_PATH}/config", make_parents=True)
             self.container.push(path=f"{WORKLOAD_PATH}/config/config.yaml", source=config_file)
-            logger.info("[GoCert] Config file created.")
+            logger.info("Config file created.")
 
     def _configure_access_certificates(self):
         """Update the config files for gocert and replan if required."""
-        logger.info("[GoCert] Configuring certificates.")
+        logger.info("Configuring certificates.")
         certificates_changed = False
         if not self._self_signed_certificates_generated():
             certificates_changed = True
             self._generate_self_signed_certificates()
-        logger.info("[GoCert] Certificates configured.")
+        logger.info("Certificates configured.")
         if certificates_changed:
             self.container.add_layer("gocert", self._pebble_layer, combine=True)
             with suppress(ops.pebble.ChangeError):
@@ -189,9 +189,9 @@ class GocertCharm(ops.CharmBase):
     ## Helpers ##
     def _generate_self_signed_certificates(self) -> None:
         """Generate self signed certificates and saves them to secrets and the charm."""
-        logger.info("[GoCert] Creating self signed certificates.")
+        logger.info("Creating self signed certificates.")
         if not self._application_bind_address:
-            logger.warning("[GoCert] unit IP not found.")
+            logger.warning("unit IP not found.")
             return
         ca, ca_pk = self._get_ca_certificate()
         pk = generate_private_key()
@@ -207,7 +207,7 @@ class GocertCharm(ops.CharmBase):
             f"{WORKLOAD_PATH}/{CONFIG_MOUNT}/certificate.pem", cert, make_dirs=True
         )
         self.container.push(f"{WORKLOAD_PATH}/{CONFIG_MOUNT}/private_key.pem", pk, make_dirs=True)
-        logger.info("[GoCert] Created self signed certificates.")
+        logger.info("Created self signed certificates.")
 
     def _self_signed_certificates_generated(self) -> bool:
         """Check if the workload certificate was generated and was self signed."""
