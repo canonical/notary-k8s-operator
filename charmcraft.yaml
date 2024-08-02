@@ -26,7 +26,7 @@ containers:
     resource: gocert-image
     mounts:
     - storage: config
-      location: /var/lib/gocert/config
+      location: /etc/gocert/config
     - storage: database
       location: /var/lib/gocert/database
 

@@ -25,7 +25,7 @@ logger = logging.getLogger(__name__)
 DB_MOUNT = "database"
 CONFIG_MOUNT = "config"
 CHARM_PATH = "/var/lib/juju/storage"
-WORKLOAD_PATH = "/var/lib/gocert"
+WORKLOAD_CONFIG_PATH = "/etc/gocert"
 
 SELF_SIGNED_CA_COMMON_NAME = "GoCert Self Signed Root CA"
 SELF_SIGNED_CA_SECRET_LABEL = "Self Signed Root CA"
@@ -105,12 +105,14 @@ class GocertCharm(ops.CharmBase):
         """Push the config file."""
         logger.info("Configuring the config file.")
         try:
-            self.container.pull(f"{WORKLOAD_PATH}/config/config.yaml")
+            self.container.pull(f"{WORKLOAD_CONFIG_PATH}/config/config.yaml")
             logger.info("Config file already created.")
         except ops.pebble.PathError:
             config_file = open("src/config/config.yaml").read()
-            self.container.make_dir(path=f"{WORKLOAD_PATH}/config", make_parents=True)
-            self.container.push(path=f"{WORKLOAD_PATH}/config/config.yaml", source=config_file)
+            self.container.make_dir(path=f"{WORKLOAD_CONFIG_PATH}/config", make_parents=True)
+            self.container.push(
+                path=f"{WORKLOAD_CONFIG_PATH}/config/config.yaml", source=config_file
+            )
             logger.info("Config file created.")
 
     def _configure_access_certificates(self):
@@ -137,7 +139,7 @@ class GocertCharm(ops.CharmBase):
                 "gocert": {
                     "override": "replace",
                     "summary": "gocert",
-                    "command": f"gocert -config {WORKLOAD_PATH}/config/config.yaml",
+                    "command": f"gocert -config {WORKLOAD_CONFIG_PATH}/config/config.yaml",
                     "startup": "enabled",
                 }
             },
@@ -204,17 +206,21 @@ class GocertCharm(ops.CharmBase):
         )
         cert = generate_certificate(csr=csr, ca=ca, ca_key=ca_pk)
 
-        self.container.push(f"{WORKLOAD_PATH}/{CONFIG_MOUNT}/ca.pem", ca, make_dirs=True)
+        self.container.push(f"{WORKLOAD_CONFIG_PATH}/{CONFIG_MOUNT}/ca.pem", ca, make_dirs=True)
         self.container.push(
-            f"{WORKLOAD_PATH}/{CONFIG_MOUNT}/certificate.pem", cert, make_dirs=True
+            f"{WORKLOAD_CONFIG_PATH}/{CONFIG_MOUNT}/certificate.pem", cert, make_dirs=True
         )
-        self.container.push(f"{WORKLOAD_PATH}/{CONFIG_MOUNT}/private_key.pem", pk, make_dirs=True)
+        self.container.push(
+            f"{WORKLOAD_CONFIG_PATH}/{CONFIG_MOUNT}/private_key.pem", pk, make_dirs=True
+        )
         logger.info("Created self signed certificates.")
 
     def _self_signed_certificates_generated(self) -> bool:
         """Check if the workload certificate was generated and was self signed."""
         try:
-            existing_cert = self.container.pull(f"{WORKLOAD_PATH}/{CONFIG_MOUNT}/certificate.pem")
+            existing_cert = self.container.pull(
+                f"{WORKLOAD_CONFIG_PATH}/{CONFIG_MOUNT}/certificate.pem"
+            )
         except ops.pebble.PathError:
             return False
         try:
