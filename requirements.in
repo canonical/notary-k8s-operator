@@ -1,0 +1,5 @@
+ops
+jsonschema
+cryptography
+requests
+rpds-py==0.18.0
