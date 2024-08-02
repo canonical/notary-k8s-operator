@@ -10,8 +10,6 @@ import requests
 from charm import GocertCharm
 from scenario import Container, Context, Event, Network, State, Storage
 
-# https://res.cloudinary.com/canonical/image/fetch/f_auto,q_auto/https://discourse-charmhub-io.s3.eu-west-2.amazonaws.com/original/2X/4/4ac42dc8a238a003c7d56fe282246ca102dd594f.png
-
 
 class TestCharm:
     @pytest.fixture(scope="function")
