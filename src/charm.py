@@ -195,7 +195,7 @@ class GocertCharm(ops.CharmBase):
         if not self._application_bind_address:
             logger.warning("unit IP not found.")
             return
-        ca, ca_pk = self._get_ca_certificate()
+        ca, ca_pk = self._get_or_create_ca_certificate()
         pk = generate_private_key()
         csr = generate_csr(
             private_key=pk,
@@ -226,7 +226,7 @@ class GocertCharm(ops.CharmBase):
             return False
         return True
 
-    def _get_ca_certificate(self) -> Tuple[bytes, bytes]:
+    def _get_or_create_ca_certificate(self) -> Tuple[bytes, bytes]:
         """Get the CA certificate from secrets. Create one if it doesn't exist."""
         try:
             secret = self.model.get_secret(label=SELF_SIGNED_CA_SECRET_LABEL)
