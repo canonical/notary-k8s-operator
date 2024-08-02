@@ -25,7 +25,7 @@ logger = logging.getLogger(__name__)
 DB_MOUNT = "database"
 CONFIG_MOUNT = "config"
 CHARM_PATH = "/var/lib/juju/storage"
-WORKLOAD_PATH = "/etc"
+WORKLOAD_PATH = "/var/lib/gocert"
 
 SELF_SIGNED_CA_COMMON_NAME = "GoCert Self Signed Root CA"
 SELF_SIGNED_CA_SECRET_LABEL = "Self Signed Root CA"
@@ -105,12 +105,12 @@ class GocertCharm(ops.CharmBase):
         """Push the config file."""
         logger.info("[GoCert] Configuring the config file.")
         try:
-            self.container.pull("/etc/config/config.yaml")
+            self.container.pull(f"{WORKLOAD_PATH}/config/config.yaml")
             logger.info("[GoCert] Config file already created.")
         except ops.pebble.PathError:
             config_file = open("src/config/config.yaml").read()
-            self.container.make_dir(path="/etc/config", make_parents=True)
-            self.container.push(path="/etc/config/config.yaml", source=config_file)
+            self.container.make_dir(path=f"{WORKLOAD_PATH}/config", make_parents=True)
+            self.container.push(path=f"{WORKLOAD_PATH}/config/config.yaml", source=config_file)
             logger.info("[GoCert] Config file created.")
 
     def _configure_access_certificates(self):
@@ -137,7 +137,7 @@ class GocertCharm(ops.CharmBase):
                 "gocert": {
                     "override": "replace",
                     "summary": "gocert",
-                    "command": "gocert -config /etc/config/config.yaml",
+                    "command": f"gocert -config {WORKLOAD_PATH}/config/config.yaml",
                     "startup": "enabled",
                 }
             },

@@ -100,23 +100,23 @@ class TestCharm:
         if storage_ready and container_ready and not network_ready:
             assert len(out.secrets) == 0
             root = out.containers[0].get_filesystem(context)
-            assert (root / "etc/config/config.yaml").open("r")
-            assert not (root / "etc/config/certificate.pem").exists()
-            assert not ((root / "etc/config/private_key.pem").exists())
+            assert (root / "var/lib/gocert/config/config.yaml").open("r")
+            assert not (root / "var/lib/gocert/config/certificate.pem").exists()
+            assert not ((root / "var/lib/gocert/config/private_key.pem").exists())
             assert out.unit_status == ops.WaitingStatus("certificates not yet created")
         if storage_ready and container_ready and network_ready and gocert_status == "not-running":
             assert out.secrets[0].contents.get(0).get("certificate")
             assert out.secrets[0].contents.get(0).get("private-key")
             root = out.containers[0].get_filesystem(context)
-            assert (root / "etc/config/config.yaml").open("r")
+            assert (root / "var/lib/gocert/config/config.yaml").open("r")
             assert (
-                (root / "etc/config/certificate.pem")
+                (root / "var/lib/gocert/config/certificate.pem")
                 .open("r")
                 .read()
                 .startswith("-----BEGIN CERTIFICATE-----")
             )
             assert (
-                (root / "etc/config/private_key.pem")
+                (root / "var/lib/gocert/config/private_key.pem")
                 .open("r")
                 .read()
                 .startswith("-----BEGIN RSA PRIVATE KEY-----")
