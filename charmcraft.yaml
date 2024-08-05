@@ -24,6 +24,21 @@ bases:
 containers:
   gocert:
     resource: gocert-image
+    mounts:
+    - storage: config
+      location: /var/lib/gocert/config
+    - storage: database
+      location: /var/lib/gocert/database
+
+storage:
+  config:
+    type: filesystem
+    minimum-size: 5M
+  database:
+    type: filesystem
+    minimum-size: 1G
+
+
 
 resources:
   gocert-image:
