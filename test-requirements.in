@@ -1,0 +1,8 @@
+codespell
+coverage[toml]
+juju
+ops-scenario
+pyright
+pytest
+pytest-operator
+ruff
