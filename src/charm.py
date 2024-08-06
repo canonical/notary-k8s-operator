@@ -55,7 +55,7 @@ class GocertCharm(ops.CharmBase):
         self.tls = TLSCertificatesProvidesV3(self, relationship_name="certificates")
 
         self.client = GoCert(
-            f"{self._application_bind_address}:{self.port}",
+            f"https://{self._application_bind_address}:{self.port}",
             f"{CHARM_PATH}/{CONFIG_MOUNT}/0/ca.pem",
         )
 

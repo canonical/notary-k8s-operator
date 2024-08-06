@@ -13,15 +13,15 @@ class GoCertClientError(Exception):
 class GoCert:
     """Class to interact with GoCert."""
 
-    def __init__(self, host: str, ca_path: str) -> None:
-        self.host = host
+    def __init__(self, url: str, ca_path: str) -> None:
+        self.url = url
         self.ca_path = ca_path
 
     def is_api_available(self) -> bool:
         """Return if the GoCert server is reachable."""
         try:
             req = requests.get(
-                f"https://{self.host}/status",
+                f"{self.url}/status",
                 verify=self.ca_path if self.ca_path else None,
             )
         except (requests.RequestException, OSError):
@@ -34,7 +34,7 @@ class GoCert:
         """Return if the GoCert server is initialized."""
         try:
             req = requests.get(
-                f"https://{self.host}/status",
+                f"{self.url}/status",
                 verify=self.ca_path if self.ca_path else None,
             )
         except (requests.RequestException, OSError):
