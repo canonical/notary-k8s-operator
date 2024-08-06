@@ -1,13 +1,16 @@
 # Copyright 2024 Canonical Ltd.
 # See LICENSE file for licensing details.
 
+import os
 from unittest.mock import Mock, patch
 
 import ops
 import ops.testing
 import pytest
 from charm import GocertCharm
-from scenario import Container, Context, Event, Network, State, Storage
+from scenario import Container, Context, Event, Mount, Network, State, Storage
+
+TESTING_MOUNT_PATH = os.path.dirname(os.path.realpath(__file__)) + "/test_mounts/"
 
 
 class TestCharm:
@@ -1385,3 +1388,25 @@ class TestCharm:
         ):
             out = context.run(Event("collect-unit-status"), state)
         assert out.unit_status == ops.WaitingStatus("certificates not yet created")
+
+    def test_given_gocert_available_and_initialized_when_collect_status_then_status_is_active(
+        self, context
+    ):
+        config_mount = Mount("/etc/gocert/config", f"{TESTING_MOUNT_PATH}/self_signed_certs")
+        state = State(
+            storage=[Storage(name="config"), Storage(name="database")],
+            containers=[
+                Container(name="gocert", can_connect=True, mounts={"config": config_mount})
+            ],
+            networks={"juju-info": Network.default()},
+            leader=True,
+        )
+
+        with patch(
+            "gocert.GoCert.__new__",
+            return_value=Mock(
+                **{"is_api_available.return_value": True, "is_initialized.return_value": True},
+            ),
+        ):
+            out = context.run(Event("collect-unit-status"), state)
+        assert out.unit_status == ops.ActiveStatus()
