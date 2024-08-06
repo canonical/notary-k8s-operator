@@ -6,7 +6,6 @@ from unittest.mock import Mock, patch
 import ops
 import ops.testing
 import pytest
-import requests
 from charm import GocertCharm
 from scenario import Container, Context, Event, Network, State, Storage
 
@@ -124,11 +123,12 @@ class TestCharm:
             ),
         ):
             out = context.run(Event("config-changed"), state)
-        assert len(out.secrets) == 0
         root = out.containers[0].get_filesystem(context)
         assert (root / "etc/gocert/config/config.yaml").open("r")
         assert not (root / "etc/gocert/config/certificate.pem").exists()
         assert not ((root / "etc/gocert/config/private_key.pem").exists())
+        assert len(out.secrets) == 1
+        assert out.secrets[0].label == "GoCert Login Details"
 
     def test_given_only_config_storage_container_cant_connect_network_available_gocert_not_running_when_configure_then_no_error_raised(
         self, context
@@ -361,11 +361,12 @@ class TestCharm:
             ),
         ):
             out = context.run(Event("config-changed"), state)
-        assert len(out.secrets) == 0
         root = out.containers[0].get_filesystem(context)
         assert (root / "etc/gocert/config/config.yaml").open("r")
         assert not (root / "etc/gocert/config/certificate.pem").exists()
         assert not ((root / "etc/gocert/config/private_key.pem").exists())
+        assert len(out.secrets) == 1
+        assert out.secrets[0].label == "GoCert Login Details"
 
     def test_given_only_config_storage_container_cant_connect_network_available_gocert_running_when_configure_then_no_error_raised(
         self, context
@@ -582,11 +583,13 @@ class TestCharm:
             ),
         ):
             out = context.run(Event("config-changed"), state)
-        assert len(out.secrets) == 0
+
         root = out.containers[0].get_filesystem(context)
         assert (root / "etc/gocert/config/config.yaml").open("r")
         assert not (root / "etc/gocert/config/certificate.pem").exists()
         assert not ((root / "etc/gocert/config/private_key.pem").exists())
+        assert len(out.secrets) == 1
+        assert out.secrets[0].label == "GoCert Login Details"
 
     def test_given_only_config_storage_container_cant_connect_network_available_gocert_initialized_when_configure_then_no_error_raised(
         self, context

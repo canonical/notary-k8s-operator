@@ -156,7 +156,7 @@ class GocertCharm(ops.CharmBase):
         login_details = self._get_or_create_admin_account()
         if not login_details:
             return
-        if not self.client.token_is_valid(login_details.token):
+        if not login_details.token or not self.client.token_is_valid(login_details.token):
             login_details.token = self.client.login(login_details.username, login_details.password)
             login_details_secret = self.model.get_secret(label=GOCERT_LOGIN_SECRET_LABEL)
             login_details_secret.set_content(login_details.to_dict())
