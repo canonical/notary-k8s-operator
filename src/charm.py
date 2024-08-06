@@ -18,7 +18,7 @@ from charms.tls_certificates_interface.v3.tls_certificates import (
     generate_private_key,
     x509,
 )
-from client import GoCert
+from gocert import GoCert
 
 logger = logging.getLogger(__name__)
 
