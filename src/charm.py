@@ -166,7 +166,7 @@ class GocertCharm(ops.CharmBase):
     def _get_gocert_client(self) -> GoCert:
         """Get a client for connecting to GoCert."""
         return GoCert(
-            f"https://{self._application_bind_address}:{self.port}/status",
+            f"{self._application_bind_address}:{self.port}",
             f"{CHARM_PATH}/{CONFIG_MOUNT}/0/ca.pem",
         )
 
