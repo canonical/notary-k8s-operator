@@ -49,10 +49,15 @@ class GocertCharm(ops.CharmBase):
     def __init__(self, framework: ops.Framework):
         super().__init__(framework)
 
+        self.port = 2111
+
         self.container = self.unit.get_container("gocert")
         self.tls = TLSCertificatesProvidesV3(self, relationship_name="certificates")
 
-        self.port = 2111
+        self.client = GoCert(
+            f"{self._application_bind_address}:{self.port}",
+            f"{CHARM_PATH}/{CONFIG_MOUNT}/0/ca.pem",
+        )
 
         [
             framework.observe(event, self.configure)
@@ -92,11 +97,10 @@ class GocertCharm(ops.CharmBase):
         if not self._self_signed_certificates_generated():
             event.add_status(ops.WaitingStatus("certificates not yet created"))
             return
-        client = self._get_gocert_client()
-        if not client.is_api_available():
+        if not self.client.is_api_available():
             event.add_status(ops.WaitingStatus("GoCert server not yet available"))
             return
-        if not client.is_initialized():
+        if not self.client.is_initialized():
             event.add_status(ops.BlockedStatus("Please initialize GoCert"))
             return
         event.add_status(ops.ActiveStatus())
@@ -163,13 +167,6 @@ class GocertCharm(ops.CharmBase):
         )
 
     ## Helpers ##
-    def _get_gocert_client(self) -> GoCert:
-        """Get a client for connecting to GoCert."""
-        return GoCert(
-            f"{self._application_bind_address}:{self.port}",
-            f"{CHARM_PATH}/{CONFIG_MOUNT}/0/ca.pem",
-        )
-
     def _generate_self_signed_certificates(self) -> None:
         """Generate self signed certificates and saves them to secrets and the charm."""
         if not self._application_bind_address:
