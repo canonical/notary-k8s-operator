@@ -152,7 +152,7 @@ class GocertCharm(ops.CharmBase):
                 self.container.replan()
 
     def _configure_charm_authorization(self):
-        """Create an admin user to manage GoCert if needed, and acquire a token for that login."""
+        """Create an admin user to manage GoCert if needed, and acquire a token by logging in if needed."""
         login_details = self._get_or_create_admin_account()
         if not login_details:
             return
