@@ -10,7 +10,6 @@ from dataclasses import dataclass
 from typing import Tuple
 
 import ops
-import requests
 from charms.tls_certificates_interface.v3.tls_certificates import (
     TLSCertificatesProvidesV3,
     generate_ca,
@@ -19,6 +18,7 @@ from charms.tls_certificates_interface.v3.tls_certificates import (
     generate_private_key,
     x509,
 )
+from gocert import GoCert
 
 logger = logging.getLogger(__name__)
 
@@ -49,10 +49,15 @@ class GocertCharm(ops.CharmBase):
     def __init__(self, framework: ops.Framework):
         super().__init__(framework)
 
+        self.port = 2111
+
         self.container = self.unit.get_container("gocert")
         self.tls = TLSCertificatesProvidesV3(self, relationship_name="certificates")
 
-        self.port = 2111
+        self.client = GoCert(
+            f"https://{self._application_bind_address}:{self.port}",
+            f"{CHARM_PATH}/{CONFIG_MOUNT}/0/ca.pem",
+        )
 
         [
             framework.observe(event, self.configure)
@@ -92,10 +97,10 @@ class GocertCharm(ops.CharmBase):
         if not self._self_signed_certificates_generated():
             event.add_status(ops.WaitingStatus("certificates not yet created"))
             return
-        if not self._gocert_available():
+        if not self.client.is_api_available():
             event.add_status(ops.WaitingStatus("GoCert server not yet available"))
             return
-        if not self._gocert_initialized():
+        if not self.client.is_initialized():
             event.add_status(ops.BlockedStatus("Please initialize GoCert"))
             return
         event.add_status(ops.ActiveStatus())
@@ -160,33 +165,6 @@ class GocertCharm(ops.CharmBase):
         return bool(self.model.storages.get("config")) and bool(
             self.model.storages.get("database")
         )
-
-    def _gocert_available(self) -> bool:
-        """Return if the gocert server is reachable."""
-        try:
-            req = requests.get(
-                f"https://{self._application_bind_address}:{self.port}/status",
-                verify=f"{CHARM_PATH}/{CONFIG_MOUNT}/0/ca.pem",
-            )
-        except (requests.RequestException, OSError):
-            return False
-        if req.status_code != 200:
-            return False
-        return True
-
-    def _gocert_initialized(self) -> bool:
-        """Return if gocert is initialized."""
-        try:
-            req = requests.get(
-                f"https://{self._application_bind_address}:{self.port}/status",
-                verify=f"{CHARM_PATH}/{CONFIG_MOUNT}/0/ca.pem",
-            )
-        except (requests.RequestException, OSError):
-            return False
-        if req.status_code != 200:
-            return False
-        body = req.json()
-        return body.get("initialized", False)
 
     ## Helpers ##
     def _generate_self_signed_certificates(self) -> None:

@@ -27,7 +27,12 @@ class TestCharm:
             leader=True,
         )
 
-        with patch("requests.get", return_value=Mock(side_effect=requests.ConnectionError)):
+        with patch(
+            "gocert.GoCert",
+            return_value=Mock(
+                **{"is_api_available.return_value": False, "is_initialized.return_value": False},
+            ),
+        ):
             context.run(Event("config-changed"), state)
 
     def test_given_only_database_storage_container_cant_connect_network_not_available_gocert_not_running_when_configure_then_no_error_raised(
@@ -40,7 +45,12 @@ class TestCharm:
             leader=True,
         )
 
-        with patch("requests.get", return_value=Mock(side_effect=requests.ConnectionError)):
+        with patch(
+            "gocert.GoCert",
+            return_value=Mock(
+                **{"is_api_available.return_value": False, "is_initialized.return_value": False},
+            ),
+        ):
             context.run(Event("config-changed"), state)
 
     def test_given_storages_available_container_cant_connect_network_not_available_gocert_not_running_when_configure_then_no_error_raised(
@@ -53,7 +63,12 @@ class TestCharm:
             leader=True,
         )
 
-        with patch("requests.get", return_value=Mock(side_effect=requests.ConnectionError)):
+        with patch(
+            "gocert.GoCert",
+            return_value=Mock(
+                **{"is_api_available.return_value": False, "is_initialized.return_value": False},
+            ),
+        ):
             context.run(Event("config-changed"), state)
 
     def test_given_only_config_storage_container_can_connect_network_not_available_gocert_not_running_when_configure_then_no_error_raised(
@@ -66,7 +81,12 @@ class TestCharm:
             leader=True,
         )
 
-        with patch("requests.get", return_value=Mock(side_effect=requests.ConnectionError)):
+        with patch(
+            "gocert.GoCert",
+            return_value=Mock(
+                **{"is_api_available.return_value": False, "is_initialized.return_value": False},
+            ),
+        ):
             context.run(Event("config-changed"), state)
 
     def test_given_only_database_storage_container_can_connect_network_not_available_gocert_not_running_when_configure_then_no_error_raised(
@@ -79,7 +99,12 @@ class TestCharm:
             leader=True,
         )
 
-        with patch("requests.get", return_value=Mock(side_effect=requests.ConnectionError)):
+        with patch(
+            "gocert.GoCert",
+            return_value=Mock(
+                **{"is_api_available.return_value": False, "is_initialized.return_value": False},
+            ),
+        ):
             context.run(Event("config-changed"), state)
 
     def test_given_storages_available_container_can_connect_network_not_available_gocert_not_running_when_configure_then_config_file_generated(
@@ -92,7 +117,12 @@ class TestCharm:
             leader=True,
         )
 
-        with patch("requests.get", return_value=Mock(side_effect=requests.ConnectionError)):
+        with patch(
+            "gocert.GoCert",
+            return_value=Mock(
+                **{"is_api_available.return_value": False, "is_initialized.return_value": False},
+            ),
+        ):
             out = context.run(Event("config-changed"), state)
         assert len(out.secrets) == 0
         root = out.containers[0].get_filesystem(context)
@@ -110,7 +140,12 @@ class TestCharm:
             leader=True,
         )
 
-        with patch("requests.get", return_value=Mock(side_effect=requests.ConnectionError)):
+        with patch(
+            "gocert.GoCert",
+            return_value=Mock(
+                **{"is_api_available.return_value": False, "is_initialized.return_value": False},
+            ),
+        ):
             context.run(Event("config-changed"), state)
 
     def test_given_only_database_storage_container_cant_connect_network_available_gocert_not_running_when_configure_then_no_error_raised(
@@ -123,7 +158,12 @@ class TestCharm:
             leader=True,
         )
 
-        with patch("requests.get", return_value=Mock(side_effect=requests.ConnectionError)):
+        with patch(
+            "gocert.GoCert",
+            return_value=Mock(
+                **{"is_api_available.return_value": False, "is_initialized.return_value": False},
+            ),
+        ):
             context.run(Event("config-changed"), state)
 
     def test_given_storages_available_container_cant_connect_network_available_gocert_not_running_when_configure_then_no_error_raised(
@@ -136,7 +176,12 @@ class TestCharm:
             leader=True,
         )
 
-        with patch("requests.get", return_value=Mock(side_effect=requests.ConnectionError)):
+        with patch(
+            "gocert.GoCert",
+            return_value=Mock(
+                **{"is_api_available.return_value": False, "is_initialized.return_value": False},
+            ),
+        ):
             context.run(Event("config-changed"), state)
 
     def test_given_only_config_storage_container_can_connect_network_available_gocert_not_running_when_configure_then_no_error_raised(
@@ -149,7 +194,12 @@ class TestCharm:
             leader=True,
         )
 
-        with patch("requests.get", return_value=Mock(side_effect=requests.ConnectionError)):
+        with patch(
+            "gocert.GoCert",
+            return_value=Mock(
+                **{"is_api_available.return_value": False, "is_initialized.return_value": False},
+            ),
+        ):
             context.run(Event("config-changed"), state)
 
     def test_given_only_database_storage_container_can_connect_network_available_gocert_not_running_when_configure_then_no_error_raised(
@@ -162,7 +212,12 @@ class TestCharm:
             leader=True,
         )
 
-        with patch("requests.get", return_value=Mock(side_effect=requests.ConnectionError)):
+        with patch(
+            "gocert.GoCert",
+            return_value=Mock(
+                **{"is_api_available.return_value": False, "is_initialized.return_value": False},
+            ),
+        ):
             context.run(Event("config-changed"), state)
 
     def test_given_storages_available_container_can_connect_network_available_gocert_not_running_when_configure_then_config_and_certificates_generated(
@@ -175,7 +230,12 @@ class TestCharm:
             leader=True,
         )
 
-        with patch("requests.get", return_value=Mock(side_effect=requests.ConnectionError)):
+        with patch(
+            "gocert.GoCert",
+            return_value=Mock(
+                **{"is_api_available.return_value": False, "is_initialized.return_value": False},
+            ),
+        ):
             out = context.run(Event("config-changed"), state)
         assert out.secrets[0].contents.get(0).get("certificate")
         assert out.secrets[0].contents.get(0).get("private-key")
@@ -205,9 +265,9 @@ class TestCharm:
         )
 
         with patch(
-            "requests.get",
+            "gocert.GoCert",
             return_value=Mock(
-                **{"json.return_value": {"initialized": False}, "status_code": 200},
+                **{"is_api_available.return_value": True, "is_initialized.return_value": False},
             ),
         ):
             context.run(Event("config-changed"), state)
@@ -223,9 +283,9 @@ class TestCharm:
         )
 
         with patch(
-            "requests.get",
+            "gocert.GoCert",
             return_value=Mock(
-                **{"json.return_value": {"initialized": False}, "status_code": 200},
+                **{"is_api_available.return_value": True, "is_initialized.return_value": False},
             ),
         ):
             context.run(Event("config-changed"), state)
@@ -241,9 +301,9 @@ class TestCharm:
         )
 
         with patch(
-            "requests.get",
+            "gocert.GoCert",
             return_value=Mock(
-                **{"json.return_value": {"initialized": False}, "status_code": 200},
+                **{"is_api_available.return_value": True, "is_initialized.return_value": False},
             ),
         ):
             context.run(Event("config-changed"), state)
@@ -259,9 +319,9 @@ class TestCharm:
         )
 
         with patch(
-            "requests.get",
+            "gocert.GoCert",
             return_value=Mock(
-                **{"json.return_value": {"initialized": False}, "status_code": 200},
+                **{"is_api_available.return_value": True, "is_initialized.return_value": False},
             ),
         ):
             context.run(Event("config-changed"), state)
@@ -277,9 +337,9 @@ class TestCharm:
         )
 
         with patch(
-            "requests.get",
+            "gocert.GoCert",
             return_value=Mock(
-                **{"json.return_value": {"initialized": False}, "status_code": 200},
+                **{"is_api_available.return_value": True, "is_initialized.return_value": False},
             ),
         ):
             context.run(Event("config-changed"), state)
@@ -295,9 +355,9 @@ class TestCharm:
         )
 
         with patch(
-            "requests.get",
+            "gocert.GoCert",
             return_value=Mock(
-                **{"json.return_value": {"initialized": False}, "status_code": 200},
+                **{"is_api_available.return_value": True, "is_initialized.return_value": False},
             ),
         ):
             out = context.run(Event("config-changed"), state)
@@ -318,9 +378,9 @@ class TestCharm:
         )
 
         with patch(
-            "requests.get",
+            "gocert.GoCert",
             return_value=Mock(
-                **{"json.return_value": {"initialized": False}, "status_code": 200},
+                **{"is_api_available.return_value": True, "is_initialized.return_value": False},
             ),
         ):
             context.run(Event("config-changed"), state)
@@ -336,9 +396,9 @@ class TestCharm:
         )
 
         with patch(
-            "requests.get",
+            "gocert.GoCert",
             return_value=Mock(
-                **{"json.return_value": {"initialized": False}, "status_code": 200},
+                **{"is_api_available.return_value": True, "is_initialized.return_value": False},
             ),
         ):
             context.run(Event("config-changed"), state)
@@ -354,9 +414,9 @@ class TestCharm:
         )
 
         with patch(
-            "requests.get",
+            "gocert.GoCert",
             return_value=Mock(
-                **{"json.return_value": {"initialized": False}, "status_code": 200},
+                **{"is_api_available.return_value": True, "is_initialized.return_value": False},
             ),
         ):
             context.run(Event("config-changed"), state)
@@ -372,9 +432,9 @@ class TestCharm:
         )
 
         with patch(
-            "requests.get",
+            "gocert.GoCert",
             return_value=Mock(
-                **{"json.return_value": {"initialized": False}, "status_code": 200},
+                **{"is_api_available.return_value": True, "is_initialized.return_value": False},
             ),
         ):
             context.run(Event("config-changed"), state)
@@ -390,9 +450,9 @@ class TestCharm:
         )
 
         with patch(
-            "requests.get",
+            "gocert.GoCert",
             return_value=Mock(
-                **{"json.return_value": {"initialized": False}, "status_code": 200},
+                **{"is_api_available.return_value": True, "is_initialized.return_value": False},
             ),
         ):
             context.run(Event("config-changed"), state)
@@ -408,9 +468,9 @@ class TestCharm:
         )
 
         with patch(
-            "requests.get",
+            "gocert.GoCert",
             return_value=Mock(
-                **{"json.return_value": {"initialized": False}, "status_code": 200},
+                **{"is_api_available.return_value": True, "is_initialized.return_value": False},
             ),
         ):
             context.run(Event("config-changed"), state)
@@ -426,9 +486,9 @@ class TestCharm:
         )
 
         with patch(
-            "requests.get",
+            "gocert.GoCert",
             return_value=Mock(
-                **{"json.return_value": {"initialized": True}, "status_code": 200},
+                **{"is_api_available.return_value": True, "is_initialized.return_value": True},
             ),
         ):
             context.run(Event("config-changed"), state)
@@ -444,9 +504,9 @@ class TestCharm:
         )
 
         with patch(
-            "requests.get",
+            "gocert.GoCert",
             return_value=Mock(
-                **{"json.return_value": {"initialized": True}, "status_code": 200},
+                **{"is_api_available.return_value": True, "is_initialized.return_value": True},
             ),
         ):
             context.run(Event("config-changed"), state)
@@ -462,9 +522,9 @@ class TestCharm:
         )
 
         with patch(
-            "requests.get",
+            "gocert.GoCert",
             return_value=Mock(
-                **{"json.return_value": {"initialized": True}, "status_code": 200},
+                **{"is_api_available.return_value": True, "is_initialized.return_value": True},
             ),
         ):
             context.run(Event("config-changed"), state)
@@ -480,9 +540,9 @@ class TestCharm:
         )
 
         with patch(
-            "requests.get",
+            "gocert.GoCert",
             return_value=Mock(
-                **{"json.return_value": {"initialized": True}, "status_code": 200},
+                **{"is_api_available.return_value": True, "is_initialized.return_value": True},
             ),
         ):
             context.run(Event("config-changed"), state)
@@ -498,9 +558,9 @@ class TestCharm:
         )
 
         with patch(
-            "requests.get",
+            "gocert.GoCert",
             return_value=Mock(
-                **{"json.return_value": {"initialized": True}, "status_code": 200},
+                **{"is_api_available.return_value": True, "is_initialized.return_value": True},
             ),
         ):
             context.run(Event("config-changed"), state)
@@ -516,9 +576,9 @@ class TestCharm:
         )
 
         with patch(
-            "requests.get",
+            "gocert.GoCert",
             return_value=Mock(
-                **{"json.return_value": {"initialized": True}, "status_code": 200},
+                **{"is_api_available.return_value": True, "is_initialized.return_value": True},
             ),
         ):
             out = context.run(Event("config-changed"), state)
@@ -539,9 +599,9 @@ class TestCharm:
         )
 
         with patch(
-            "requests.get",
+            "gocert.GoCert",
             return_value=Mock(
-                **{"json.return_value": {"initialized": True}, "status_code": 200},
+                **{"is_api_available.return_value": True, "is_initialized.return_value": True},
             ),
         ):
             context.run(Event("config-changed"), state)
@@ -557,9 +617,9 @@ class TestCharm:
         )
 
         with patch(
-            "requests.get",
+            "gocert.GoCert",
             return_value=Mock(
-                **{"json.return_value": {"initialized": True}, "status_code": 200},
+                **{"is_api_available.return_value": True, "is_initialized.return_value": True},
             ),
         ):
             context.run(Event("config-changed"), state)
@@ -575,9 +635,9 @@ class TestCharm:
         )
 
         with patch(
-            "requests.get",
+            "gocert.GoCert",
             return_value=Mock(
-                **{"json.return_value": {"initialized": True}, "status_code": 200},
+                **{"is_api_available.return_value": True, "is_initialized.return_value": True},
             ),
         ):
             context.run(Event("config-changed"), state)
@@ -593,9 +653,9 @@ class TestCharm:
         )
 
         with patch(
-            "requests.get",
+            "gocert.GoCert",
             return_value=Mock(
-                **{"json.return_value": {"initialized": True}, "status_code": 200},
+                **{"is_api_available.return_value": True, "is_initialized.return_value": True},
             ),
         ):
             context.run(Event("config-changed"), state)
@@ -611,9 +671,9 @@ class TestCharm:
         )
 
         with patch(
-            "requests.get",
+            "gocert.GoCert",
             return_value=Mock(
-                **{"json.return_value": {"initialized": True}, "status_code": 200},
+                **{"is_api_available.return_value": True, "is_initialized.return_value": True},
             ),
         ):
             context.run(Event("config-changed"), state)
@@ -629,9 +689,9 @@ class TestCharm:
         )
 
         with patch(
-            "requests.get",
+            "gocert.GoCert",
             return_value=Mock(
-                **{"json.return_value": {"initialized": True}, "status_code": 200},
+                **{"is_api_available.return_value": True, "is_initialized.return_value": True},
             ),
         ):
             context.run(Event("config-changed"), state)
@@ -647,7 +707,12 @@ class TestCharm:
             leader=True,
         )
 
-        with patch("requests.get", return_value=Mock(side_effect=requests.ConnectionError)):
+        with patch(
+            "gocert.GoCert",
+            return_value=Mock(
+                **{"is_api_available.return_value": False, "is_initialized.return_value": False},
+            ),
+        ):
             out = context.run(Event("collect-unit-status"), state)
 
         assert out.unit_status == ops.WaitingStatus("container not yet connectable")
@@ -662,7 +727,12 @@ class TestCharm:
             leader=True,
         )
 
-        with patch("requests.get", return_value=Mock(side_effect=requests.ConnectionError)):
+        with patch(
+            "gocert.GoCert",
+            return_value=Mock(
+                **{"is_api_available.return_value": False, "is_initialized.return_value": False},
+            ),
+        ):
             out = context.run(Event("collect-unit-status"), state)
         assert out.unit_status == ops.WaitingStatus("container not yet connectable")
 
@@ -676,7 +746,12 @@ class TestCharm:
             leader=True,
         )
 
-        with patch("requests.get", return_value=Mock(side_effect=requests.ConnectionError)):
+        with patch(
+            "gocert.GoCert",
+            return_value=Mock(
+                **{"is_api_available.return_value": False, "is_initialized.return_value": False},
+            ),
+        ):
             out = context.run(Event("collect-unit-status"), state)
 
         assert out.unit_status == ops.WaitingStatus("container not yet connectable")
@@ -691,7 +766,12 @@ class TestCharm:
             leader=True,
         )
 
-        with patch("requests.get", return_value=Mock(side_effect=requests.ConnectionError)):
+        with patch(
+            "gocert.GoCert",
+            return_value=Mock(
+                **{"is_api_available.return_value": False, "is_initialized.return_value": False},
+            ),
+        ):
             out = context.run(Event("collect-unit-status"), state)
         assert out.unit_status == ops.WaitingStatus("storages not yet available")
 
@@ -705,7 +785,12 @@ class TestCharm:
             leader=True,
         )
 
-        with patch("requests.get", return_value=Mock(side_effect=requests.ConnectionError)):
+        with patch(
+            "gocert.GoCert",
+            return_value=Mock(
+                **{"is_api_available.return_value": False, "is_initialized.return_value": False},
+            ),
+        ):
             out = context.run(Event("collect-unit-status"), state)
         assert out.unit_status == ops.WaitingStatus("storages not yet available")
 
@@ -719,7 +804,12 @@ class TestCharm:
             leader=True,
         )
 
-        with patch("requests.get", return_value=Mock(side_effect=requests.ConnectionError)):
+        with patch(
+            "gocert.GoCert",
+            return_value=Mock(
+                **{"is_api_available.return_value": False, "is_initialized.return_value": False},
+            ),
+        ):
             out = context.run(Event("collect-unit-status"), state)
         assert out.unit_status == ops.WaitingStatus("certificates not yet created")
 
@@ -733,7 +823,12 @@ class TestCharm:
             leader=True,
         )
 
-        with patch("requests.get", return_value=Mock(side_effect=requests.ConnectionError)):
+        with patch(
+            "gocert.GoCert",
+            return_value=Mock(
+                **{"is_api_available.return_value": False, "is_initialized.return_value": False},
+            ),
+        ):
             out = context.run(Event("collect-unit-status"), state)
         assert out.unit_status == ops.WaitingStatus("container not yet connectable")
 
@@ -747,7 +842,12 @@ class TestCharm:
             leader=True,
         )
 
-        with patch("requests.get", return_value=Mock(side_effect=requests.ConnectionError)):
+        with patch(
+            "gocert.GoCert",
+            return_value=Mock(
+                **{"is_api_available.return_value": False, "is_initialized.return_value": False},
+            ),
+        ):
             out = context.run(Event("collect-unit-status"), state)
         assert out.unit_status == ops.WaitingStatus("container not yet connectable")
 
@@ -761,7 +861,12 @@ class TestCharm:
             leader=True,
         )
 
-        with patch("requests.get", return_value=Mock(side_effect=requests.ConnectionError)):
+        with patch(
+            "gocert.GoCert",
+            return_value=Mock(
+                **{"is_api_available.return_value": False, "is_initialized.return_value": False},
+            ),
+        ):
             out = context.run(Event("collect-unit-status"), state)
         assert out.unit_status == ops.WaitingStatus("container not yet connectable")
 
@@ -775,7 +880,12 @@ class TestCharm:
             leader=True,
         )
 
-        with patch("requests.get", return_value=Mock(side_effect=requests.ConnectionError)):
+        with patch(
+            "gocert.GoCert",
+            return_value=Mock(
+                **{"is_api_available.return_value": False, "is_initialized.return_value": False},
+            ),
+        ):
             out = context.run(Event("collect-unit-status"), state)
         assert out.unit_status == ops.WaitingStatus("storages not yet available")
 
@@ -789,7 +899,12 @@ class TestCharm:
             leader=True,
         )
 
-        with patch("requests.get", return_value=Mock(side_effect=requests.ConnectionError)):
+        with patch(
+            "gocert.GoCert",
+            return_value=Mock(
+                **{"is_api_available.return_value": False, "is_initialized.return_value": False},
+            ),
+        ):
             out = context.run(Event("collect-unit-status"), state)
         assert out.unit_status == ops.WaitingStatus("storages not yet available")
 
@@ -803,7 +918,12 @@ class TestCharm:
             leader=True,
         )
 
-        with patch("requests.get", return_value=Mock(side_effect=requests.ConnectionError)):
+        with patch(
+            "gocert.GoCert",
+            return_value=Mock(
+                **{"is_api_available.return_value": False, "is_initialized.return_value": False},
+            ),
+        ):
             out = context.run(Event("collect-unit-status"), state)
         assert out.unit_status == ops.WaitingStatus("certificates not yet created")
 
@@ -818,9 +938,9 @@ class TestCharm:
         )
 
         with patch(
-            "requests.get",
+            "gocert.GoCert",
             return_value=Mock(
-                **{"json.return_value": {"initialized": False}, "status_code": 200},
+                **{"is_api_available.return_value": True, "is_initialized.return_value": False},
             ),
         ):
             out = context.run(Event("collect-unit-status"), state)
@@ -837,9 +957,9 @@ class TestCharm:
         )
 
         with patch(
-            "requests.get",
+            "gocert.GoCert",
             return_value=Mock(
-                **{"json.return_value": {"initialized": False}, "status_code": 200},
+                **{"is_api_available.return_value": True, "is_initialized.return_value": False},
             ),
         ):
             out = context.run(Event("collect-unit-status"), state)
@@ -856,9 +976,9 @@ class TestCharm:
         )
 
         with patch(
-            "requests.get",
+            "gocert.GoCert",
             return_value=Mock(
-                **{"json.return_value": {"initialized": False}, "status_code": 200},
+                **{"is_api_available.return_value": True, "is_initialized.return_value": False},
             ),
         ):
             out = context.run(Event("collect-unit-status"), state)
@@ -875,9 +995,9 @@ class TestCharm:
         )
 
         with patch(
-            "requests.get",
+            "gocert.GoCert",
             return_value=Mock(
-                **{"json.return_value": {"initialized": False}, "status_code": 200},
+                **{"is_api_available.return_value": True, "is_initialized.return_value": False},
             ),
         ):
             out = context.run(Event("collect-unit-status"), state)
@@ -894,9 +1014,9 @@ class TestCharm:
         )
 
         with patch(
-            "requests.get",
+            "gocert.GoCert",
             return_value=Mock(
-                **{"json.return_value": {"initialized": False}, "status_code": 200},
+                **{"is_api_available.return_value": True, "is_initialized.return_value": False},
             ),
         ):
             out = context.run(Event("collect-unit-status"), state)
@@ -913,9 +1033,9 @@ class TestCharm:
         )
 
         with patch(
-            "requests.get",
+            "gocert.GoCert",
             return_value=Mock(
-                **{"json.return_value": {"initialized": False}, "status_code": 200},
+                **{"is_api_available.return_value": True, "is_initialized.return_value": False},
             ),
         ):
             out = context.run(Event("collect-unit-status"), state)
@@ -932,9 +1052,9 @@ class TestCharm:
         )
 
         with patch(
-            "requests.get",
+            "gocert.GoCert",
             return_value=Mock(
-                **{"json.return_value": {"initialized": False}, "status_code": 200},
+                **{"is_api_available.return_value": True, "is_initialized.return_value": False},
             ),
         ):
             out = context.run(Event("collect-unit-status"), state)
@@ -951,9 +1071,9 @@ class TestCharm:
         )
 
         with patch(
-            "requests.get",
+            "gocert.GoCert",
             return_value=Mock(
-                **{"json.return_value": {"initialized": False}, "status_code": 200},
+                **{"is_api_available.return_value": True, "is_initialized.return_value": False},
             ),
         ):
             out = context.run(Event("collect-unit-status"), state)
@@ -970,9 +1090,9 @@ class TestCharm:
         )
 
         with patch(
-            "requests.get",
+            "gocert.GoCert",
             return_value=Mock(
-                **{"json.return_value": {"initialized": False}, "status_code": 200},
+                **{"is_api_available.return_value": True, "is_initialized.return_value": False},
             ),
         ):
             out = context.run(Event("collect-unit-status"), state)
@@ -989,9 +1109,9 @@ class TestCharm:
         )
 
         with patch(
-            "requests.get",
+            "gocert.GoCert",
             return_value=Mock(
-                **{"json.return_value": {"initialized": False}, "status_code": 200},
+                **{"is_api_available.return_value": True, "is_initialized.return_value": False},
             ),
         ):
             out = context.run(Event("collect-unit-status"), state)
@@ -1008,9 +1128,9 @@ class TestCharm:
         )
 
         with patch(
-            "requests.get",
+            "gocert.GoCert",
             return_value=Mock(
-                **{"json.return_value": {"initialized": False}, "status_code": 200},
+                **{"is_api_available.return_value": True, "is_initialized.return_value": False},
             ),
         ):
             out = context.run(Event("collect-unit-status"), state)
@@ -1027,9 +1147,9 @@ class TestCharm:
         )
 
         with patch(
-            "requests.get",
+            "gocert.GoCert",
             return_value=Mock(
-                **{"json.return_value": {"initialized": False}, "status_code": 200},
+                **{"is_api_available.return_value": True, "is_initialized.return_value": False},
             ),
         ):
             out = context.run(Event("collect-unit-status"), state)
@@ -1046,9 +1166,9 @@ class TestCharm:
         )
 
         with patch(
-            "requests.get",
+            "gocert.GoCert",
             return_value=Mock(
-                **{"json.return_value": {"initialized": True}, "status_code": 200},
+                **{"is_api_available.return_value": True, "is_initialized.return_value": True},
             ),
         ):
             out = context.run(Event("collect-unit-status"), state)
@@ -1065,9 +1185,9 @@ class TestCharm:
         )
 
         with patch(
-            "requests.get",
+            "gocert.GoCert",
             return_value=Mock(
-                **{"json.return_value": {"initialized": True}, "status_code": 200},
+                **{"is_api_available.return_value": True, "is_initialized.return_value": True},
             ),
         ):
             out = context.run(Event("collect-unit-status"), state)
@@ -1084,9 +1204,9 @@ class TestCharm:
         )
 
         with patch(
-            "requests.get",
+            "gocert.GoCert",
             return_value=Mock(
-                **{"json.return_value": {"initialized": True}, "status_code": 200},
+                **{"is_api_available.return_value": True, "is_initialized.return_value": True},
             ),
         ):
             out = context.run(Event("collect-unit-status"), state)
@@ -1103,9 +1223,9 @@ class TestCharm:
         )
 
         with patch(
-            "requests.get",
+            "gocert.GoCert",
             return_value=Mock(
-                **{"json.return_value": {"initialized": True}, "status_code": 200},
+                **{"is_api_available.return_value": True, "is_initialized.return_value": True},
             ),
         ):
             out = context.run(Event("collect-unit-status"), state)
@@ -1122,9 +1242,9 @@ class TestCharm:
         )
 
         with patch(
-            "requests.get",
+            "gocert.GoCert",
             return_value=Mock(
-                **{"json.return_value": {"initialized": True}, "status_code": 200},
+                **{"is_api_available.return_value": True, "is_initialized.return_value": True},
             ),
         ):
             out = context.run(Event("collect-unit-status"), state)
@@ -1141,9 +1261,9 @@ class TestCharm:
         )
 
         with patch(
-            "requests.get",
+            "gocert.GoCert",
             return_value=Mock(
-                **{"json.return_value": {"initialized": True}, "status_code": 200},
+                **{"is_api_available.return_value": True, "is_initialized.return_value": True},
             ),
         ):
             out = context.run(Event("collect-unit-status"), state)
@@ -1160,9 +1280,9 @@ class TestCharm:
         )
 
         with patch(
-            "requests.get",
+            "gocert.GoCert",
             return_value=Mock(
-                **{"json.return_value": {"initialized": True}, "status_code": 200},
+                **{"is_api_available.return_value": True, "is_initialized.return_value": True},
             ),
         ):
             out = context.run(Event("collect-unit-status"), state)
@@ -1179,9 +1299,9 @@ class TestCharm:
         )
 
         with patch(
-            "requests.get",
+            "gocert.GoCert",
             return_value=Mock(
-                **{"json.return_value": {"initialized": True}, "status_code": 200},
+                **{"is_api_available.return_value": True, "is_initialized.return_value": True},
             ),
         ):
             out = context.run(Event("collect-unit-status"), state)
@@ -1198,9 +1318,9 @@ class TestCharm:
         )
 
         with patch(
-            "requests.get",
+            "gocert.GoCert",
             return_value=Mock(
-                **{"json.return_value": {"initialized": True}, "status_code": 200},
+                **{"is_api_available.return_value": True, "is_initialized.return_value": True},
             ),
         ):
             out = context.run(Event("collect-unit-status"), state)
@@ -1217,9 +1337,9 @@ class TestCharm:
         )
 
         with patch(
-            "requests.get",
+            "gocert.GoCert",
             return_value=Mock(
-                **{"json.return_value": {"initialized": True}, "status_code": 200},
+                **{"is_api_available.return_value": True, "is_initialized.return_value": True},
             ),
         ):
             out = context.run(Event("collect-unit-status"), state)
@@ -1236,9 +1356,9 @@ class TestCharm:
         )
 
         with patch(
-            "requests.get",
+            "gocert.GoCert",
             return_value=Mock(
-                **{"json.return_value": {"initialized": True}, "status_code": 200},
+                **{"is_api_available.return_value": True, "is_initialized.return_value": True},
             ),
         ):
             out = context.run(Event("collect-unit-status"), state)
@@ -1255,9 +1375,9 @@ class TestCharm:
         )
 
         with patch(
-            "requests.get",
+            "gocert.GoCert",
             return_value=Mock(
-                **{"json.return_value": {"initialized": True}, "status_code": 200},
+                **{"is_api_available.return_value": True, "is_initialized.return_value": True},
             ),
         ):
             out = context.run(Event("collect-unit-status"), state)
