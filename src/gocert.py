@@ -14,6 +14,12 @@ class GoCert:
     """Class to interact with GoCert."""
 
     def __init__(self, url: str, ca_path: str) -> None:
+        """Initialize a client for interacting with GoCert.
+
+        Args:
+            url: the endpoint that gocert is listening on e.g https://gocert.com:8000
+            ca_path: the file path that contains the ca cert that gocert uses for https communication
+        """
         self.url = url
         self.ca_path = ca_path
 
