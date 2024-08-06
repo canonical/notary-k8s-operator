@@ -19,15 +19,21 @@ class GoCert:
 
     API_VERSION = "v1"
 
-    def __init__(self, host: str, ca_path: str) -> None:
-        self.host = host
+    def __init__(self, url: str, ca_path: str) -> None:
+        """Initialize a client for interacting with GoCert.
+
+        Args:
+            url: the endpoint that gocert is listening on e.g https://gocert.com:8000
+            ca_path: the file path that contains the ca cert that gocert uses for https communication
+        """
+        self.url = url
         self.ca_path = ca_path
 
     def login(self, username: str, password: str) -> str | None:
         """Login to gocert by sending the username and password and return a Token."""
         try:
             req = requests.post(
-                f"https://{self.host}/login",
+                f"{self.url}/login",
                 verify=self.ca_path if self.ca_path else None,
                 json={"username": username, "password": password},
             )
@@ -43,7 +49,7 @@ class GoCert:
         """Return if the token is still valid by attempting to connect to an endpoint."""
         try:
             req = requests.get(
-                f"https://{self.host}/accounts",
+                f"{self.url}/accounts",
                 verify=self.ca_path if self.ca_path else None,
                 headers={"Authorization": f"Bearer {token}"},
             )
@@ -57,7 +63,7 @@ class GoCert:
         """Return if the GoCert server is reachable."""
         try:
             req = requests.get(
-                f"https://{self.host}/status",
+                f"{self.url}/status",
                 verify=self.ca_path if self.ca_path else None,
             )
         except (requests.RequestException, OSError):
@@ -70,7 +76,7 @@ class GoCert:
         """Return if the GoCert server is initialized."""
         try:
             req = requests.get(
-                f"https://{self.host}/status",
+                f"{self.url}/status",
                 verify=self.ca_path if self.ca_path else None,
             )
         except (requests.RequestException, OSError):
@@ -94,7 +100,7 @@ class GoCert:
         """
         try:
             req = requests.post(
-                f"https://{self.host}/api/{self.API_VERSION}/accounts",
+                f"{self.url}/api/{self.API_VERSION}/accounts",
                 verify=self.ca_path if self.ca_path else None,
                 json={"username": username, "password": password},
             )
