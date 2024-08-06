@@ -1410,3 +1410,32 @@ class TestCharm:
         ):
             out = context.run(Event("collect-unit-status"), state)
         assert out.unit_status == ops.ActiveStatus()
+
+    def test_given_gocert_available_and_not_initialized_when_configure_then_admin_user_created(
+        self, context
+    ):
+        config_mount = Mount("/etc/gocert/config", f"{TESTING_MOUNT_PATH}/self_signed_certs")
+        state = State(
+            storage=[Storage(name="config"), Storage(name="database")],
+            containers=[
+                Container(name="gocert", can_connect=True, mounts={"config": config_mount})
+            ],
+            networks={"juju-info": Network.default()},
+            leader=True,
+        )
+
+        with patch(
+            "gocert.GoCert.__new__",
+            return_value=Mock(
+                **{
+                    "is_api_available.return_value": True,
+                    "is_initialized.return_value": False,
+                    "login.return_value": "example-token",
+                    "token_is_valid.return_value": False,
+                },
+            ),
+        ):
+            out = context.run(Event("update-status"), state)
+        assert len(out.secrets) == 1
+        assert out.secrets[0].label == "GoCert Login Details"
+        assert out.secrets[0].contents[1].get("token") == "example-token"
