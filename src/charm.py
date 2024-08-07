@@ -160,7 +160,6 @@ class GocertCharm(ops.CharmBase):
             login_details.token = self.client.login(login_details.username, login_details.password)
             login_details_secret = self.model.get_secret(label=GOCERT_LOGIN_SECRET_LABEL)
             login_details_secret.set_content(login_details.to_dict())
-            logger.info("logged in to GoCert")
 
     ## Properties ##
     @property
@@ -281,9 +280,7 @@ class GocertCharm(ops.CharmBase):
         if self.client.is_api_available() and not self.client.is_initialized():
             response = self.client.create_first_user(username, password)
             if not response:
-                logger.error("couldn't create the admin user.")
                 return None
-            logger.info("created the admin user in GoCert.")
         return account
 
 

@@ -43,7 +43,10 @@ class GoCert:
             logger.error("couldn't log in: code %s, %s", req.status_code, req.text)
             return
         body = req.text
-        return None if body == "" else body
+        if body != "":
+            logger.info("logged in to GoCert successfully")
+            return body
+        return None
 
     def token_is_valid(self, token: str) -> bool:
         """Return if the token is still valid by attempting to connect to an endpoint."""
@@ -109,5 +112,6 @@ class GoCert:
         if req.status_code != 201:
             logger.warning("couldn't create first user: code %s, %s", req.status_code, req.text)
             return None
+        logger.info("created the first user in GoCert.")
         id = req.json().get("id")
         return int(id) if id else None
