@@ -37,8 +37,11 @@ class GoCert:
                 verify=self.ca_path if self.ca_path else None,
                 json={"username": username, "password": password},
             )
-            req.raise_for_status()
         except (requests.RequestException, OSError):
+            return
+        try:
+            req.raise_for_status()
+        except requests.HTTPError:
             logger.error("couldn't log in: code %s, %s", req.status_code, req.text)
             return
         logger.info("logged in to GoCert successfully")
@@ -100,8 +103,11 @@ class GoCert:
                 verify=self.ca_path if self.ca_path else None,
                 json={"username": username, "password": password},
             )
-            req.raise_for_status()
         except (requests.RequestException, OSError):
+            return None
+        try:
+            req.raise_for_status()
+        except requests.HTTPError:
             logger.warning("couldn't create first user: code %s, %s", req.status_code, req.text)
             return None
         logger.info("created the first user in GoCert.")
