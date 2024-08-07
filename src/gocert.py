@@ -37,16 +37,12 @@ class GoCert:
                 verify=self.ca_path if self.ca_path else None,
                 json={"username": username, "password": password},
             )
+            req.raise_for_status()
         except (requests.RequestException, OSError):
-            return
-        if req.status_code != 200:
             logger.error("couldn't log in: code %s, %s", req.status_code, req.text)
             return
-        body = req.text
-        if body != "":
-            logger.info("logged in to GoCert successfully")
-            return body
-        return None
+        logger.info("logged in to GoCert successfully")
+        return req.text
 
     def token_is_valid(self, token: str) -> bool:
         """Return if the token is still valid by attempting to connect to an endpoint."""
@@ -56,9 +52,8 @@ class GoCert:
                 verify=self.ca_path if self.ca_path else None,
                 headers={"Authorization": f"Bearer {token}"},
             )
+            req.raise_for_status()
         except (requests.RequestException, OSError):
-            return False
-        if req.status_code == 401:
             return False
         return True
 
@@ -69,9 +64,8 @@ class GoCert:
                 f"{self.url}/status",
                 verify=self.ca_path if self.ca_path else None,
             )
+            req.raise_for_status()
         except (requests.RequestException, OSError):
-            return False
-        if req.status_code != 200:
             return False
         return True
 
@@ -82,9 +76,8 @@ class GoCert:
                 f"{self.url}/status",
                 verify=self.ca_path if self.ca_path else None,
             )
+            req.raise_for_status()
         except (requests.RequestException, OSError):
-            return False
-        if req.status_code != 200:
             return False
         body = req.json()
         return body.get("initialized", False)
@@ -107,9 +100,8 @@ class GoCert:
                 verify=self.ca_path if self.ca_path else None,
                 json={"username": username, "password": password},
             )
+            req.raise_for_status()
         except (requests.RequestException, OSError):
-            return None
-        if req.status_code != 201:
             logger.warning("couldn't create first user: code %s, %s", req.status_code, req.text)
             return None
         logger.info("created the first user in GoCert.")
