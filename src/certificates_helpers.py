@@ -63,10 +63,7 @@ def certificate_issuer_has_common_name(certificate: str, common_name: str) -> bo
     except (ValueError, TypeError):
         logger.warning("Failed to load certificate")
         return False
-    a = issuer_common_name.value == common_name
-    if not a:
-        logger.warning("Certificate issuer common name does not match")
-    return a
+    return issuer_common_name.value == common_name
 
 
 def _generate_private_key() -> str:
