@@ -22,7 +22,6 @@ async def test_build_and_deploy(ops_test: OpsTest, request):
 
     Assert on the unit status before any relations/configurations take place.
     """
-
     charm = Path(request.config.getoption("--charm_path")).resolve()
     resources = {"gocert-image": CHARMCRAFT["resources"]["gocert-image"]["upstream-source"]}
 
