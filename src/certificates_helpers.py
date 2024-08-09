@@ -117,13 +117,8 @@ def _generate_certificate(
             x509.NameAttribute(x509.NameOID.COMMON_NAME, csr_common_name),
         ]
     )
-
-    if validity > 0:
-        not_valid_before = datetime.now(timezone.utc)
-        not_valid_after = datetime.now(timezone.utc) + timedelta(days=validity)
-    else:
-        not_valid_before = datetime.now(timezone.utc) + timedelta(days=validity)
-        not_valid_after = datetime.now(timezone.utc) - timedelta(seconds=1)
+    not_valid_before = datetime.now(timezone.utc)
+    not_valid_after = datetime.now(timezone.utc) + timedelta(days=validity)
     certificate_builder = (
         x509.CertificateBuilder()
         .subject_name(subject)
@@ -133,7 +128,6 @@ def _generate_certificate(
         .not_valid_before(not_valid_before)
         .not_valid_after(not_valid_after)
     )
-
     certificate_builder._version = x509.Version.v3
     cert = certificate_builder.sign(private_key, hashes.SHA256())  # type: ignore[arg-type]
     return cert.public_bytes(serialization.Encoding.PEM).decode().strip()
@@ -156,21 +150,21 @@ def _generate_ca(
         str: CA Certificate
     """
     private_key_object = serialization.load_pem_private_key(private_key.encode(), password=None)
+    assert isinstance(private_key_object, rsa.RSAPrivateKey)
     subject = issuer = x509.Name(
         [
             x509.NameAttribute(x509.NameOID.COMMON_NAME, common_name),
         ]
     )
     subject_identifier_object = x509.SubjectKeyIdentifier.from_public_key(
-        private_key_object.public_key()  # type: ignore[arg-type]
+        private_key_object.public_key()
     )
     subject_identifier = key_identifier = subject_identifier_object.public_bytes()
-
     cert = (
         x509.CertificateBuilder()
         .subject_name(subject)
         .issuer_name(issuer)
-        .public_key(private_key_object.public_key())  # type: ignore[arg-type]
+        .public_key(private_key_object.public_key())
         .serial_number(x509.random_serial_number())
         .not_valid_before(datetime.now(timezone.utc))
         .not_valid_after(datetime.now(timezone.utc) + timedelta(days=validity))
