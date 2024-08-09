@@ -38,13 +38,17 @@ def generate_certificate(
         Tuple[str, str, str]: Certificate, CA Certificate, Private Key
     """
     private_key = _generate_private_key()
-    csr = _generate_csr(private_key=private_key, common_name=common_name, sans_ips=sans_ips)
     ca_key = _generate_private_key()
     ca_certificate = _generate_ca_certificate(
         private_key=ca_key, common_name=ca_common_name, validity=validity
     )
     certificate = _generate_certificate(
-        csr=csr, ca=ca_certificate, ca_key=ca_key, validity=validity
+        private_key=private_key,
+        common_name=common_name,
+        sans_ips=sans_ips,
+        ca_cert=ca_certificate,
+        ca_key=ca_key,
+        validity=validity,
     )
     return certificate, ca_certificate, private_key
 
@@ -78,66 +82,38 @@ def _generate_private_key() -> str:
     return key_bytes.decode().strip()
 
 
-def _generate_csr(private_key: str, common_name: str, sans_ips: List[str]) -> str:
-    signing_key = serialization.load_pem_private_key(private_key.encode(), password=None)
-    subject_name = [x509.NameAttribute(x509.NameOID.COMMON_NAME, common_name)]
-    csr = x509.CertificateSigningRequestBuilder(subject_name=x509.Name(subject_name))
-    sans_ip_extension = [x509.IPAddress(ipaddress.ip_address(san)) for san in sans_ips]
-    csr = csr.add_extension(x509.SubjectAlternativeName(set(sans_ip_extension)), critical=False)
-    signed_certificate = csr.sign(signing_key, hashes.SHA256())  # type: ignore[arg-type]
-    return signed_certificate.public_bytes(serialization.Encoding.PEM).decode().strip()
-
-
 def _generate_certificate(
-    csr: str,
-    ca: str,
+    private_key: str,
+    common_name: str,
+    sans_ips: List[str],
+    ca_cert: str,
     ca_key: str,
     validity: int,
 ) -> str:
-    """Generate a TLS certificate based on a CSR.
-
-    Args:
-        csr (str): CSR
-        ca (str): CA Certificate
-        ca_key (str): CA private key
-        validity (int): Certificate validity (in days)
-
-    Returns:
-        str: Certificate
-    """
-    ca_pem = x509.load_pem_x509_certificate(ca.encode())
-    csr_object = x509.load_pem_x509_csr(csr.encode())
-    csr_subject = csr_object.subject
-    csr_common_name = csr_subject.get_attributes_for_oid(x509.NameOID.COMMON_NAME)[0].value
-    private_key = serialization.load_pem_private_key(ca_key.encode(), password=None)
-    subject = x509.Name(
-        [
-            x509.NameAttribute(x509.NameOID.COMMON_NAME, csr_common_name),
-        ]
-    )
-    not_valid_before = datetime.now(timezone.utc)
-    not_valid_after = datetime.now(timezone.utc) + timedelta(days=validity)
-    certificate_builder = (
+    """Generate a self-signed certificate directly."""
+    private_key_obj = serialization.load_pem_private_key(private_key.encode(), password=None)
+    assert isinstance(private_key_obj, rsa.RSAPrivateKey)
+    ca_cert_obj = x509.load_pem_x509_certificate(ca_cert.encode())
+    subject = x509.Name([x509.NameAttribute(x509.NameOID.COMMON_NAME, common_name)])
+    cert_builder = (
         x509.CertificateBuilder()
         .subject_name(subject)
-        .issuer_name(ca_pem.issuer)
-        .public_key(csr_object.public_key())
+        .issuer_name(ca_cert_obj.issuer)
+        .public_key(private_key_obj.public_key())
         .serial_number(x509.random_serial_number())
-        .not_valid_before(not_valid_before)
-        .not_valid_after(not_valid_after)
+        .not_valid_before(datetime.now(timezone.utc))
+        .not_valid_after(datetime.now(timezone.utc) + timedelta(days=validity))
         .add_extension(
-            extval=x509.SubjectAlternativeName(
-                [
-                    x509.IPAddress(ip)
-                    for ip in csr_object.extensions.get_extension_for_class(
-                        x509.SubjectAlternativeName
-                    ).value.get_values_for_type(x509.IPAddress)
-                ]
+            x509.SubjectAlternativeName(
+                [x509.IPAddress(ipaddress.ip_address(san)) for san in sans_ips]
             ),
             critical=False,
         )
     )
-    cert = certificate_builder.sign(private_key, hashes.SHA256())  # type: ignore[arg-type]
+    cert = cert_builder.sign(
+        private_key=serialization.load_pem_private_key(ca_key.encode(), password=None),  # type: ignore[reportArgumentType]
+        algorithm=hashes.SHA256(),
+    )
     return cert.public_bytes(serialization.Encoding.PEM).decode().strip()
 
 
