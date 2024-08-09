@@ -1,4 +1,4 @@
-name: main
+name: CI
 
 on:
   pull_request:
@@ -8,31 +8,30 @@ on:
     branches:
       - main
 
+concurrency:
+  group: ${{ github.ref == 'refs/heads/main' && format('ignore-main-{0}', github.run_id) || format('{0}-{1}', github.workflow, github.ref_name) }}
+  cancel-in-progress: true
+
 jobs:
-  tests:
-    runs-on: ubuntu-22.04
-    steps:
-        - name: checkout
-          uses: actions/checkout@v4
-        - name: setup operator environment
-          uses: charmed-kubernetes/actions-operator@main
-          with:
-            provider: microk8s
-            channel: 1.29-strict/stable
-            juju-channel: 3.4/stable
-            lxd-channel: 5.20/stable
-        - name: format
-          run: |
-            tox -e format
-        - name: lint
-          run: |
-            tox -e lint
-        - name: static
-          run: |
-            tox -e static
-        - name: unit tests
-          run: |
-            tox -e unit
-        - name: integration tests
-          run: |
-            tox -e integration
+  lint-report:
+    uses: ./.github/workflows/lint-report.yaml
+
+  static-analysis:
+    name: Static analysis
+    uses: ./.github/workflows/static-analysis.yaml
+
+  unit-tests-with-coverage:
+    uses: ./.github/workflows/unit-test.yaml
+  
+  build:
+    needs:
+      - lint-report
+      - static-analysis
+      - unit-tests-with-coverage
+    uses: ./.github/workflows/build.yaml
+    secrets: inherit
+
+  integration-test:
+    needs: 
+      - build
+    uses: ./.github/workflows/integration-test.yaml
