@@ -11,7 +11,7 @@ from contextlib import suppress
 from dataclasses import dataclass
 
 import ops
-from certificates_helpers import certificate_has_common_name, generate_certificate
+from certificates_helpers import certificate_issuer_has_common_name, generate_certificate
 from charms.tls_certificates_interface.v4.tls_certificates import (
     TLSCertificatesProvidesV4,
 )
@@ -24,8 +24,8 @@ CONFIG_MOUNT = "config"
 CHARM_PATH = "/var/lib/juju/storage"
 WORKLOAD_CONFIG_PATH = "/etc/gocert"
 
+CERTIFICATE_COMMON_NAME = "GoCert Self Signed Certificate"
 SELF_SIGNED_CA_COMMON_NAME = "GoCert Self Signed Root CA"
-SELF_SIGNED_CA_SECRET_LABEL = "Self Signed Root CA"
 GOCERT_LOGIN_SECRET_LABEL = "GoCert Login Details"
 
 
@@ -186,7 +186,8 @@ class GocertCharm(ops.CharmBase):
             logger.warning("unit IP not found.")
             return
         certificate, ca_certificate, private_key = generate_certificate(
-            common_name="GoCert Self Signed Certificate",
+            common_name=CERTIFICATE_COMMON_NAME,
+            ca_common_name=SELF_SIGNED_CA_COMMON_NAME,
             validity=365,
         )
         self.container.push(
@@ -208,8 +209,9 @@ class GocertCharm(ops.CharmBase):
             )
         except ops.pebble.PathError:
             return False
-        return certificate_has_common_name(
-            certificate=existing_cert.read(), common_name=SELF_SIGNED_CA_COMMON_NAME
+        return certificate_issuer_has_common_name(
+            certificate=existing_cert.read(),
+            common_name=SELF_SIGNED_CA_COMMON_NAME,
         )
 
     def _get_or_create_admin_account(self) -> LoginSecret | None:

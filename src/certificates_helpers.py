@@ -15,31 +15,37 @@ KEY_SIZE = 2048
 PUBLIC_EXPONENT = 65537
 
 
-def generate_certificate(common_name: str, validity: int) -> Tuple[str, str, str]:
+def generate_certificate(
+    common_name: str,
+    ca_common_name: str,
+    validity: int,
+) -> Tuple[str, str, str]:
     """Generate a certificate and private key.
 
     Args:
         common_name (str): Common name for the certificate
-        validity (int): Certificate validity time (in days)
+        ca_common_name (str): Common name for the CA certificate
+        validity (int): Certificate validity time (in days). The same value
+            is used for the CA certificate.
     """
     private_key = _generate_private_key()
     csr = _generate_csr(private_key=private_key, common_name=common_name)
     ca_key = _generate_private_key()
-    ca = _generate_ca(private_key=ca_key, common_name=common_name, validity=validity)
+    ca = _generate_ca(private_key=ca_key, common_name=ca_common_name, validity=validity)
     certificate = _generate_certificate(csr=csr, ca=ca, ca_key=ca_key, validity=validity)
     return certificate, ca, private_key
 
 
-def certificate_has_common_name(certificate: str, common_name: str) -> bool:
+def certificate_issuer_has_common_name(certificate: str, common_name: str) -> bool:
     """Check if a certificate has a specific common name."""
     try:
         loaded_certificate = x509.load_pem_x509_certificate(certificate.encode())
-        loaded_certificate_common_name = loaded_certificate.issuer.get_attributes_for_oid(
+        issuer_common_name = loaded_certificate.issuer.get_attributes_for_oid(
             x509.NameOID.COMMON_NAME
         )[0]
     except (ValueError, TypeError):
         return False
-    return loaded_certificate_common_name.value == common_name
+    return issuer_common_name.value == common_name
 
 
 def _generate_private_key() -> str:
