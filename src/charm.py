@@ -28,7 +28,6 @@ logger = logging.getLogger(__name__)
 
 LOGGING_RELATION_NAME = "logging"
 METRICS_RELATION_NAME = "metrics"
-GRAFANA_RELATION_NAME = "grafana-dashboard"
 
 DB_MOUNT = "database"
 CONFIG_MOUNT = "config"
