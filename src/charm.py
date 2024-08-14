@@ -14,6 +14,7 @@ from typing import Tuple
 import ops
 from charms.loki_k8s.v1.loki_push_api import LogForwarder
 from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointProvider
+from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardProvider
 from charms.tls_certificates_interface.v3.tls_certificates import (
     TLSCertificatesProvidesV3,
     generate_ca,
@@ -78,20 +79,19 @@ class GocertCharm(ops.CharmBase):
 
         self.container = self.unit.get_container("gocert")
         self.tls = TLSCertificatesProvidesV3(self, relationship_name="certificates")
-        self.logs = LogForwarder(self, LOGGING_RELATION_NAME)
+        self.dashboard = GrafanaDashboardProvider(self)
+        self.logs = LogForwarder(charm=self, relation_name=LOGGING_RELATION_NAME)
         self.metrics = MetricsEndpointProvider(
-            self,
-            METRICS_RELATION_NAME,
-            {
-                [
-                    {
-                        "scheme": "https",
-                        "tls_config": {"insecure_skip_verify": True},
-                        "metrics_path": "/metrics",
-                        "static_configs": [{"targets": [f"*:{self.port}"]}],
-                    }
-                ]
-            },
+            charm=self,
+            relation_name=METRICS_RELATION_NAME,
+            jobs=[
+                {
+                    "scheme": "https",
+                    "tls_config": {"insecure_skip_verify": True},
+                    "metrics_path": "/metrics",
+                    "static_configs": [{"targets": [f"*:{self.port}"]}],
+                }
+            ],
         )
 
         self.client = GoCert(
