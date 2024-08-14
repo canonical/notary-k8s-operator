@@ -187,6 +187,7 @@ class GocertCharm(ops.CharmBase):
             return
         certificate, ca_certificate, private_key = generate_certificate(
             common_name=CERTIFICATE_COMMON_NAME,
+            sans_dns=[CERTIFICATE_COMMON_NAME],
             sans_ips=[self._application_bind_address],
             ca_common_name=SELF_SIGNED_CA_COMMON_NAME,
             validity=365,

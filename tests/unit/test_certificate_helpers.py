@@ -5,13 +5,17 @@ from certificates_helpers import certificate_issuer_has_common_name, generate_ce
 from cryptography import x509
 
 
-def test_given_sans_ip_when_generate_certificate_then_certificate_contains_expected_attributes():
+def test_given_sans_when_generate_certificate_then_certificate_contains_expected_attributes():
     common_name = "banana.com"
     sans_ips = ["1.2.3.4"]
     ca_common_name = "apple.com"
 
     certificate, ca_certificate, private_key = generate_certificate(
-        common_name=common_name, sans_ips=sans_ips, ca_common_name=ca_common_name, validity=365
+        common_name=common_name,
+        sans_dns=["banana.com"],
+        sans_ips=sans_ips,
+        ca_common_name=ca_common_name,
+        validity=365,
     )
 
     loaded_cert = x509.load_pem_x509_certificate(certificate.encode())
@@ -27,6 +31,10 @@ def test_given_sans_ip_when_generate_certificate_then_certificate_contains_expec
     sans_ips_from_cert = [ip.compressed for ip in sans.value.get_values_for_type(x509.IPAddress)]
     assert sans_ips == sans_ips_from_cert
 
+    # Validate the SANs DNS
+    sans_dns_from_cert = list(sans.value.get_values_for_type(x509.DNSName))
+    assert ["banana.com"] == sans_dns_from_cert
+
 
 def test_given_cert_issuer_has_common_name_when_certificate_issuer_has_common_name_then_return_true():
     common_name = "banana.com"
@@ -34,7 +42,11 @@ def test_given_cert_issuer_has_common_name_when_certificate_issuer_has_common_na
     ca_common_name = "apple.com"
 
     certificate, ca_certificate, private_key = generate_certificate(
-        common_name=common_name, sans_ips=sans_ips, ca_common_name=ca_common_name, validity=365
+        common_name=common_name,
+        sans_dns=["banana.com"],
+        sans_ips=sans_ips,
+        ca_common_name=ca_common_name,
+        validity=365,
     )
 
     assert certificate_issuer_has_common_name(certificate, ca_common_name)

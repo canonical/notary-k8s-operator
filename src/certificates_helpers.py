@@ -21,7 +21,8 @@ PUBLIC_EXPONENT = 65537
 
 def generate_certificate(
     common_name: str,
-    sans_ips: list[str],
+    sans_dns: List[str],
+    sans_ips: List[str],
     ca_common_name: str,
     validity: int,
 ) -> Tuple[str, str, str]:
@@ -29,6 +30,7 @@ def generate_certificate(
 
     Args:
         common_name (str): Common name for the certificate
+        sans_dns (list[str]): List of Subject Alternative Names (DNS)
         sans_ips (list[str]): List of Subject Alternative Names (IPs)
         ca_common_name (str): Common name for the CA certificate
         validity (int): Certificate validity time (in days). The same value
@@ -45,6 +47,7 @@ def generate_certificate(
     certificate = _generate_certificate(
         private_key=private_key,
         common_name=common_name,
+        sans_dns=sans_dns,
         sans_ips=sans_ips,
         ca_cert=ca_certificate,
         ca_key=ca_key,
@@ -82,6 +85,7 @@ def _generate_private_key() -> str:
 def _generate_certificate(
     private_key: str,
     common_name: str,
+    sans_dns: List[str],
     sans_ips: List[str],
     ca_cert: str,
     ca_key: str,
@@ -103,6 +107,7 @@ def _generate_certificate(
         .add_extension(
             x509.SubjectAlternativeName(
                 [x509.IPAddress(ipaddress.ip_address(san)) for san in sans_ips]
+                + [x509.DNSName(san) for san in sans_dns]
             ),
             critical=False,
         )
