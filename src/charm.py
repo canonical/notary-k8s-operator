@@ -66,7 +66,7 @@ class GocertCharm(ops.CharmBase):
             for event in [
                 self.on["gocert"].pebble_ready,
                 self.on["gocert"].pebble_custom_notice,
-                self.on.certificates_relation_changed,
+                self.on["certificates"].relation_changed,
                 self.on.config_storage_attached,
                 self.on.database_storage_attached,
                 self.on.config_changed,
