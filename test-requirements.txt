@@ -15,7 +15,7 @@ certifi==2024.7.4
     #   -c requirements.txt
     #   kubernetes
     #   requests
-cffi==1.16.0
+cffi==1.17.0
     # via
     #   -c requirements.txt
     #   cryptography
@@ -38,7 +38,7 @@ decorator==5.1.1
     #   ipython
 executing==2.0.1
     # via stack-data
-google-auth==2.32.0
+google-auth==2.33.0
     # via kubernetes
 hvac==2.3.0
     # via juju
@@ -141,7 +141,7 @@ python-dateutil==2.9.0.post0
     # via kubernetes
 pytz==2024.1
     # via pyrfc3339
-pyyaml==6.0.1
+pyyaml==6.0.2
     # via
     #   -c requirements.txt
     #   juju

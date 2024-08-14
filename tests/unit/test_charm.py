@@ -240,8 +240,6 @@ class TestCharm:
             ),
         ):
             out = context.run(Event("config-changed"), state)
-        assert out.secrets[0].contents.get(0).get("certificate")
-        assert out.secrets[0].contents.get(0).get("private-key")
         root = out.containers[0].get_filesystem(context)
         assert (root / "etc/gocert/config/config.yaml").open("r")
         assert (

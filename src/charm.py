@@ -9,18 +9,13 @@ import random
 import string
 from contextlib import suppress
 from dataclasses import dataclass
-from typing import Tuple
 
 import ops
+from certificates_helpers import certificate_issuer_has_common_name, generate_certificate
 from charms.loki_k8s.v1.loki_push_api import LogForwarder
 from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointProvider
-from charms.tls_certificates_interface.v3.tls_certificates import (
-    TLSCertificatesProvidesV3,
-    generate_ca,
-    generate_certificate,
-    generate_csr,
-    generate_private_key,
-    x509,
+from charms.tls_certificates_interface.v4.tls_certificates import (
+    TLSCertificatesProvidesV4,
 )
 from gocert import GoCert
 
@@ -34,21 +29,9 @@ CONFIG_MOUNT = "config"
 CHARM_PATH = "/var/lib/juju/storage"
 WORKLOAD_CONFIG_PATH = "/etc/gocert"
 
+CERTIFICATE_COMMON_NAME = "GoCert Self Signed Certificate"
 SELF_SIGNED_CA_COMMON_NAME = "GoCert Self Signed Root CA"
-SELF_SIGNED_CA_SECRET_LABEL = "Self Signed Root CA"
 GOCERT_LOGIN_SECRET_LABEL = "GoCert Login Details"
-
-
-@dataclass
-class CertificateSecret:
-    """The format of the secret for the certificate that will be used for https connections to GoCert."""
-
-    certificate: str
-    private_key: str
-
-    def to_dict(self) -> dict[str, str]:
-        """Return a dict version of the secret."""
-        return {"certificate": self.certificate, "private-key": self.private_key}
 
 
 @dataclass
@@ -77,7 +60,7 @@ class GocertCharm(ops.CharmBase):
         self.port = 2111
 
         self.container = self.unit.get_container("gocert")
-        self.tls = TLSCertificatesProvidesV3(self, relationship_name="certificates")
+        self.tls = TLSCertificatesProvidesV4(self, relationship_name="certificates")
         self.logs = LogForwarder(charm=self, relation_name=LOGGING_RELATION_NAME)
         self.metrics = MetricsEndpointProvider(
             charm=self,
@@ -101,7 +84,7 @@ class GocertCharm(ops.CharmBase):
             for event in [
                 self.on["gocert"].pebble_ready,
                 self.on["gocert"].pebble_custom_notice,
-                self.tls.on.certificate_creation_request,
+                self.on["certificates"].relation_changed,
                 self.on.config_storage_attached,
                 self.on.database_storage_attached,
                 self.on.config_changed,
@@ -220,21 +203,21 @@ class GocertCharm(ops.CharmBase):
         if not self._application_bind_address:
             logger.warning("unit IP not found.")
             return
-        ca, ca_pk = self._get_or_create_ca_certificate()
-        pk = generate_private_key()
-        csr = generate_csr(
-            private_key=pk,
-            subject="GoCert Self Signed Certificate",
-            sans_ip=[self._application_bind_address],
-        )
-        cert = generate_certificate(csr=csr, ca=ca, ca_key=ca_pk)
-
-        self.container.push(f"{WORKLOAD_CONFIG_PATH}/{CONFIG_MOUNT}/ca.pem", ca, make_dirs=True)
-        self.container.push(
-            f"{WORKLOAD_CONFIG_PATH}/{CONFIG_MOUNT}/certificate.pem", cert, make_dirs=True
+        certificate, ca_certificate, private_key = generate_certificate(
+            common_name=CERTIFICATE_COMMON_NAME,
+            sans_dns=[CERTIFICATE_COMMON_NAME],
+            sans_ips=[self._application_bind_address],
+            ca_common_name=SELF_SIGNED_CA_COMMON_NAME,
+            validity=365,
         )
         self.container.push(
-            f"{WORKLOAD_CONFIG_PATH}/{CONFIG_MOUNT}/private_key.pem", pk, make_dirs=True
+            f"{WORKLOAD_CONFIG_PATH}/{CONFIG_MOUNT}/ca.pem", ca_certificate, make_dirs=True
+        )
+        self.container.push(
+            f"{WORKLOAD_CONFIG_PATH}/{CONFIG_MOUNT}/certificate.pem", certificate, make_dirs=True
+        )
+        self.container.push(
+            f"{WORKLOAD_CONFIG_PATH}/{CONFIG_MOUNT}/private_key.pem", private_key, make_dirs=True
         )
         logger.info("Created self signed certificates.")
 
@@ -246,32 +229,10 @@ class GocertCharm(ops.CharmBase):
             )
         except ops.pebble.PathError:
             return False
-        try:
-            certificate = x509.load_pem_x509_certificate(existing_cert.read().encode())
-            common_name = certificate.issuer.get_attributes_for_oid(x509.NameOID.COMMON_NAME)[0]
-        except (ValueError, TypeError):
-            return False
-        if common_name.value != SELF_SIGNED_CA_COMMON_NAME:
-            return False
-        return True
-
-    def _get_or_create_ca_certificate(self) -> Tuple[bytes, bytes]:
-        """Get the CA certificate from secrets. Create one if it doesn't exist."""
-        try:
-            secret = self.model.get_secret(label=SELF_SIGNED_CA_SECRET_LABEL)
-            secret_content = secret.get_content(refresh=True)
-            ca_cert = secret_content.get("certificate", "")
-            ca_pk = secret_content.get("private-key", "")
-            content = CertificateSecret(
-                certificate=ca_cert,
-                private_key=ca_pk,
-            )
-        except ops.SecretNotFoundError:
-            pk = generate_private_key()
-            ca = generate_ca(private_key=pk, subject=SELF_SIGNED_CA_COMMON_NAME)
-            content = CertificateSecret(certificate=ca.decode(), private_key=pk.decode())
-            self.app.add_secret(label=SELF_SIGNED_CA_SECRET_LABEL, content=content.to_dict())
-        return content.certificate.encode(), content.private_key.encode()
+        return certificate_issuer_has_common_name(
+            certificate=existing_cert.read(),
+            common_name=SELF_SIGNED_CA_COMMON_NAME,
+        )
 
     def _get_or_create_admin_account(self) -> LoginSecret | None:
         """Get the first admin user for the charm to use from secrets. Create one if it doesn't exist.
