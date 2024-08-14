@@ -36,7 +36,9 @@ async def test_build_and_deploy(ops_test: OpsTest, request):
 
 
 @pytest.mark.abort_on_fail
-async def test_given_loki(ops_test: OpsTest):
+async def test_given_loki_and_prometheus_related_to_gocert_all_charm_statuses_active(
+    ops_test: OpsTest,
+):
     """Deploy loki and prometheus, and make sure all applications are active."""
     deploy_prometheus = ops_test.model.deploy(
         "prometheus-k8s",
@@ -50,9 +52,18 @@ async def test_given_loki(ops_test: OpsTest):
     await asyncio.gather(
         deploy_loki,
         deploy_prometheus,
-        ops_test.model.wait_for_idle(
-            apps=[APP_NAME, PROMETHEUS_APPLICATION_NAME, LOKI_APPLICATION_NAME],
-            status="active",
-            timeout=1000,
+        ops_test.model.integrate(
+            relation1=f"{APP_NAME}",
+            relation2=f"{LOKI_APPLICATION_NAME}",
         ),
+        ops_test.model.integrate(
+            relation1=f"{APP_NAME}",
+            relation2=f"{PROMETHEUS_APPLICATION_NAME}",
+        ),
+    )
+    await ops_test.model.wait_for_idle(
+        apps=[APP_NAME, PROMETHEUS_APPLICATION_NAME, LOKI_APPLICATION_NAME],
+        status="active",
+        timeout=1000,
+        raise_on_error=True,
     )
