@@ -1,0 +1,54 @@
+name: Integration tests
+
+on:
+  workflow_call:
+
+jobs:
+  integration-test:
+    strategy:
+      matrix:
+        arch:
+          - arch: amd64
+            runner: ubuntu-22.04
+  
+    runs-on: ${{ matrix.arch.runner }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Fetch Charm Under Test
+        uses: actions/download-artifact@v4
+        with:
+          name: built-charm-${{ matrix.arch.arch }}
+          path: built/
+      
+      - name: Get Charm Under Test Path
+        id: charm-path
+        run: echo "charm_path=$(find built/ -name '*.charm' -type f -print)" >> $GITHUB_OUTPUT
+      
+      - name: Setup operator environment
+        uses: charmed-kubernetes/actions-operator@main
+        with:
+          provider: microk8s
+          channel: 1.29-strict/stable
+          juju-channel: 3.4/stable
+          lxd-channel: 5.20/stable
+  
+      - name: Run integration tests
+        run: |
+          tox -e integration -- \
+            --charm_path=${{ steps.charm-path.outputs.charm_path }}
+  
+      - name: Archive charmcraft logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: charmcraft-logs
+          path: /home/runner/.local/state/charmcraft/log/*.log
+  
+      - name: Archive juju crashdump
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: juju-crashdump
+          path: juju-crashdump-*.tar.xz
