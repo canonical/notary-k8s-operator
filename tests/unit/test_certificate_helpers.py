@@ -5,7 +5,7 @@ from certificates_helpers import certificate_issuer_has_common_name, generate_ce
 from cryptography import x509
 
 
-def test_given_sans_ip_when_generate_certificate_then_certificate_contain_expected_attributes():
+def test_given_sans_ip_when_generate_certificate_then_certificate_contains_expected_attributes():
     common_name = "banana.com"
     sans_ips = ["1.2.3.4"]
     ca_common_name = "apple.com"
