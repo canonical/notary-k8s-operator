@@ -35,3 +35,13 @@ jobs:
     needs: 
       - build
     uses: ./.github/workflows/integration-test.yaml
+
+  publish-charm:
+    needs:
+      - lint-report
+      - static-analysis
+      - unit-tests-with-coverage
+      - integration-test
+    if: ${{ github.ref_name == 'main' || startsWith(github.ref_name, 'release-') }}
+    uses: ./.github/workflows/publish-charm.yaml
+    secrets: inherit
