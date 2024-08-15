@@ -52,6 +52,8 @@ async def test_given_loki_and_prometheus_related_to_gocert_all_charm_statuses_ac
     await asyncio.gather(
         deploy_loki,
         deploy_prometheus,
+    )
+    await asyncio.gather(
         ops_test.model.integrate(
             relation1=f"{APP_NAME}",
             relation2=f"{LOKI_APPLICATION_NAME}",
