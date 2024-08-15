@@ -58,7 +58,7 @@ class GocertCharm(ops.CharmBase):
         super().__init__(framework)
 
         self.port = 2111
-
+        self.unit.set_ports(self.port)
         self.container = self.unit.get_container("gocert")
         self.tls = TLSCertificatesProvidesV4(self, relationship_name="certificates")
         self.logs = LogForwarder(charm=self, relation_name=LOGGING_RELATION_NAME)
