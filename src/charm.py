@@ -12,12 +12,17 @@ from dataclasses import dataclass
 
 import ops
 from certificates_helpers import certificate_issuer_has_common_name, generate_certificate
+from charms.loki_k8s.v1.loki_push_api import LogForwarder
+from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointProvider
 from charms.tls_certificates_interface.v4.tls_certificates import (
     TLSCertificatesProvidesV4,
 )
 from gocert import GoCert
 
 logger = logging.getLogger(__name__)
+
+LOGGING_RELATION_NAME = "logging"
+METRICS_RELATION_NAME = "metrics"
 
 DB_MOUNT = "database"
 CONFIG_MOUNT = "config"
@@ -56,11 +61,24 @@ class GocertCharm(ops.CharmBase):
 
         self.container = self.unit.get_container("gocert")
         self.tls = TLSCertificatesProvidesV4(self, relationship_name="certificates")
+        self.logs = LogForwarder(charm=self, relation_name=LOGGING_RELATION_NAME)
+        self.metrics = MetricsEndpointProvider(
+            charm=self,
+            relation_name=METRICS_RELATION_NAME,
+            jobs=[
+                {
+                    "scheme": "https",
+                    "tls_config": {"insecure_skip_verify": True},
+                    "metrics_path": "/metrics",
+                    "static_configs": [{"targets": [f"*:{self.port}"]}],
+                }
+            ],
+        )
+
         self.client = GoCert(
             f"https://{self._application_bind_address}:{self.port}",
             f"{CHARM_PATH}/{CONFIG_MOUNT}/0/ca.pem",
         )
-
         [
             framework.observe(event, self.configure)
             for event in [

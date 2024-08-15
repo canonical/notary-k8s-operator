@@ -12,6 +12,12 @@ description: |
 provides:
   certificates:
     interface: tls-certificates
+  metrics:
+    interface: prometheus_scrape
+
+requires:
+  logging:
+    interface: loki_push_api
 
 bases:
   - build-on:

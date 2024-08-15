@@ -12,26 +12,35 @@ cffi==1.17.0
     # via cryptography
 charset-normalizer==3.3.2
     # via requests
+cosl==0.0.20
+    # via -r requirements.in
 cryptography==43.0.0
     # via -r requirements.in
 idna==3.7
     # via requests
 ops==2.15.0
-    # via -r requirements.in
+    # via
+    #   -r requirements.in
+    #   cosl
 pycparser==2.22
     # via cffi
 pydantic==2.8.2
-    # via -r requirements.in
+    # via
+    #   -r requirements.in
+    #   cosl
 pydantic-core==2.20.1
     # via pydantic
 pyyaml==6.0.2
-    # via ops
+    # via
+    #   cosl
+    #   ops
 requests==2.32.3
     # via -r requirements.in
 rpds-py==0.18.0
     # via -r requirements.in
 typing-extensions==4.12.2
     # via
+    #   cosl
     #   pydantic
     #   pydantic-core
 urllib3==2.2.2
