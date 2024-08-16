@@ -124,7 +124,7 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "D {__name__=\"outstanding_certificate_requests\", instance=\"gocert_62b06074-5b24-4a6d-8245-34310fc568e0_gocert-k8s_gocert-k8s/0\", job=\"juju_gocert_62b06074_gocert-k8s_prometheus_scrape-0\", juju_application=\"gocert-k8s\", juju_charm=\"gocert-k8s\", juju_model=\"gocert\", juju_model_uuid=\"62b06074-5b24-4a6d-8245-34310fc568e0\", juju_unit=\"gocert-k8s/0\"}"
+              "options": "D"
             },
             "properties": [
               {
