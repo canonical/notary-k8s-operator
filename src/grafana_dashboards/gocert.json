@@ -659,10 +659,10 @@
         "current": {
           "selected": true,
           "text": [
-            "All"
+            "gocert-k8s/0"
           ],
           "value": [
-            "$__all"
+            "gocert-k8s/0"
           ]
         },
         "datasource": {
