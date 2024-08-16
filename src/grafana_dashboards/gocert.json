@@ -54,7 +54,8 @@
                 "value": null
               }
             ]
-          }
+          },
+          "unit": "none"
         },
         "overrides": []
       },
@@ -212,7 +213,7 @@
             "uid": "${prometheusds}"
           },
           "editorMode": "builder",
-          "expr": "outstanding_certificate_requests",
+          "expr": "outstanding_certificate_requests{juju_application=~\"$juju_application\",juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",juju_unit=~\"$juju_unit\"}",
           "legendFormat": "Outstanding",
           "range": true,
           "refId": "A"
@@ -223,7 +224,7 @@
             "uid": "${prometheusds}"
           },
           "editorMode": "builder",
-          "expr": "certificates",
+          "expr": "certificates{juju_application=~\"$juju_application\",juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",juju_unit=~\"$juju_unit\"}",
           "hide": false,
           "legendFormat": "Fulfilled",
           "range": true,
@@ -235,7 +236,7 @@
             "uid": "${prometheusds}"
           },
           "editorMode": "builder",
-          "expr": "certificate_requests",
+          "expr": "certificate_requests{juju_application=~\"$juju_application\",juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",juju_unit=~\"$juju_unit\"}",
           "hide": true,
           "legendFormat": "__auto",
           "range": true,
@@ -408,7 +409,8 @@
                 "value": 80
               }
             ]
-          }
+          },
+          "unit": "none"
         },
         "overrides": []
       },
@@ -516,7 +518,8 @@
                 "value": 80
               }
             ]
-          }
+          },
+          "unit": "none"
         },
         "overrides": []
       },
@@ -613,6 +616,42 @@
   "tags": [],
   "templating": {
     "list": [
+      {
+        "current": {
+          "selected": false,
+          "text": "All",
+          "value": "$__all"
+        },
+        "hide": 0,
+        "includeAll": true,
+        "label": "Loki datasource",
+        "multi": true,
+        "name": "lokids",
+        "options": [],
+        "query": "loki",
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "type": "datasource"
+      },
+      {
+        "current": {
+          "selected": false,
+          "text": "All",
+          "value": "$__all"
+        },
+        "hide": 0,
+        "includeAll": true,
+        "label": "Prometheus datasource",
+        "multi": true,
+        "name": "prometheusds",
+        "options": [],
+        "query": "prometheus",
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "type": "datasource"
+      },
       {
         "current": {
           "selected": false,
