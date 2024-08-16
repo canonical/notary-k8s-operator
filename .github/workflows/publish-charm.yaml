@@ -8,7 +8,14 @@ on:
 
 jobs:
   publish-charm:
-    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        arch:
+          - arch: amd64
+            runner: ubuntu-22.04
+          - arch: arm64
+            runner: [self-hosted, linux, ARM64, medium, jammy]
+    runs-on: ${{ matrix.arch.runner }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -19,7 +26,7 @@ jobs:
       - name: Fetch Tested Charm
         uses: actions/download-artifact@v4
         with:
-          name: built-charm
+          name: built-charm-${{ matrix.arch.arch }}
 
       - name: Get Charm Under Test Path
         id: charm-path
