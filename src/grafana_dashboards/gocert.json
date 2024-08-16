@@ -15,7 +15,7 @@
       }
     ]
   },
-  "editable": true,
+  "editable": false,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 0,
   "links": [],
@@ -389,6 +389,7 @@
         "type": "prometheus",
         "uid": "${prometheusds}"
       },
+      "description": "Displays stats about the Go server running GoCert",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -466,6 +467,7 @@
         "type": "prometheus",
         "uid": "${prometheusds}"
       },
+      "description": "Displays stats about the HTTP requests coming in to Gocert",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -655,9 +657,13 @@
       {
         "allValue": ".*",
         "current": {
-          "selected": false,
-          "text": "All",
-          "value": "$__all"
+          "selected": true,
+          "text": [
+            "All"
+          ],
+          "value": [
+            "$__all"
+          ]
         },
         "datasource": {
           "uid": "${prometheusds}"
@@ -686,9 +692,13 @@
       {
         "allValue": ".*",
         "current": {
-          "selected": false,
-          "text": "All",
-          "value": "$__all"
+          "selected": true,
+          "text": [
+            "gocert-k8s"
+          ],
+          "value": [
+            "gocert-k8s"
+          ]
         },
         "datasource": {
           "uid": "${prometheusds}"
