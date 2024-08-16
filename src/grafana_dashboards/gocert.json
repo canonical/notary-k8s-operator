@@ -103,7 +103,7 @@
         "type": "prometheus",
         "uid": "${prometheusds}"
       },
-      "description": "Shows the ratio of outstanding, fulfilled and rejected certificates",
+      "description": "The ratio of outstanding, fulfilled and rejected certificates",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -262,7 +262,7 @@
         "type": "prometheus",
         "uid": "${prometheusds}"
       },
-      "description": "This graph shows the expiring or expiring certificates from left to right.",
+      "description": "The chart of fulfilled, outstanding and rejected certificate requests.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -390,7 +390,7 @@
         "type": "prometheus",
         "uid": "${prometheusds}"
       },
-      "description": "Displays the number of running GoRoutines",
+      "description": "The number of running GoRoutines",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -562,7 +562,7 @@
           "refId": "A"
         }
       ],
-      "title": "Pebble Logs",
+      "title": "GoCert Logs",
       "type": "logs"
     }
   ],
