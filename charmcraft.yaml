@@ -9,6 +9,16 @@ description: |
   Charmed GoCert helps you automatically receive CSRs and distribute certificates to the applications
   you've deployed in your model.
 
+links:
+  documentation: https://discourse.charmhub.io/t/gocert-docs-index/15216
+  issues: 
+    - https://github.com/canonical/gocert-k8s-operator/issues
+  source: 
+    - https://github.com/canonical/gocert-k8s-operator
+  website: 
+    - https://charmhub.io/gocert-k8s
+  
+
 provides:
   certificates:
     interface: tls-certificates
