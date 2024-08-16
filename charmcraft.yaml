@@ -44,14 +44,12 @@ storage:
     type: filesystem
     minimum-size: 1G
 
-
-
 resources:
   gocert-image:
     type: oci-image
     description: OCI image for the 'GoCert' application
-    upstream-source: ghcr.io/canonical/gocert:0.0.2
-  
+    upstream-source: ghcr.io/canonical/gocert:0.0.3
+
 parts:
   charm:
     build-packages:
