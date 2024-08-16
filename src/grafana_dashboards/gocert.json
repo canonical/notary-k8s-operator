@@ -37,7 +37,7 @@
       {
         "datasource": {
           "type": "prometheus",
-          "uid": "PF33313B8A1E04527"
+          "uid": "${prometheusds}"
         },
         "description": "The total number of certificate requests in GoCert",
         "fieldConfig": {
@@ -82,7 +82,7 @@
           {
             "datasource": {
               "type": "prometheus",
-              "uid": "PF33313B8A1E04527"
+              "uid": "${prometheusds}"
             },
             "editorMode": "builder",
             "expr": "certificates",
@@ -95,7 +95,7 @@
           {
             "datasource": {
               "type": "prometheus",
-              "uid": "PF33313B8A1E04527"
+              "uid": "${prometheusds}"
             },
             "editorMode": "builder",
             "expr": "outstanding_certificate_requests",
@@ -107,7 +107,7 @@
           {
             "datasource": {
               "type": "prometheus",
-              "uid": "PF33313B8A1E04527"
+              "uid": "${prometheusds}"
             },
             "editorMode": "builder",
             "expr": "certificate_requests",
@@ -123,7 +123,7 @@
       {
         "datasource": {
           "type": "prometheus",
-          "uid": "PF33313B8A1E04527"
+          "uid": "${prometheusds}"
         },
         "description": "This graph shows the expiring or expiring certificates from left to right.",
         "fieldConfig": {
@@ -175,7 +175,7 @@
           {
             "datasource": {
               "type": "prometheus",
-              "uid": "PF33313B8A1E04527"
+              "uid": "${prometheusds}"
             },
             "editorMode": "builder",
             "expr": "certificates_expired",
@@ -186,7 +186,7 @@
           {
             "datasource": {
               "type": "prometheus",
-              "uid": "PF33313B8A1E04527"
+              "uid": "${prometheusds}"
             },
             "editorMode": "builder",
             "expr": "certificates_expiring_in_1_day",
@@ -198,7 +198,7 @@
           {
             "datasource": {
               "type": "prometheus",
-              "uid": "PF33313B8A1E04527"
+              "uid": "${prometheusds}"
             },
             "editorMode": "builder",
             "expr": "certificates_expiring_in_7_days",
@@ -210,7 +210,7 @@
           {
             "datasource": {
               "type": "prometheus",
-              "uid": "PF33313B8A1E04527"
+              "uid": "${prometheusds}"
             },
             "editorMode": "builder",
             "expr": "certificates_expiring_in_30_days",
@@ -222,7 +222,7 @@
           {
             "datasource": {
               "type": "prometheus",
-              "uid": "PF33313B8A1E04527"
+              "uid": "${prometheusds}"
             },
             "editorMode": "builder",
             "expr": "certificates_expiring_in_90_days",
@@ -251,7 +251,7 @@
       {
         "datasource": {
           "type": "prometheus",
-          "uid": "PF33313B8A1E04527"
+          "uid": "${prometheusds}"
         },
         "fieldConfig": {
           "defaults": {
@@ -301,7 +301,7 @@
           {
             "datasource": {
               "type": "prometheus",
-              "uid": "PF33313B8A1E04527"
+              "uid": "${prometheusds}"
             },
             "editorMode": "builder",
             "expr": "go_goroutines{juju_charm=\"gocert-k8s\"}",
@@ -312,7 +312,7 @@
           {
             "datasource": {
               "type": "prometheus",
-              "uid": "PF33313B8A1E04527"
+              "uid": "${prometheusds}"
             },
             "editorMode": "builder",
             "expr": "go_memstats_alloc_bytes{juju_charm=\"gocert-k8s\"} / 1048576",
@@ -328,7 +328,7 @@
       {
         "datasource": {
           "type": "prometheus",
-          "uid": "PF33313B8A1E04527"
+          "uid": "${prometheusds}"
         },
         "fieldConfig": {
           "defaults": {
@@ -406,7 +406,7 @@
           {
             "datasource": {
               "type": "prometheus",
-              "uid": "PF33313B8A1E04527"
+              "uid": "${prometheusds}"
             },
             "editorMode": "builder",
             "expr": "sum_over_time(http_requests_total{juju_charm=\"gocert-k8s\"}[1m])",
@@ -434,7 +434,7 @@
       {
         "datasource": {
           "type": "loki",
-          "uid": "P2C167435204F2BB6"
+          "uid": "${lokids}"
         },
         "gridPos": {
           "h": 8,
@@ -457,7 +457,7 @@
           {
             "datasource": {
               "type": "loki",
-              "uid": "P2C167435204F2BB6"
+              "uid": "${lokids}"
             },
             "editorMode": "builder",
             "expr": "{charm=\"gocert-k8s\"} |= ``",
