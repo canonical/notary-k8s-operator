@@ -503,7 +503,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "P211CE32A51D62744"
+            "uid": "${prometheusds}"
           },
           "editorMode": "builder",
           "expr": "go_memstats_alloc_bytes{juju_charm=\"gocert-k8s\"}",
