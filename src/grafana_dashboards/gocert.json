@@ -88,7 +88,7 @@
             "uid": "${prometheusds}"
           },
           "editorMode": "builder",
-          "expr": "certificate_requests{juju_application=~\"$juju_application\",juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",juju_unit=~\"$juju_unit\"}",
+          "expr": "certificate_requests",
           "hide": false,
           "legendFormat": "Total",
           "range": true,
@@ -213,7 +213,7 @@
             "uid": "${prometheusds}"
           },
           "editorMode": "builder",
-          "expr": "outstanding_certificate_requests{juju_application=~\"$juju_application\",juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",juju_unit=~\"$juju_unit\"}",
+          "expr": "outstanding_certificate_requests",
           "legendFormat": "Outstanding",
           "range": true,
           "refId": "A"
@@ -224,7 +224,7 @@
             "uid": "${prometheusds}"
           },
           "editorMode": "builder",
-          "expr": "certificates{juju_application=~\"$juju_application\",juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",juju_unit=~\"$juju_unit\"}",
+          "expr": "certificates",
           "hide": false,
           "legendFormat": "Fulfilled",
           "range": true,
@@ -236,7 +236,7 @@
             "uid": "${prometheusds}"
           },
           "editorMode": "builder",
-          "expr": "certificate_requests{juju_application=~\"$juju_application\",juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",juju_unit=~\"$juju_unit\"}",
+          "expr": "certificate_requests",
           "hide": true,
           "legendFormat": "__auto",
           "range": true,
