@@ -390,7 +390,7 @@
         "type": "prometheus",
         "uid": "${prometheusds}"
       },
-      "description": "Displays stats about the Go server running GoCert",
+      "description": "Displays the number of running GoRoutines",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -416,7 +416,7 @@
       },
       "gridPos": {
         "h": 7,
-        "w": 7,
+        "w": 4,
         "x": 0,
         "y": 9
       },
@@ -447,21 +447,9 @@
           "legendFormat": "Goroutines",
           "range": true,
           "refId": "A"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${prometheusds}"
-          },
-          "editorMode": "builder",
-          "expr": "go_memstats_alloc_bytes{juju_application=~\"$juju_application\",juju_charm=\"gocert-k8s\",juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",juju_unit=~\"$juju_unit\"} / 1.048576e+06",
-          "hide": false,
-          "legendFormat": "Allocated Megabytes",
-          "range": true,
-          "refId": "B"
         }
       ],
-      "title": "Server Performance",
+      "title": "Number of GoRoutines",
       "type": "stat"
     },
     {
@@ -469,41 +457,11 @@
         "type": "prometheus",
         "uid": "${prometheusds}"
       },
-      "description": "Displays stats about the HTTP requests coming in to Gocert",
+      "description": "The total memory usage by GoCert",
       "fieldConfig": {
         "defaults": {
           "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "drawStyle": "line",
-            "fillOpacity": 0,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
-            "lineInterpolation": "linear",
-            "lineWidth": 1,
-            "pointSize": 5,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "auto",
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
+            "mode": "thresholds"
           },
           "mappings": [],
           "thresholds": {
@@ -512,52 +470,50 @@
               {
                 "color": "green",
                 "value": null
-              },
-              {
-                "color": "red",
-                "value": 80
               }
             ]
           },
-          "unit": "none"
+          "unit": "bytes"
         },
         "overrides": []
       },
       "gridPos": {
         "h": 7,
-        "w": 12,
-        "x": 7,
+        "w": 4,
+        "x": 4,
         "y": 9
       },
-      "id": 8,
+      "id": 10,
       "options": {
-        "legend": {
-          "calcs": [],
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": true
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
         },
-        "tooltip": {
-          "mode": "single",
-          "sort": "none"
-        }
+        "textMode": "auto"
       },
       "pluginVersion": "9.5.3",
       "targets": [
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${prometheusds}"
+            "uid": "P211CE32A51D62744"
           },
           "editorMode": "builder",
-          "expr": "sum_over_time(http_requests_total{juju_application=~\"$juju_application\",juju_charm=\"gocert-k8s\",juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",juju_unit=~\"$juju_unit\"}[1m])",
-          "legendFormat": "{{method}} - {{code}}",
+          "expr": "go_memstats_alloc_bytes{juju_charm=\"gocert-k8s\"}",
+          "legendFormat": "__auto",
           "range": true,
           "refId": "A"
         }
       ],
-      "title": "Network Performance",
-      "type": "timeseries"
+      "title": "Allocated Memory",
+      "type": "stat"
     },
     {
       "collapsed": false,
@@ -610,7 +566,7 @@
       "type": "logs"
     }
   ],
-  "refresh": "",
+  "refresh": false,
   "schemaVersion": 38,
   "style": "dark",
   "tags": [],
@@ -636,9 +592,13 @@
       },
       {
         "current": {
-          "selected": false,
-          "text": "All",
-          "value": "$__all"
+          "selected": true,
+          "text": [
+            "All"
+          ],
+          "value": [
+            "$__all"
+          ]
         },
         "hide": 0,
         "includeAll": true,
@@ -647,6 +607,7 @@
         "name": "prometheusds",
         "options": [],
         "query": "prometheus",
+        "queryValue": "",
         "refresh": 1,
         "regex": "",
         "skipUrlSync": false,
@@ -696,13 +657,9 @@
       {
         "allValue": ".*",
         "current": {
-          "selected": true,
-          "text": [
-            "gocert-k8s/0"
-          ],
-          "value": [
-            "gocert-k8s/0"
-          ]
+          "selected": false,
+          "text": "All",
+          "value": "$__all"
         },
         "datasource": {
           "uid": "${prometheusds}"
@@ -731,13 +688,9 @@
       {
         "allValue": ".*",
         "current": {
-          "selected": true,
-          "text": [
-            "gocert-k8s"
-          ],
-          "value": [
-            "gocert-k8s"
-          ]
+          "selected": false,
+          "text": "All",
+          "value": "$__all"
         },
         "datasource": {
           "uid": "${prometheusds}"
@@ -828,7 +781,7 @@
     ]
   },
   "time": {
-    "from": "now-6h",
+    "from": "now-30m",
     "to": "now"
   },
   "timepicker": {},
