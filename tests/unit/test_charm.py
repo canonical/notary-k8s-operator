@@ -2,6 +2,7 @@
 # See LICENSE file for licensing details.
 
 import os
+import tempfile
 from unittest.mock import Mock, patch
 
 import ops
@@ -10,6 +11,17 @@ import pytest
 from scenario import Container, Context, Event, Mount, Network, State, Storage
 
 from charm import GocertCharm
+from lib.charms.tls_certificates_interface.v4.tls_certificates import (
+    Certificate,
+    PrivateKey,
+    generate_ca,
+    generate_certificate,
+    generate_csr,
+    generate_private_key,
+)
+
+CERTIFICATE_COMMON_NAME = "GoCert Self Signed Certificate"
+SELF_SIGNED_CA_COMMON_NAME = "GoCert Self Signed Root CA"
 
 TESTING_MOUNT_PATH = os.path.dirname(os.path.realpath(__file__)) + "/test_mounts/"
 
@@ -18,6 +30,26 @@ class TestCharm:
     @pytest.fixture(scope="function")
     def context(self):
         yield Context(GocertCharm)
+
+    def example_cert_and_key(self) -> tuple[Certificate, PrivateKey]:
+        private_key = generate_private_key()
+        csr = generate_csr(
+            private_key=private_key,
+            common_name=CERTIFICATE_COMMON_NAME,
+        )
+        ca_private_key = generate_private_key()
+        ca_certificate = generate_ca(
+            private_key=ca_private_key,
+            common_name=SELF_SIGNED_CA_COMMON_NAME,
+            validity=365,
+        )
+        certificate = generate_certificate(
+            csr=csr,
+            ca=ca_certificate,
+            ca_private_key=ca_private_key,
+            validity=365,
+        )
+        return certificate, private_key
 
     # Configure tests
     def test_given_only_config_storage_container_cant_connect_network_not_available_gocert_not_running_when_configure_then_no_error_raised(
@@ -1391,24 +1423,29 @@ class TestCharm:
     def test_given_gocert_available_and_initialized_when_collect_status_then_status_is_active(
         self, context
     ):
-        config_mount = Mount("/etc/gocert/config", f"{TESTING_MOUNT_PATH}/self_signed_certs")
-        state = State(
-            storage=[Storage(name="config"), Storage(name="database")],
-            containers=[
-                Container(name="gocert", can_connect=True, mounts={"config": config_mount})
-            ],
-            networks={"juju-info": Network.default()},
-            leader=True,
-        )
+        with tempfile.TemporaryDirectory() as tempdir:
+            config_mount = Mount("/etc/gocert/config", tempdir)
+            state = State(
+                storage=[Storage(name="config"), Storage(name="database")],
+                containers=[
+                    Container(name="gocert", can_connect=True, mounts={"config": config_mount})
+                ],
+                networks={"juju-info": Network.default()},
+                leader=True,
+            )
 
-        with patch(
-            "gocert.GoCert.__new__",
-            return_value=Mock(
-                **{"is_api_available.return_value": True, "is_initialized.return_value": True},
-            ),
-        ):
-            out = context.run(Event("collect-unit-status"), state)
-        assert out.unit_status == ops.ActiveStatus()
+            certificate, _ = self.example_cert_and_key()
+            with open(tempdir + "/certificate.pem", "w") as f:
+                f.write(str(certificate))
+
+            with patch(
+                "gocert.GoCert.__new__",
+                return_value=Mock(
+                    **{"is_api_available.return_value": True, "is_initialized.return_value": True},
+                ),
+            ):
+                out = context.run(Event("collect-unit-status"), state)
+            assert out.unit_status == ops.ActiveStatus()
 
     def test_given_gocert_available_and_not_initialized_when_configure_then_admin_user_created(
         self, context

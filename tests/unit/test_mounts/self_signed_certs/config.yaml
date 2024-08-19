@@ -1,5 +1,0 @@
-key_path:  "/etc/gocert/config/private_key.pem"
-cert_path: "/etc/gocert/config/certificate.pem"
-db_path: "/var/lib/gocert/database/certs.db"
-port: 2111
-pebble_notifications: true
