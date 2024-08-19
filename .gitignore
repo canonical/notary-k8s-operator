@@ -162,6 +162,3 @@ cython_debug/
 
 .vscode
 *.charm
-
-# Unit test generated files
-tests/unit/test_mounts/self_signed_certs/*
