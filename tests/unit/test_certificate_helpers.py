@@ -1,8 +1,9 @@
 # Copyright 2024 Canonical Ltd.
 # See LICENSE file for licensing details.
 
-from certificates_helpers import certificate_issuer_has_common_name, generate_certificate
 from cryptography import x509
+
+from certificates_helpers import certificate_issuer_has_common_name, generate_certificate
 
 
 def test_given_sans_when_generate_certificate_then_certificate_contains_expected_attributes():

@@ -12,7 +12,7 @@ cffi==1.17.0
     # via cryptography
 charset-normalizer==3.3.2
     # via requests
-cosl==0.0.20
+cosl==0.0.21
     # via -r requirements.in
 cryptography==43.0.0
     # via -r requirements.in

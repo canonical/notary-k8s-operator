@@ -11,13 +11,14 @@ from contextlib import suppress
 from dataclasses import dataclass
 
 import ops
-from certificates_helpers import certificate_issuer_has_common_name, generate_certificate
 from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardProvider
 from charms.loki_k8s.v1.loki_push_api import LogForwarder
 from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointProvider
 from charms.tls_certificates_interface.v4.tls_certificates import (
     TLSCertificatesProvidesV4,
 )
+
+from certificates_helpers import certificate_issuer_has_common_name, generate_certificate
 from gocert import GoCert
 
 logger = logging.getLogger(__name__)

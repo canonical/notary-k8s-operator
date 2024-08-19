@@ -7,8 +7,9 @@ from unittest.mock import Mock, patch
 import ops
 import ops.testing
 import pytest
-from charm import GocertCharm
 from scenario import Container, Context, Event, Mount, Network, State, Storage
+
+from charm import GocertCharm
 
 TESTING_MOUNT_PATH = os.path.dirname(os.path.realpath(__file__)) + "/test_mounts/"
 
