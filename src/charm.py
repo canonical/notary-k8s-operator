@@ -15,10 +15,14 @@ from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardProvider
 from charms.loki_k8s.v1.loki_push_api import LogForwarder
 from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointProvider
 from charms.tls_certificates_interface.v4.tls_certificates import (
+    Certificate,
     TLSCertificatesProvidesV4,
+    generate_ca,
+    generate_certificate,
+    generate_csr,
+    generate_private_key,
 )
 
-from certificates_helpers import certificate_issuer_has_common_name, generate_certificate
 from gocert import GoCert
 
 logger = logging.getLogger(__name__)
@@ -207,21 +211,37 @@ class GocertCharm(ops.CharmBase):
         if not self._application_bind_address:
             logger.warning("unit IP not found.")
             return
-        certificate, ca_certificate, private_key = generate_certificate(
+        ca_private_key = generate_private_key()
+        ca_certificate = generate_ca(
+            private_key=ca_private_key,
+            common_name=SELF_SIGNED_CA_COMMON_NAME,
+            validity=365,
+        )
+        private_key = generate_private_key()
+        csr = generate_csr(
+            private_key=private_key,
             common_name=CERTIFICATE_COMMON_NAME,
-            sans_dns=[CERTIFICATE_COMMON_NAME],
-            sans_ips=[self._application_bind_address],
-            ca_common_name=SELF_SIGNED_CA_COMMON_NAME,
+            sans_dns=frozenset([CERTIFICATE_COMMON_NAME]),
+            sans_ip=frozenset([self._application_bind_address]),
+        )
+        certificate = generate_certificate(
+            ca=ca_certificate,
+            ca_private_key=ca_private_key,
+            csr=csr,
             validity=365,
         )
         self.container.push(
-            f"{WORKLOAD_CONFIG_PATH}/{CONFIG_MOUNT}/ca.pem", ca_certificate, make_dirs=True
+            f"{WORKLOAD_CONFIG_PATH}/{CONFIG_MOUNT}/ca.pem", str(ca_certificate), make_dirs=True
         )
         self.container.push(
-            f"{WORKLOAD_CONFIG_PATH}/{CONFIG_MOUNT}/certificate.pem", certificate, make_dirs=True
+            f"{WORKLOAD_CONFIG_PATH}/{CONFIG_MOUNT}/certificate.pem",
+            str(certificate),
+            make_dirs=True,
         )
         self.container.push(
-            f"{WORKLOAD_CONFIG_PATH}/{CONFIG_MOUNT}/private_key.pem", private_key, make_dirs=True
+            f"{WORKLOAD_CONFIG_PATH}/{CONFIG_MOUNT}/private_key.pem",
+            str(private_key),
+            make_dirs=True,
         )
         logger.info("Created self signed certificates.")
 
@@ -233,10 +253,8 @@ class GocertCharm(ops.CharmBase):
             )
         except ops.pebble.PathError:
             return False
-        return certificate_issuer_has_common_name(
-            certificate=existing_cert.read(),
-            common_name=SELF_SIGNED_CA_COMMON_NAME,
-        )
+        cert = Certificate.from_string(existing_cert.read())
+        return cert.common_name == CERTIFICATE_COMMON_NAME
 
     def _get_or_create_admin_account(self) -> LoginSecret | None:
         """Get the first admin user for the charm to use from secrets. Create one if it doesn't exist.
