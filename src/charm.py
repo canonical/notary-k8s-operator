@@ -12,6 +12,7 @@ from dataclasses import dataclass
 
 import ops
 from certificates_helpers import certificate_issuer_has_common_name, generate_certificate
+from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardProvider
 from charms.loki_k8s.v1.loki_push_api import LogForwarder
 from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointProvider
 from charms.tls_certificates_interface.v4.tls_certificates import (
@@ -23,6 +24,7 @@ logger = logging.getLogger(__name__)
 
 LOGGING_RELATION_NAME = "logging"
 METRICS_RELATION_NAME = "metrics"
+GRAFANA_RELATION_NAME = "grafana-dashboard"
 
 DB_MOUNT = "database"
 CONFIG_MOUNT = "config"
@@ -61,6 +63,7 @@ class GocertCharm(ops.CharmBase):
         self.unit.set_ports(self.port)
         self.container = self.unit.get_container("gocert")
         self.tls = TLSCertificatesProvidesV4(self, relationship_name="certificates")
+        self.dashboard = GrafanaDashboardProvider(self, relation_name=GRAFANA_RELATION_NAME)
         self.logs = LogForwarder(charm=self, relation_name=LOGGING_RELATION_NAME)
         self.metrics = MetricsEndpointProvider(
             charm=self,

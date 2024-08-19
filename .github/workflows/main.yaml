@@ -15,6 +15,8 @@ concurrency:
 jobs:
   lint-report:
     uses: ./.github/workflows/lint-report.yaml
+  lint-grafana:
+    uses: ./.github/workflows/grafana-lint.yaml
 
   static-analysis:
     name: Static analysis
