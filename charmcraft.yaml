@@ -18,6 +18,10 @@ links:
   website: 
     - https://charmhub.io/notary-k8s
   
+base: ubuntu@24.04
+platforms:
+  amd64:
+  arm64:
 
 provides:
   certificates:
@@ -30,14 +34,6 @@ provides:
 requires:
   logging:
     interface: loki_push_api
-
-bases:
-  - build-on:
-    - name: ubuntu
-      channel: "22.04"
-    run-on:
-    - name: ubuntu
-      channel: "22.04"
 
 containers:
   notary:
