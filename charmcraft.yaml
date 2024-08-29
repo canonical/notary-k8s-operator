@@ -30,6 +30,9 @@ provides:
 requires:
   logging:
     interface: loki_push_api
+  ingress:
+    interface: ingress
+    limit: 1
 
 bases:
   - build-on:

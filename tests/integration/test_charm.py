@@ -17,6 +17,7 @@ APP_NAME = CHARMCRAFT["name"]
 
 LOKI_APPLICATION_NAME = "loki-k8s"
 PROMETHEUS_APPLICATION_NAME = "prometheus-k8s"
+TRAEIK_K8S_APPLICATION_NAME = "traefik-k8s"
 
 
 @pytest.mark.abort_on_fail
@@ -65,6 +66,21 @@ async def test_given_loki_and_prometheus_related_to_gocert_all_charm_statuses_ac
     )
     await ops_test.model.wait_for_idle(
         apps=[APP_NAME, PROMETHEUS_APPLICATION_NAME, LOKI_APPLICATION_NAME],
+        status="active",
+        timeout=1000,
+        raise_on_error=True,
+    )
+
+
+@pytest.mark.abort_on_fail
+async def test_given_application_deployed_when_related_to_traefik_k8s_then_all_statuses_active(
+    ops_test: OpsTest,
+):
+    await ops_test.model.deploy(
+        TRAEIK_K8S_APPLICATION_NAME, application_name=TRAEIK_K8S_APPLICATION_NAME, trust=True
+    )
+    await ops_test.model.wait_for_idle(
+        apps=[APP_NAME, TRAEIK_K8S_APPLICATION_NAME],
         status="active",
         timeout=1000,
         raise_on_error=True,

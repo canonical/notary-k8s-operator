@@ -22,6 +22,7 @@ from charms.tls_certificates_interface.v4.tls_certificates import (
     generate_csr,
     generate_private_key,
 )
+from charms.traefik_k8s.v2.ingress import IngressPerAppRequirer
 
 from gocert import GoCert
 
@@ -70,6 +71,12 @@ class GocertCharm(ops.CharmBase):
         self.tls = TLSCertificatesProvidesV4(self, relationship_name="certificates")
         self.dashboard = GrafanaDashboardProvider(self, relation_name=GRAFANA_RELATION_NAME)
         self.logs = LogForwarder(charm=self, relation_name=LOGGING_RELATION_NAME)
+        self.ingress = IngressPerAppRequirer(
+            charm=self,
+            port=self.port,
+            strip_prefix=True,
+            scheme=lambda: "https",
+        )
         self.metrics = MetricsEndpointProvider(
             charm=self,
             relation_name=METRICS_RELATION_NAME,
