@@ -1,22 +1,22 @@
 
-name: gocert-k8s
+name: notary-k8s
 type: charm
-title: GoCert
+title: Notary
 summary: Certificate management made easy
 
 description: |
-  GoCert helps you manage certificate requests and their associated certificates.
-  Charmed GoCert helps you automatically receive CSRs and distribute certificates to the applications
+  Notary helps you manage certificate requests and their associated certificates.
+  Charmed Notary helps you automatically receive CSRs and distribute certificates to the applications
   you've deployed in your model.
 
 links:
   documentation: https://discourse.charmhub.io/t/gocert-docs-index/15216
   issues: 
-    - https://github.com/canonical/gocert-k8s-operator/issues
+    - https://github.com/canonical/notary-k8s-operator/issues
   source: 
-    - https://github.com/canonical/gocert-k8s-operator
+    - https://github.com/canonical/notary-k8s-operator
   website: 
-    - https://charmhub.io/gocert-k8s
+    - https://charmhub.io/notary-k8s
   
 
 provides:
@@ -40,13 +40,13 @@ bases:
       channel: "22.04"
 
 containers:
-  gocert:
-    resource: gocert-image
+  notary:
+    resource: notary-image
     mounts:
     - storage: config
-      location: /etc/gocert/config
+      location: /etc/notary/config
     - storage: database
-      location: /var/lib/gocert/database
+      location: /var/lib/notary/database
 
 storage:
   config:
@@ -57,10 +57,10 @@ storage:
     minimum-size: 1G
 
 resources:
-  gocert-image:
+  notary-image:
     type: oci-image
-    description: OCI image for the 'GoCert' application
-    upstream-source: ghcr.io/canonical/gocert:0.0.3
+    description: OCI image for the Notary application
+    upstream-source: ghcr.io/canonical/notary:0.0.3
 
 parts:
   charm:

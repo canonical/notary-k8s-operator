@@ -1,20 +1,20 @@
-# gocert-k8s-operator
+# notary-k8s-operator
 Manage your certificates in charms
 
 ## OCI Images
 
-- GoCert: [ghcr.io/canonical/gocert](https://github.com/canonical/gocert)
+- Notary: [ghcr.io/canonical/notary](https://github.com/canonical/notary)
 
-# gocert
+# notary
 
-Charmhub package name: gocert
-More information: https://charmhub.io/gocert
+Charmhub package name: notary
+More information: https://charmhub.io/notary
 
-GoCert helps you manage your certificates, from simple all the way up to enterprise deployments.
+Notary helps you manage your certificates, from simple all the way up to enterprise deployments.
 
 ## Other resources
 
-- [Read more](https://github.com/canonical/gocert/blob/main/README.md)
+- [Read more](https://github.com/canonical/notary/blob/main/README.md)
 
 - [Contributing](CONTRIBUTING.md)
 

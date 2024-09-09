@@ -23,7 +23,7 @@ from charms.tls_certificates_interface.v4.tls_certificates import (
     generate_private_key,
 )
 
-from gocert import GoCert
+from notary import Notary
 
 logger = logging.getLogger(__name__)
 
@@ -34,16 +34,16 @@ GRAFANA_RELATION_NAME = "grafana-dashboard"
 DB_MOUNT = "database"
 CONFIG_MOUNT = "config"
 CHARM_PATH = "/var/lib/juju/storage"
-WORKLOAD_CONFIG_PATH = "/etc/gocert"
+WORKLOAD_CONFIG_PATH = "/etc/notary"
 
-CERTIFICATE_COMMON_NAME = "GoCert Self Signed Certificate"
-SELF_SIGNED_CA_COMMON_NAME = "GoCert Self Signed Root CA"
-GOCERT_LOGIN_SECRET_LABEL = "GoCert Login Details"
+CERTIFICATE_COMMON_NAME = "Notary Self Signed Certificate"
+SELF_SIGNED_CA_COMMON_NAME = "Notary Self Signed Root CA"
+NOTARY_LOGIN_SECRET_LABEL = "Notary Login Details"
 
 
 @dataclass
 class LoginSecret:
-    """The format of the secret for the login details that are required to login to GoCert."""
+    """The format of the secret for the login details that are required to login to Notary."""
 
     username: str
     password: str
@@ -58,15 +58,15 @@ class LoginSecret:
         }
 
 
-class GocertCharm(ops.CharmBase):
-    """Charmed Gocert."""
+class NotaryCharm(ops.CharmBase):
+    """Charmed Notary."""
 
     def __init__(self, framework: ops.Framework):
         super().__init__(framework)
 
         self.port = 2111
         self.unit.set_ports(self.port)
-        self.container = self.unit.get_container("gocert")
+        self.container = self.unit.get_container("notary")
         self.tls = TLSCertificatesProvidesV4(self, relationship_name="certificates")
         self.dashboard = GrafanaDashboardProvider(self, relation_name=GRAFANA_RELATION_NAME)
         self.logs = LogForwarder(charm=self, relation_name=LOGGING_RELATION_NAME)
@@ -83,15 +83,15 @@ class GocertCharm(ops.CharmBase):
             ],
         )
 
-        self.client = GoCert(
+        self.client = Notary(
             f"https://{self._application_bind_address}:{self.port}",
             f"{CHARM_PATH}/{CONFIG_MOUNT}/0/ca.pem",
         )
         [
             framework.observe(event, self.configure)
             for event in [
-                self.on["gocert"].pebble_ready,
-                self.on["gocert"].pebble_custom_notice,
+                self.on["notary"].pebble_ready,
+                self.on["notary"].pebble_custom_notice,
                 self.on["certificates"].relation_changed,
                 self.on.config_storage_attached,
                 self.on.database_storage_attached,
@@ -109,7 +109,7 @@ class GocertCharm(ops.CharmBase):
             return
         if not self.container.can_connect():
             return
-        self._configure_gocert_config_file()
+        self._configure_notary_config_file()
         self._configure_access_certificates()
         self._configure_charm_authorization()
 
@@ -127,15 +127,15 @@ class GocertCharm(ops.CharmBase):
             event.add_status(ops.WaitingStatus("certificates not yet created"))
             return
         if not self.client.is_api_available():
-            event.add_status(ops.WaitingStatus("GoCert server not yet available"))
+            event.add_status(ops.WaitingStatus("Notary server not yet available"))
             return
         if not self.client.is_initialized():
-            event.add_status(ops.BlockedStatus("Please initialize GoCert"))
+            event.add_status(ops.BlockedStatus("Please initialize Notary"))
             return
         event.add_status(ops.ActiveStatus())
 
     ## Configure Dependencies ##
-    def _configure_gocert_config_file(self):
+    def _configure_notary_config_file(self):
         """Push the config file."""
         try:
             self.container.pull(f"{WORKLOAD_CONFIG_PATH}/config/config.yaml")
@@ -149,25 +149,25 @@ class GocertCharm(ops.CharmBase):
             logger.info("Config file created.")
 
     def _configure_access_certificates(self):
-        """Update the config files for gocert and replan if required."""
+        """Update the config files for notary and replan if required."""
         certificates_changed = False
         if not self._self_signed_certificates_generated():
             certificates_changed = True
             self._generate_self_signed_certificates()
         logger.info("Certificates configured.")
         if certificates_changed:
-            self.container.add_layer("gocert", self._pebble_layer, combine=True)
+            self.container.add_layer("notary", self._pebble_layer, combine=True)
             with suppress(ops.pebble.ChangeError):
                 self.container.replan()
 
     def _configure_charm_authorization(self):
-        """Create an admin user to manage GoCert if needed, and acquire a token by logging in if needed."""
+        """Create an admin user to manage Notary if needed, and acquire a token by logging in if needed."""
         login_details = self._get_or_create_admin_account()
         if not login_details:
             return
         if not login_details.token or not self.client.token_is_valid(login_details.token):
             login_details.token = self.client.login(login_details.username, login_details.password)
-            login_details_secret = self.model.get_secret(label=GOCERT_LOGIN_SECRET_LABEL)
+            login_details_secret = self.model.get_secret(label=NOTARY_LOGIN_SECRET_LABEL)
             login_details_secret.set_content(login_details.to_dict())
 
     ## Properties ##
@@ -175,13 +175,13 @@ class GocertCharm(ops.CharmBase):
     def _pebble_layer(self) -> ops.pebble.LayerDict:
         """Return a dictionary representing a Pebble layer."""
         return {
-            "summary": "gocert layer",
-            "description": "pebble config layer for gocert",
+            "summary": "notary layer",
+            "description": "pebble config layer for notary",
             "services": {
-                "gocert": {
+                "notary": {
                     "override": "replace",
-                    "summary": "gocert",
-                    "command": f"gocert -config {WORKLOAD_CONFIG_PATH}/config/config.yaml",
+                    "summary": "notary",
+                    "command": f"notary -config {WORKLOAD_CONFIG_PATH}/config/config.yaml",
                     "startup": "enabled",
                 }
             },
@@ -260,10 +260,10 @@ class GocertCharm(ops.CharmBase):
         """Get the first admin user for the charm to use from secrets. Create one if it doesn't exist.
 
         Returns:
-            Login details secret if they exist. None if the related account couldn't be created in GoCert.
+            Login details secret if they exist. None if the related account couldn't be created in Notary.
         """
         try:
-            secret = self.model.get_secret(label=GOCERT_LOGIN_SECRET_LABEL)
+            secret = self.model.get_secret(label=NOTARY_LOGIN_SECRET_LABEL)
             secret_content = secret.get_content(refresh=True)
             username = secret_content.get("username", "")
             password = secret_content.get("password", "")
@@ -274,7 +274,7 @@ class GocertCharm(ops.CharmBase):
             password = _generate_password()
             account = LoginSecret(username, password, None)
             self.app.add_secret(
-                label=GOCERT_LOGIN_SECRET_LABEL,
+                label=NOTARY_LOGIN_SECRET_LABEL,
                 content=account.to_dict(),
             )
             logger.info("admin account details saved to secrets.")
@@ -286,7 +286,7 @@ class GocertCharm(ops.CharmBase):
 
 
 def _generate_password() -> str:
-    """Generate a password for the GoCert Account."""
+    """Generate a password for the Notary Account."""
     pw = []
     pw.append(random.choice(string.ascii_lowercase))
     pw.append(random.choice(string.ascii_uppercase))
@@ -299,10 +299,10 @@ def _generate_password() -> str:
 
 
 def _generate_username() -> str:
-    """Generate a username for the GoCert Account."""
+    """Generate a username for the Notary Account."""
     suffix = [random.choice(string.ascii_uppercase) for i in range(4)]
     return "charm-admin-" + "".join(suffix)
 
 
 if __name__ == "__main__":  # pragma: nocover
-    ops.main(GocertCharm)  # type: ignore
+    ops.main(NotaryCharm)  # type: ignore

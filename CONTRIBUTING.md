@@ -34,5 +34,5 @@ charmcraft pack
 Deploy it by using:
 
 ```shell
-juju deploy ./gocert-k8s_ubuntu-22.04-amd64.charm --resource gocert-image=ghcr.io/canonical/gocert
+juju deploy ./notary-k8s_ubuntu-22.04-amd64.charm --resource notary-image=ghcr.io/canonical/notary
 ```
