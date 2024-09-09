@@ -39,7 +39,7 @@
         "type": "prometheus",
         "uid": "${prometheusds}"
       },
-      "description": "The total number of certificate requests in GoCert",
+      "description": "The total number of certificate requests in Notary",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -443,7 +443,7 @@
             "uid": "${prometheusds}"
           },
           "editorMode": "builder",
-          "expr": "go_goroutines{juju_application=~\"$juju_application\",juju_charm=\"gocert-k8s\",juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",juju_unit=~\"$juju_unit\"}",
+          "expr": "go_goroutines{juju_application=~\"$juju_application\",juju_charm=\"notary-k8s\",juju_model=~\"$juju_model\",juju_model_uuid=~\"$juju_model_uuid\",juju_unit=~\"$juju_unit\"}",
           "legendFormat": "Goroutines",
           "range": true,
           "refId": "A"
@@ -457,7 +457,7 @@
         "type": "prometheus",
         "uid": "${prometheusds}"
       },
-      "description": "The total memory usage by GoCert",
+      "description": "The total memory usage by Notary",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -506,7 +506,7 @@
             "uid": "${prometheusds}"
           },
           "editorMode": "builder",
-          "expr": "go_memstats_alloc_bytes{juju_charm=\"gocert-k8s\"}",
+          "expr": "go_memstats_alloc_bytes{juju_charm=\"notary-k8s\"}",
           "legendFormat": "__auto",
           "range": true,
           "refId": "A"
@@ -557,12 +557,12 @@
             "uid": "${lokids}"
           },
           "editorMode": "builder",
-          "expr": "{charm=\"gocert-k8s\", juju_application=~\"$juju_application\", juju_model=~\"$juju_model\", juju_model_uuid=~\"$juju_model_uuid\", juju_unit=~\"$juju_unit\"} |= \"\"",
+          "expr": "{charm=\"notary-k8s\", juju_application=~\"$juju_application\", juju_model=~\"$juju_model\", juju_model_uuid=~\"$juju_model_uuid\", juju_unit=~\"$juju_unit\"} |= \"\"",
           "queryType": "range",
           "refId": "A"
         }
       ],
-      "title": "GoCert Logs",
+      "title": "Notary Logs",
       "type": "logs"
     }
   ],
@@ -786,7 +786,7 @@
   },
   "timepicker": {},
   "timezone": "",
-  "title": "GoCert",
+  "title": "Notary",
   "uid": "1546e4c5ed06bcba",
   "version": 1,
   "weekStart": ""

@@ -1,7 +1,7 @@
 # Copyright 2024 Canonical Ltd.
 # See LICENSE file for licensing details.
 
-"""Library for interacting with the GoCert application."""
+"""Library for interacting with the Notary application."""
 
 import logging
 
@@ -10,27 +10,27 @@ import requests
 logger = logging.getLogger(__name__)
 
 
-class GoCertClientError(Exception):
-    """Base class for exceptions raised by the GoCert client."""
+class NotaryClientError(Exception):
+    """Base class for exceptions raised by the Notary client."""
 
 
-class GoCert:
-    """Class to interact with GoCert."""
+class Notary:
+    """Class to interact with Notary."""
 
     API_VERSION = "v1"
 
     def __init__(self, url: str, ca_path: str) -> None:
-        """Initialize a client for interacting with GoCert.
+        """Initialize a client for interacting with Notary.
 
         Args:
-            url: the endpoint that gocert is listening on e.g https://gocert.com:8000
-            ca_path: the file path that contains the ca cert that gocert uses for https communication
+            url: the endpoint that notary is listening on e.g https://notary.com:8000
+            ca_path: the file path that contains the ca cert that notary uses for https communication
         """
         self.url = url
         self.ca_path = ca_path
 
     def login(self, username: str, password: str) -> str | None:
-        """Login to gocert by sending the username and password and return a Token."""
+        """Login to notary by sending the username and password and return a Token."""
         try:
             req = requests.post(
                 f"{self.url}/login",
@@ -44,7 +44,7 @@ class GoCert:
         except requests.HTTPError:
             logger.error("couldn't log in: code %s, %s", req.status_code, req.text)
             return
-        logger.info("logged in to GoCert successfully")
+        logger.info("logged in to Notary successfully")
         return req.text
 
     def token_is_valid(self, token: str) -> bool:
@@ -61,7 +61,7 @@ class GoCert:
         return True
 
     def is_api_available(self) -> bool:
-        """Return if the GoCert server is reachable."""
+        """Return if the Notary server is reachable."""
         try:
             req = requests.get(
                 f"{self.url}/status",
@@ -73,7 +73,7 @@ class GoCert:
         return True
 
     def is_initialized(self) -> bool:
-        """Return if the GoCert server is initialized."""
+        """Return if the Notary server is initialized."""
         try:
             req = requests.get(
                 f"{self.url}/status",
@@ -110,6 +110,6 @@ class GoCert:
         except requests.HTTPError:
             logger.warning("couldn't create first user: code %s, %s", req.status_code, req.text)
             return None
-        logger.info("created the first user in GoCert.")
+        logger.info("created the first user in Notary.")
         id = req.json().get("id")
         return int(id) if id else None

@@ -26,7 +26,7 @@ async def test_build_and_deploy(ops_test: OpsTest, request):
     Assert on the unit status before any relations/configurations take place.
     """
     charm = Path(request.config.getoption("--charm_path")).resolve()
-    resources = {"gocert-image": CHARMCRAFT["resources"]["gocert-image"]["upstream-source"]}
+    resources = {"notary-image": CHARMCRAFT["resources"]["notary-image"]["upstream-source"]}
 
     # Deploy the charm and wait for active status
     await asyncio.gather(
@@ -36,7 +36,7 @@ async def test_build_and_deploy(ops_test: OpsTest, request):
 
 
 @pytest.mark.abort_on_fail
-async def test_given_loki_and_prometheus_related_to_gocert_all_charm_statuses_active(
+async def test_given_loki_and_prometheus_related_to_notary_all_charm_statuses_active(
     ops_test: OpsTest,
 ):
     """Deploy loki and prometheus, and make sure all applications are active."""
