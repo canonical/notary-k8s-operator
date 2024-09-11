@@ -16,6 +16,7 @@ from charms.loki_k8s.v1.loki_push_api import LogForwarder
 from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointProvider
 from charms.tls_certificates_interface.v4.tls_certificates import (
     Certificate,
+    ProviderCertificate,
     TLSCertificatesProvidesV4,
     generate_ca,
     generate_certificate,
@@ -26,6 +27,8 @@ from charms.tls_certificates_interface.v4.tls_certificates import (
 from notary import Notary
 
 logger = logging.getLogger(__name__)
+
+CERTIFICATE_PROVIDER_RELATION_NAME = "certificates"
 
 LOGGING_RELATION_NAME = "logging"
 METRICS_RELATION_NAME = "metrics"
@@ -67,7 +70,9 @@ class NotaryCharm(ops.CharmBase):
         self.port = 2111
         self.unit.set_ports(self.port)
         self.container = self.unit.get_container("notary")
-        self.tls = TLSCertificatesProvidesV4(self, relationship_name="certificates")
+        self.tls = TLSCertificatesProvidesV4(
+            self, relationship_name=CERTIFICATE_PROVIDER_RELATION_NAME
+        )
         self.dashboard = GrafanaDashboardProvider(self, relation_name=GRAFANA_RELATION_NAME)
         self.logs = LogForwarder(charm=self, relation_name=LOGGING_RELATION_NAME)
         self.metrics = MetricsEndpointProvider(
@@ -112,6 +117,7 @@ class NotaryCharm(ops.CharmBase):
         self._configure_notary_config_file()
         self._configure_access_certificates()
         self._configure_charm_authorization()
+        self._configure_certificate_requirers()
 
     def _on_collect_status(self, event: ops.CollectStatusEvent):
         if not self.unit.is_leader():
@@ -169,6 +175,73 @@ class NotaryCharm(ops.CharmBase):
             login_details.token = self.client.login(login_details.username, login_details.password)
             login_details_secret = self.model.get_secret(label=NOTARY_LOGIN_SECRET_LABEL)
             login_details_secret.set_content(login_details.to_dict())
+
+    def _configure_certificate_requirers(self):
+        """Get all CSR's and certs from databags and Notary, compare differences and update requirers if needed."""
+        login_details = self._get_or_create_admin_account()
+        if not login_details or not login_details.token:
+            logger.warning("couldn't distribute certificates: not logged in")
+            return
+        databag_csrs = self.tls.get_certificate_requests()
+        notary_table = self.client.get_certificate_requests_table(login_details.token)
+        if not notary_table:
+            logger.warning("couldn't distribute certificates: couldn't get table from notary")
+            return
+
+        for request in databag_csrs:
+            notary_rows_with_matching_csr = [
+                row
+                for row in notary_table.rows
+                if row.csr == str(request.certificate_signing_request)
+            ]
+            if len(notary_rows_with_matching_csr) < 1:
+                self.client.post_csr(str(request.certificate_signing_request), login_details.token)
+                continue
+            assert len(notary_rows_with_matching_csr) < 2
+            request_notary_entry = notary_rows_with_matching_csr[0]
+            certificates_provided_for_csr = [
+                csr
+                for csr in self.tls.get_issued_certificates(request.relation_id)
+                if str(csr.certificate_signing_request) == request_notary_entry.csr
+            ]
+            if (
+                request_notary_entry.certificate_chain == "rejected"
+                or request_notary_entry.certificate_chain == ""
+            ):
+                if len(certificates_provided_for_csr) > 0:
+                    last_provided_certificate = certificates_provided_for_csr[0]
+                    self.tls.set_relation_certificate(
+                        ProviderCertificate(
+                            relation_id=request.relation_id,
+                            certificate_signing_request=request.certificate_signing_request,
+                            certificate=last_provided_certificate.certificate,
+                            ca=last_provided_certificate.ca,
+                            chain=last_provided_certificate.chain,
+                            revoked=True,
+                        )
+                    )
+                continue
+            certificate_chain = [
+                Certificate.from_string(cert) for cert in request_notary_entry.certificate_chain
+            ]
+            certificate_not_provided_yet = (
+                len(certificate_chain) > 0 and len(certificates_provided_for_csr) == 0
+            )
+            certificate_provided_is_stale = (
+                len(certificate_chain) > 0
+                and len(certificates_provided_for_csr) == 1
+                and certificate_chain[0] != certificates_provided_for_csr[0].certificate
+            )
+            if certificate_not_provided_yet or certificate_provided_is_stale:
+                self.tls.set_relation_certificate(
+                    ProviderCertificate(
+                        relation_id=request.relation_id,
+                        certificate_signing_request=request.certificate_signing_request,
+                        certificate=certificate_chain[0],
+                        ca=certificate_chain[-1],
+                        chain=certificate_chain,
+                    )
+                )
 
     ## Properties ##
     @property
