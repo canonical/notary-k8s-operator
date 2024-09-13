@@ -39,6 +39,7 @@ DB_MOUNT = "database"
 CONFIG_MOUNT = "config"
 CHARM_PATH = "/var/lib/juju/storage"
 WORKLOAD_CONFIG_PATH = "/etc/notary"
+WORKLOAD_DB_PATH = "/var/lib"
 
 CERTIFICATE_COMMON_NAME = "Notary Self Signed Certificate"
 SELF_SIGNED_CA_COMMON_NAME = "Notary Self Signed Root CA"
@@ -153,9 +154,9 @@ class NotaryCharm(ops.CharmBase):
                 path=f"{WORKLOAD_CONFIG_PATH}/config/config.yaml",
                 source=yaml.dump(
                     data={
-                        "key_path": "/etc/notary/config/private_key.pem",
-                        "cert_path": "/etc/notary/config/certificate.pem",
-                        "db_path": "/var/lib/notary/database/certs.db",
+                        "key_path": f"{WORKLOAD_CONFIG_PATH}/config/private_key.pem",
+                        "cert_path": f"{WORKLOAD_CONFIG_PATH}/config/certificate.pem",
+                        "db_path": f"{WORKLOAD_DB_PATH}/notary/database/certs.db",
                         "port": self.port,
                         "pebble_notifications": True,
                     }
