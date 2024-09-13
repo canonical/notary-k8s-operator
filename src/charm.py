@@ -11,6 +11,7 @@ from contextlib import suppress
 from dataclasses import dataclass
 
 import ops
+import yaml
 from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardProvider
 from charms.loki_k8s.v1.loki_push_api import LogForwarder
 from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointProvider
@@ -147,10 +148,18 @@ class NotaryCharm(ops.CharmBase):
             self.container.pull(f"{WORKLOAD_CONFIG_PATH}/config/config.yaml")
             logger.info("Config file already created.")
         except ops.pebble.PathError:
-            config_file = open("src/config/config.yaml").read()
             self.container.make_dir(path=f"{WORKLOAD_CONFIG_PATH}/config", make_parents=True)
             self.container.push(
-                path=f"{WORKLOAD_CONFIG_PATH}/config/config.yaml", source=config_file
+                path=f"{WORKLOAD_CONFIG_PATH}/config/config.yaml",
+                source=yaml.dump(
+                    data={
+                        "key_path": "/etc/notary/config/private_key.pem",
+                        "cert_path": "/etc/notary/config/certificate.pem",
+                        "db_path": "/var/lib/notary/database/certs.db",
+                        "port": self.port,
+                        "pebble_notifications": True,
+                    }
+                ),
             )
             logger.info("Config file created.")
 
