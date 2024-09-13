@@ -6,17 +6,22 @@ from unittest.mock import Mock, patch
 
 import ops
 import pytest
-from scenario import Container, Context, Mount, Network, State, Storage
+from scenario import Container, Context, Mount, Network, Relation, Secret, State, Storage
 
-from charm import NotaryCharm
+from charm import CERTIFICATE_PROVIDER_RELATION_NAME, NOTARY_LOGIN_SECRET_LABEL, NotaryCharm
 from lib.charms.tls_certificates_interface.v4.tls_certificates import (
     Certificate,
     PrivateKey,
+    ProviderCertificate,
+    RequirerCSR,
     generate_ca,
     generate_certificate,
     generate_csr,
     generate_private_key,
 )
+from notary import CertificateRequest, CertificateRequests
+
+TLS_LIB_PATH = "charms.tls_certificates_interface.v4.tls_certificates"
 
 CERTIFICATE_COMMON_NAME = "Notary Self Signed Certificate"
 SELF_SIGNED_CA_COMMON_NAME = "Notary Self Signed Root CA"
@@ -54,14 +59,14 @@ class TestCharm:
         state = State(
             storages={Storage(name="config")},
             containers={Container(name="notary", can_connect=False)},
-            networks={Network("juju-info", [], ingress_addresses=[], egress_subnets=[])},
+            networks={Network("juju-info", bind_addresses=[])},
             leader=True,
         )
 
         with patch(
             "notary.Notary",
             return_value=Mock(
-                **{"is_api_available.return_value": False, "is_initialized.return_value": False},
+                **{"is_api_available.return_value": False, "is_initialized.return_value": False},  # type: ignore
             ),
         ):
             context.run(context.on.config_changed(), state)
@@ -72,14 +77,14 @@ class TestCharm:
         state = State(
             storages={Storage(name="database")},
             containers={Container(name="notary", can_connect=False)},
-            networks={Network("juju-info", [], ingress_addresses=[], egress_subnets=[])},
+            networks={Network("juju-info", bind_addresses=[])},
             leader=True,
         )
 
         with patch(
             "notary.Notary",
             return_value=Mock(
-                **{"is_api_available.return_value": False, "is_initialized.return_value": False},
+                **{"is_api_available.return_value": False, "is_initialized.return_value": False},  # type: ignore
             ),
         ):
             context.run(context.on.config_changed(), state)
@@ -90,14 +95,14 @@ class TestCharm:
         state = State(
             storages={Storage(name="config"), Storage(name="database")},
             containers={Container(name="notary", can_connect=False)},
-            networks={Network("juju-info", [], ingress_addresses=[], egress_subnets=[])},
+            networks={Network("juju-info", bind_addresses=[])},
             leader=True,
         )
 
         with patch(
             "notary.Notary",
             return_value=Mock(
-                **{"is_api_available.return_value": False, "is_initialized.return_value": False},
+                **{"is_api_available.return_value": False, "is_initialized.return_value": False},  # type: ignore
             ),
         ):
             context.run(context.on.config_changed(), state)
@@ -108,14 +113,14 @@ class TestCharm:
         state = State(
             storages={Storage(name="config")},
             containers={Container(name="notary", can_connect=True)},
-            networks={Network("juju-info", [], ingress_addresses=[], egress_subnets=[])},
+            networks={Network("juju-info", bind_addresses=[])},
             leader=True,
         )
 
         with patch(
             "notary.Notary",
             return_value=Mock(
-                **{"is_api_available.return_value": False, "is_initialized.return_value": False},
+                **{"is_api_available.return_value": False, "is_initialized.return_value": False},  # type: ignore
             ),
         ):
             context.run(context.on.config_changed(), state)
@@ -126,14 +131,14 @@ class TestCharm:
         state = State(
             storages={Storage(name="database")},
             containers={Container(name="notary", can_connect=True)},
-            networks={Network("juju-info", [], ingress_addresses=[], egress_subnets=[])},
+            networks={Network("juju-info", bind_addresses=[])},
             leader=True,
         )
 
         with patch(
             "notary.Notary",
             return_value=Mock(
-                **{"is_api_available.return_value": False, "is_initialized.return_value": False},
+                **{"is_api_available.return_value": False, "is_initialized.return_value": False},  # type: ignore
             ),
         ):
             context.run(context.on.config_changed(), state)
@@ -144,21 +149,21 @@ class TestCharm:
         state = State(
             storages={Storage(name="config"), Storage(name="database")},
             containers={Container(name="notary", can_connect=True)},
-            networks={Network("juju-info", [], ingress_addresses=[], egress_subnets=[])},
+            networks={Network("juju-info", bind_addresses=[])},
             leader=True,
         )
 
         with patch(
             "notary.Notary",
             return_value=Mock(
-                **{"is_api_available.return_value": False, "is_initialized.return_value": False},
+                **{"is_api_available.return_value": False, "is_initialized.return_value": False},  # type: ignore
             ),
         ):
             out = context.run(context.on.config_changed(), state)
         root = out.get_container("notary").get_filesystem(context)
         assert (root / "etc/notary/config/config.yaml").open("r")
         assert not (root / "etc/notary/config/certificate.pem").exists()
-        assert not ((root / "etc/notary/config/private_key.pem").exists())
+        assert not (root / "etc/notary/config/private_key.pem").exists()
         assert len(out.secrets) == 1
         assert out.get_secret(label="Notary Login Details")
 
@@ -175,7 +180,7 @@ class TestCharm:
         with patch(
             "notary.Notary",
             return_value=Mock(
-                **{"is_api_available.return_value": False, "is_initialized.return_value": False},
+                **{"is_api_available.return_value": False, "is_initialized.return_value": False},  # type: ignore
             ),
         ):
             context.run(context.on.config_changed(), state)
@@ -193,7 +198,7 @@ class TestCharm:
         with patch(
             "notary.Notary",
             return_value=Mock(
-                **{"is_api_available.return_value": False, "is_initialized.return_value": False},
+                **{"is_api_available.return_value": False, "is_initialized.return_value": False},  # type: ignore
             ),
         ):
             context.run(context.on.config_changed(), state)
@@ -211,7 +216,7 @@ class TestCharm:
         with patch(
             "notary.Notary",
             return_value=Mock(
-                **{"is_api_available.return_value": False, "is_initialized.return_value": False},
+                **{"is_api_available.return_value": False, "is_initialized.return_value": False},  # type: ignore
             ),
         ):
             context.run(context.on.config_changed(), state)
@@ -229,7 +234,7 @@ class TestCharm:
         with patch(
             "notary.Notary",
             return_value=Mock(
-                **{"is_api_available.return_value": False, "is_initialized.return_value": False},
+                **{"is_api_available.return_value": False, "is_initialized.return_value": False},  # type: ignore
             ),
         ):
             context.run(context.on.config_changed(), state)
@@ -247,7 +252,7 @@ class TestCharm:
         with patch(
             "notary.Notary",
             return_value=Mock(
-                **{"is_api_available.return_value": False, "is_initialized.return_value": False},
+                **{"is_api_available.return_value": False, "is_initialized.return_value": False},  # type: ignore
             ),
         ):
             context.run(context.on.config_changed(), state)
@@ -265,7 +270,7 @@ class TestCharm:
         with patch(
             "notary.Notary",
             return_value=Mock(
-                **{"is_api_available.return_value": False, "is_initialized.return_value": False},
+                **{"is_api_available.return_value": False, "is_initialized.return_value": False},  # type: ignore
             ),
         ):
             out = context.run(context.on.config_changed(), state)
@@ -290,14 +295,14 @@ class TestCharm:
         state = State(
             storages={Storage(name="config")},
             containers={Container(name="notary", can_connect=False)},
-            networks={Network("juju-info", [], ingress_addresses=[], egress_subnets=[])},
+            networks={Network("juju-info", bind_addresses=[])},
             leader=True,
         )
 
         with patch(
             "notary.Notary",
             return_value=Mock(
-                **{"is_api_available.return_value": True, "is_initialized.return_value": False},
+                **{"is_api_available.return_value": True, "is_initialized.return_value": False},  # type: ignore
             ),
         ):
             context.run(context.on.config_changed(), state)
@@ -308,14 +313,14 @@ class TestCharm:
         state = State(
             storages={Storage(name="database")},
             containers={Container(name="notary", can_connect=False)},
-            networks={Network("juju-info", [], ingress_addresses=[], egress_subnets=[])},
+            networks={Network("juju-info", bind_addresses=[])},
             leader=True,
         )
 
         with patch(
             "notary.Notary",
             return_value=Mock(
-                **{"is_api_available.return_value": True, "is_initialized.return_value": False},
+                **{"is_api_available.return_value": True, "is_initialized.return_value": False},  # type: ignore
             ),
         ):
             context.run(context.on.config_changed(), state)
@@ -326,14 +331,14 @@ class TestCharm:
         state = State(
             storages={Storage(name="config"), Storage(name="database")},
             containers={Container(name="notary", can_connect=False)},
-            networks={Network("juju-info", [], ingress_addresses=[], egress_subnets=[])},
+            networks={Network("juju-info", bind_addresses=[])},
             leader=True,
         )
 
         with patch(
             "notary.Notary",
             return_value=Mock(
-                **{"is_api_available.return_value": True, "is_initialized.return_value": False},
+                **{"is_api_available.return_value": True, "is_initialized.return_value": False},  # type: ignore
             ),
         ):
             context.run(context.on.config_changed(), state)
@@ -344,14 +349,14 @@ class TestCharm:
         state = State(
             storages={Storage(name="config")},
             containers={Container(name="notary", can_connect=True)},
-            networks={Network("juju-info", [], ingress_addresses=[], egress_subnets=[])},
+            networks={Network("juju-info", bind_addresses=[])},
             leader=True,
         )
 
         with patch(
             "notary.Notary",
             return_value=Mock(
-                **{"is_api_available.return_value": True, "is_initialized.return_value": False},
+                **{"is_api_available.return_value": True, "is_initialized.return_value": False},  # type: ignore
             ),
         ):
             context.run(context.on.config_changed(), state)
@@ -362,14 +367,14 @@ class TestCharm:
         state = State(
             storages={Storage(name="database")},
             containers={Container(name="notary", can_connect=True)},
-            networks={Network("juju-info", [], ingress_addresses=[], egress_subnets=[])},
+            networks={Network("juju-info", bind_addresses=[])},
             leader=True,
         )
 
         with patch(
             "notary.Notary",
             return_value=Mock(
-                **{"is_api_available.return_value": True, "is_initialized.return_value": False},
+                **{"is_api_available.return_value": True, "is_initialized.return_value": False},  # type: ignore
             ),
         ):
             context.run(context.on.config_changed(), state)
@@ -380,14 +385,14 @@ class TestCharm:
         state = State(
             storages={Storage(name="config"), Storage(name="database")},
             containers={Container(name="notary", can_connect=True)},
-            networks={Network("juju-info", [], ingress_addresses=[], egress_subnets=[])},
+            networks={Network("juju-info", bind_addresses=[])},
             leader=True,
         )
 
         with patch(
             "notary.Notary",
             return_value=Mock(
-                **{"is_api_available.return_value": True, "is_initialized.return_value": False},
+                **{"is_api_available.return_value": True, "is_initialized.return_value": False},  # type: ignore
             ),
         ):
             out = context.run(context.on.config_changed(), state)
@@ -411,7 +416,7 @@ class TestCharm:
         with patch(
             "notary.Notary",
             return_value=Mock(
-                **{"is_api_available.return_value": True, "is_initialized.return_value": False},
+                **{"is_api_available.return_value": True, "is_initialized.return_value": False},  # type: ignore
             ),
         ):
             context.run(context.on.config_changed(), state)
@@ -429,7 +434,7 @@ class TestCharm:
         with patch(
             "notary.Notary",
             return_value=Mock(
-                **{"is_api_available.return_value": True, "is_initialized.return_value": False},
+                **{"is_api_available.return_value": True, "is_initialized.return_value": False},  # type: ignore
             ),
         ):
             context.run(context.on.config_changed(), state)
@@ -447,7 +452,7 @@ class TestCharm:
         with patch(
             "notary.Notary",
             return_value=Mock(
-                **{"is_api_available.return_value": True, "is_initialized.return_value": False},
+                **{"is_api_available.return_value": True, "is_initialized.return_value": False},  # type: ignore
             ),
         ):
             context.run(context.on.config_changed(), state)
@@ -465,7 +470,7 @@ class TestCharm:
         with patch(
             "notary.Notary",
             return_value=Mock(
-                **{"is_api_available.return_value": True, "is_initialized.return_value": False},
+                **{"is_api_available.return_value": True, "is_initialized.return_value": False},  # type: ignore
             ),
         ):
             context.run(context.on.config_changed(), state)
@@ -483,7 +488,7 @@ class TestCharm:
         with patch(
             "notary.Notary",
             return_value=Mock(
-                **{"is_api_available.return_value": True, "is_initialized.return_value": False},
+                **{"is_api_available.return_value": True, "is_initialized.return_value": False},  # type: ignore
             ),
         ):
             context.run(context.on.config_changed(), state)
@@ -501,7 +506,7 @@ class TestCharm:
         with patch(
             "notary.Notary",
             return_value=Mock(
-                **{"is_api_available.return_value": True, "is_initialized.return_value": False},
+                **{"is_api_available.return_value": True, "is_initialized.return_value": False},  # type: ignore
             ),
         ):
             context.run(context.on.config_changed(), state)
@@ -512,14 +517,14 @@ class TestCharm:
         state = State(
             storages={Storage(name="config")},
             containers={Container(name="notary", can_connect=False)},
-            networks={Network("juju-info", [], ingress_addresses=[], egress_subnets=[])},
+            networks={Network("juju-info", bind_addresses=[])},
             leader=True,
         )
 
         with patch(
             "notary.Notary",
             return_value=Mock(
-                **{"is_api_available.return_value": True, "is_initialized.return_value": True},
+                **{"is_api_available.return_value": True, "is_initialized.return_value": True},  # type: ignore
             ),
         ):
             context.run(context.on.config_changed(), state)
@@ -530,14 +535,14 @@ class TestCharm:
         state = State(
             storages={Storage(name="database")},
             containers={Container(name="notary", can_connect=False)},
-            networks={Network("juju-info", [], ingress_addresses=[], egress_subnets=[])},
+            networks={Network("juju-info", bind_addresses=[])},
             leader=True,
         )
 
         with patch(
             "notary.Notary",
             return_value=Mock(
-                **{"is_api_available.return_value": True, "is_initialized.return_value": True},
+                **{"is_api_available.return_value": True, "is_initialized.return_value": True},  # type: ignore
             ),
         ):
             context.run(context.on.config_changed(), state)
@@ -548,14 +553,14 @@ class TestCharm:
         state = State(
             storages={Storage(name="config"), Storage(name="database")},
             containers={Container(name="notary", can_connect=False)},
-            networks={Network("juju-info", [], ingress_addresses=[], egress_subnets=[])},
+            networks={Network("juju-info", bind_addresses=[])},
             leader=True,
         )
 
         with patch(
             "notary.Notary",
             return_value=Mock(
-                **{"is_api_available.return_value": True, "is_initialized.return_value": True},
+                **{"is_api_available.return_value": True, "is_initialized.return_value": True},  # type: ignore
             ),
         ):
             context.run(context.on.config_changed(), state)
@@ -566,14 +571,14 @@ class TestCharm:
         state = State(
             storages={Storage(name="config")},
             containers={Container(name="notary", can_connect=True)},
-            networks={Network("juju-info", [], ingress_addresses=[], egress_subnets=[])},
+            networks={Network("juju-info", bind_addresses=[])},
             leader=True,
         )
 
         with patch(
             "notary.Notary",
             return_value=Mock(
-                **{"is_api_available.return_value": True, "is_initialized.return_value": True},
+                **{"is_api_available.return_value": True, "is_initialized.return_value": True},  # type: ignore
             ),
         ):
             context.run(context.on.config_changed(), state)
@@ -584,14 +589,14 @@ class TestCharm:
         state = State(
             storages={Storage(name="database")},
             containers={Container(name="notary", can_connect=True)},
-            networks={Network("juju-info", [], ingress_addresses=[], egress_subnets=[])},
+            networks={Network("juju-info", bind_addresses=[])},
             leader=True,
         )
 
         with patch(
             "notary.Notary",
             return_value=Mock(
-                **{"is_api_available.return_value": True, "is_initialized.return_value": True},
+                **{"is_api_available.return_value": True, "is_initialized.return_value": True},  # type: ignore
             ),
         ):
             context.run(context.on.config_changed(), state)
@@ -602,14 +607,14 @@ class TestCharm:
         state = State(
             storages={Storage(name="config"), Storage(name="database")},
             containers={Container(name="notary", can_connect=True)},
-            networks={Network("juju-info", [], ingress_addresses=[], egress_subnets=[])},
+            networks={Network("juju-info", bind_addresses=[])},
             leader=True,
         )
 
         with patch(
             "notary.Notary",
             return_value=Mock(
-                **{"is_api_available.return_value": True, "is_initialized.return_value": True},
+                **{"is_api_available.return_value": True, "is_initialized.return_value": True},  # type: ignore
             ),
         ):
             out = context.run(context.on.config_changed(), state)
@@ -634,7 +639,7 @@ class TestCharm:
         with patch(
             "notary.Notary",
             return_value=Mock(
-                **{"is_api_available.return_value": True, "is_initialized.return_value": True},
+                **{"is_api_available.return_value": True, "is_initialized.return_value": True},  # type: ignore
             ),
         ):
             context.run(context.on.config_changed(), state)
@@ -652,7 +657,7 @@ class TestCharm:
         with patch(
             "notary.Notary",
             return_value=Mock(
-                **{"is_api_available.return_value": True, "is_initialized.return_value": True},
+                **{"is_api_available.return_value": True, "is_initialized.return_value": True},  # type: ignore
             ),
         ):
             context.run(context.on.config_changed(), state)
@@ -670,7 +675,7 @@ class TestCharm:
         with patch(
             "notary.Notary",
             return_value=Mock(
-                **{"is_api_available.return_value": True, "is_initialized.return_value": True},
+                **{"is_api_available.return_value": True, "is_initialized.return_value": True},  # type: ignore
             ),
         ):
             context.run(context.on.config_changed(), state)
@@ -688,7 +693,7 @@ class TestCharm:
         with patch(
             "notary.Notary",
             return_value=Mock(
-                **{"is_api_available.return_value": True, "is_initialized.return_value": True},
+                **{"is_api_available.return_value": True, "is_initialized.return_value": True},  # type: ignore
             ),
         ):
             context.run(context.on.config_changed(), state)
@@ -706,7 +711,7 @@ class TestCharm:
         with patch(
             "notary.Notary",
             return_value=Mock(
-                **{"is_api_available.return_value": True, "is_initialized.return_value": True},
+                **{"is_api_available.return_value": True, "is_initialized.return_value": True},  # type: ignore
             ),
         ):
             context.run(context.on.config_changed(), state)
@@ -724,7 +729,7 @@ class TestCharm:
         with patch(
             "notary.Notary",
             return_value=Mock(
-                **{"is_api_available.return_value": True, "is_initialized.return_value": True},
+                **{"is_api_available.return_value": True, "is_initialized.return_value": True},  # type: ignore
             ),
         ):
             context.run(context.on.config_changed(), state)
@@ -736,14 +741,14 @@ class TestCharm:
         state = State(
             storages={Storage(name="config")},
             containers={Container(name="notary", can_connect=False)},
-            networks={Network("juju-info", [], ingress_addresses=[], egress_subnets=[])},
+            networks={Network("juju-info", bind_addresses=[])},
             leader=True,
         )
 
         with patch(
             "notary.Notary",
             return_value=Mock(
-                **{"is_api_available.return_value": False, "is_initialized.return_value": False},
+                **{"is_api_available.return_value": False, "is_initialized.return_value": False},  # type: ignore
             ),
         ):
             out = context.run(context.on.collect_unit_status(), state)
@@ -756,14 +761,14 @@ class TestCharm:
         state = State(
             storages={Storage(name="database")},
             containers={Container(name="notary", can_connect=False)},
-            networks={Network("juju-info", [], ingress_addresses=[], egress_subnets=[])},
+            networks={Network("juju-info", bind_addresses=[])},
             leader=True,
         )
 
         with patch(
             "notary.Notary",
             return_value=Mock(
-                **{"is_api_available.return_value": False, "is_initialized.return_value": False},
+                **{"is_api_available.return_value": False, "is_initialized.return_value": False},  # type: ignore
             ),
         ):
             out = context.run(context.on.collect_unit_status(), state)
@@ -775,14 +780,14 @@ class TestCharm:
         state = State(
             storages={Storage(name="config"), Storage(name="database")},
             containers={Container(name="notary", can_connect=False)},
-            networks={Network("juju-info", [], ingress_addresses=[], egress_subnets=[])},
+            networks={Network("juju-info", bind_addresses=[])},
             leader=True,
         )
 
         with patch(
             "notary.Notary",
             return_value=Mock(
-                **{"is_api_available.return_value": False, "is_initialized.return_value": False},
+                **{"is_api_available.return_value": False, "is_initialized.return_value": False},  # type: ignore
             ),
         ):
             out = context.run(context.on.collect_unit_status(), state)
@@ -795,14 +800,14 @@ class TestCharm:
         state = State(
             storages={Storage(name="config")},
             containers={Container(name="notary", can_connect=True)},
-            networks={Network("juju-info", [], ingress_addresses=[], egress_subnets=[])},
+            networks={Network("juju-info", bind_addresses=[])},
             leader=True,
         )
 
         with patch(
             "notary.Notary",
             return_value=Mock(
-                **{"is_api_available.return_value": False, "is_initialized.return_value": False},
+                **{"is_api_available.return_value": False, "is_initialized.return_value": False},  # type: ignore
             ),
         ):
             out = context.run(context.on.collect_unit_status(), state)
@@ -814,14 +819,14 @@ class TestCharm:
         state = State(
             storages={Storage(name="database")},
             containers={Container(name="notary", can_connect=True)},
-            networks={Network("juju-info", [], ingress_addresses=[], egress_subnets=[])},
+            networks={Network("juju-info", bind_addresses=[])},
             leader=True,
         )
 
         with patch(
             "notary.Notary",
             return_value=Mock(
-                **{"is_api_available.return_value": False, "is_initialized.return_value": False},
+                **{"is_api_available.return_value": False, "is_initialized.return_value": False},  # type: ignore
             ),
         ):
             out = context.run(context.on.collect_unit_status(), state)
@@ -833,14 +838,14 @@ class TestCharm:
         state = State(
             storages={Storage(name="config"), Storage(name="database")},
             containers={Container(name="notary", can_connect=True)},
-            networks={Network("juju-info", [], ingress_addresses=[], egress_subnets=[])},
+            networks={Network("juju-info", bind_addresses=[])},
             leader=True,
         )
 
         with patch(
             "notary.Notary",
             return_value=Mock(
-                **{"is_api_available.return_value": False, "is_initialized.return_value": False},
+                **{"is_api_available.return_value": False, "is_initialized.return_value": False},  # type: ignore
             ),
         ):
             out = context.run(context.on.collect_unit_status(), state)
@@ -859,7 +864,7 @@ class TestCharm:
         with patch(
             "notary.Notary",
             return_value=Mock(
-                **{"is_api_available.return_value": False, "is_initialized.return_value": False},
+                **{"is_api_available.return_value": False, "is_initialized.return_value": False},  # type: ignore
             ),
         ):
             out = context.run(context.on.collect_unit_status(), state)
@@ -878,7 +883,7 @@ class TestCharm:
         with patch(
             "notary.Notary",
             return_value=Mock(
-                **{"is_api_available.return_value": False, "is_initialized.return_value": False},
+                **{"is_api_available.return_value": False, "is_initialized.return_value": False},  # type: ignore
             ),
         ):
             out = context.run(context.on.collect_unit_status(), state)
@@ -897,7 +902,7 @@ class TestCharm:
         with patch(
             "notary.Notary",
             return_value=Mock(
-                **{"is_api_available.return_value": False, "is_initialized.return_value": False},
+                **{"is_api_available.return_value": False, "is_initialized.return_value": False},  # type: ignore
             ),
         ):
             out = context.run(context.on.collect_unit_status(), state)
@@ -916,7 +921,7 @@ class TestCharm:
         with patch(
             "notary.Notary",
             return_value=Mock(
-                **{"is_api_available.return_value": False, "is_initialized.return_value": False},
+                **{"is_api_available.return_value": False, "is_initialized.return_value": False},  # type: ignore
             ),
         ):
             out = context.run(context.on.collect_unit_status(), state)
@@ -935,7 +940,7 @@ class TestCharm:
         with patch(
             "notary.Notary",
             return_value=Mock(
-                **{"is_api_available.return_value": False, "is_initialized.return_value": False},
+                **{"is_api_available.return_value": False, "is_initialized.return_value": False},  # type: ignore
             ),
         ):
             out = context.run(context.on.collect_unit_status(), state)
@@ -954,7 +959,7 @@ class TestCharm:
         with patch(
             "notary.Notary",
             return_value=Mock(
-                **{"is_api_available.return_value": False, "is_initialized.return_value": False},
+                **{"is_api_available.return_value": False, "is_initialized.return_value": False},  # type: ignore
             ),
         ):
             out = context.run(context.on.collect_unit_status(), state)
@@ -966,14 +971,14 @@ class TestCharm:
         state = State(
             storages={Storage(name="config")},
             containers={Container(name="notary", can_connect=False)},
-            networks={Network("juju-info", [], ingress_addresses=[], egress_subnets=[])},
+            networks={Network("juju-info", bind_addresses=[])},
             leader=True,
         )
 
         with patch(
             "notary.Notary",
             return_value=Mock(
-                **{"is_api_available.return_value": True, "is_initialized.return_value": False},
+                **{"is_api_available.return_value": True, "is_initialized.return_value": False},  # type: ignore
             ),
         ):
             out = context.run(context.on.collect_unit_status(), state)
@@ -985,14 +990,14 @@ class TestCharm:
         state = State(
             storages={Storage(name="database")},
             containers={Container(name="notary", can_connect=False)},
-            networks={Network("juju-info", [], ingress_addresses=[], egress_subnets=[])},
+            networks={Network("juju-info", bind_addresses=[])},
             leader=True,
         )
 
         with patch(
             "notary.Notary",
             return_value=Mock(
-                **{"is_api_available.return_value": True, "is_initialized.return_value": False},
+                **{"is_api_available.return_value": True, "is_initialized.return_value": False},  # type: ignore
             ),
         ):
             out = context.run(context.on.collect_unit_status(), state)
@@ -1004,14 +1009,14 @@ class TestCharm:
         state = State(
             storages={Storage(name="config"), Storage(name="database")},
             containers={Container(name="notary", can_connect=False)},
-            networks={Network("juju-info", [], ingress_addresses=[], egress_subnets=[])},
+            networks={Network("juju-info", bind_addresses=[])},
             leader=True,
         )
 
         with patch(
             "notary.Notary",
             return_value=Mock(
-                **{"is_api_available.return_value": True, "is_initialized.return_value": False},
+                **{"is_api_available.return_value": True, "is_initialized.return_value": False},  # type: ignore
             ),
         ):
             out = context.run(context.on.collect_unit_status(), state)
@@ -1023,14 +1028,14 @@ class TestCharm:
         state = State(
             storages={Storage(name="config")},
             containers={Container(name="notary", can_connect=True)},
-            networks={Network("juju-info", [], ingress_addresses=[], egress_subnets=[])},
+            networks={Network("juju-info", bind_addresses=[])},
             leader=True,
         )
 
         with patch(
             "notary.Notary",
             return_value=Mock(
-                **{"is_api_available.return_value": True, "is_initialized.return_value": False},
+                **{"is_api_available.return_value": True, "is_initialized.return_value": False},  # type: ignore
             ),
         ):
             out = context.run(context.on.collect_unit_status(), state)
@@ -1042,14 +1047,14 @@ class TestCharm:
         state = State(
             storages={Storage(name="database")},
             containers={Container(name="notary", can_connect=True)},
-            networks={Network("juju-info", [], ingress_addresses=[], egress_subnets=[])},
+            networks={Network("juju-info", bind_addresses=[])},
             leader=True,
         )
 
         with patch(
             "notary.Notary",
             return_value=Mock(
-                **{"is_api_available.return_value": True, "is_initialized.return_value": False},
+                **{"is_api_available.return_value": True, "is_initialized.return_value": False},  # type: ignore
             ),
         ):
             out = context.run(context.on.collect_unit_status(), state)
@@ -1061,14 +1066,14 @@ class TestCharm:
         state = State(
             storages={Storage(name="config"), Storage(name="database")},
             containers={Container(name="notary", can_connect=True)},
-            networks={Network("juju-info", [], ingress_addresses=[], egress_subnets=[])},
+            networks={Network("juju-info", bind_addresses=[])},
             leader=True,
         )
 
         with patch(
             "notary.Notary",
             return_value=Mock(
-                **{"is_api_available.return_value": True, "is_initialized.return_value": False},
+                **{"is_api_available.return_value": True, "is_initialized.return_value": False},  # type: ignore
             ),
         ):
             out = context.run(context.on.collect_unit_status(), state)
@@ -1087,7 +1092,7 @@ class TestCharm:
         with patch(
             "notary.Notary",
             return_value=Mock(
-                **{"is_api_available.return_value": True, "is_initialized.return_value": False},
+                **{"is_api_available.return_value": True, "is_initialized.return_value": False},  # type: ignore
             ),
         ):
             out = context.run(context.on.collect_unit_status(), state)
@@ -1106,7 +1111,7 @@ class TestCharm:
         with patch(
             "notary.Notary",
             return_value=Mock(
-                **{"is_api_available.return_value": True, "is_initialized.return_value": False},
+                **{"is_api_available.return_value": True, "is_initialized.return_value": False},  # type: ignore
             ),
         ):
             out = context.run(context.on.collect_unit_status(), state)
@@ -1125,7 +1130,7 @@ class TestCharm:
         with patch(
             "notary.Notary",
             return_value=Mock(
-                **{"is_api_available.return_value": True, "is_initialized.return_value": False},
+                **{"is_api_available.return_value": True, "is_initialized.return_value": False},  # type: ignore
             ),
         ):
             out = context.run(context.on.collect_unit_status(), state)
@@ -1144,7 +1149,7 @@ class TestCharm:
         with patch(
             "notary.Notary",
             return_value=Mock(
-                **{"is_api_available.return_value": True, "is_initialized.return_value": False},
+                **{"is_api_available.return_value": True, "is_initialized.return_value": False},  # type: ignore
             ),
         ):
             out = context.run(context.on.collect_unit_status(), state)
@@ -1163,7 +1168,7 @@ class TestCharm:
         with patch(
             "notary.Notary",
             return_value=Mock(
-                **{"is_api_available.return_value": True, "is_initialized.return_value": False},
+                **{"is_api_available.return_value": True, "is_initialized.return_value": False},  # type: ignore
             ),
         ):
             out = context.run(context.on.collect_unit_status(), state)
@@ -1182,7 +1187,7 @@ class TestCharm:
         with patch(
             "notary.Notary",
             return_value=Mock(
-                **{"is_api_available.return_value": True, "is_initialized.return_value": False},
+                **{"is_api_available.return_value": True, "is_initialized.return_value": False},  # type: ignore
             ),
         ):
             out = context.run(context.on.collect_unit_status(), state)
@@ -1194,14 +1199,14 @@ class TestCharm:
         state = State(
             storages={Storage(name="config")},
             containers={Container(name="notary", can_connect=False)},
-            networks={Network("juju-info", [], ingress_addresses=[], egress_subnets=[])},
+            networks={Network("juju-info", bind_addresses=[])},
             leader=True,
         )
 
         with patch(
             "notary.Notary",
             return_value=Mock(
-                **{"is_api_available.return_value": True, "is_initialized.return_value": True},
+                **{"is_api_available.return_value": True, "is_initialized.return_value": True},  # type: ignore
             ),
         ):
             out = context.run(context.on.collect_unit_status(), state)
@@ -1213,14 +1218,14 @@ class TestCharm:
         state = State(
             storages={Storage(name="database")},
             containers={Container(name="notary", can_connect=False)},
-            networks={Network("juju-info", [], ingress_addresses=[], egress_subnets=[])},
+            networks={Network("juju-info", bind_addresses=[])},
             leader=True,
         )
 
         with patch(
             "notary.Notary",
             return_value=Mock(
-                **{"is_api_available.return_value": True, "is_initialized.return_value": True},
+                **{"is_api_available.return_value": True, "is_initialized.return_value": True},  # type: ignore
             ),
         ):
             out = context.run(context.on.collect_unit_status(), state)
@@ -1232,14 +1237,14 @@ class TestCharm:
         state = State(
             storages={Storage(name="config"), Storage(name="database")},
             containers={Container(name="notary", can_connect=False)},
-            networks={Network("juju-info", [], ingress_addresses=[], egress_subnets=[])},
+            networks={Network("juju-info", bind_addresses=[])},
             leader=True,
         )
 
         with patch(
             "notary.Notary",
             return_value=Mock(
-                **{"is_api_available.return_value": True, "is_initialized.return_value": True},
+                **{"is_api_available.return_value": True, "is_initialized.return_value": True},  # type: ignore
             ),
         ):
             out = context.run(context.on.collect_unit_status(), state)
@@ -1251,14 +1256,14 @@ class TestCharm:
         state = State(
             storages={Storage(name="config")},
             containers={Container(name="notary", can_connect=True)},
-            networks={Network("juju-info", [], ingress_addresses=[], egress_subnets=[])},
+            networks={Network("juju-info", bind_addresses=[])},
             leader=True,
         )
 
         with patch(
             "notary.Notary",
             return_value=Mock(
-                **{"is_api_available.return_value": True, "is_initialized.return_value": True},
+                **{"is_api_available.return_value": True, "is_initialized.return_value": True},  # type: ignore
             ),
         ):
             out = context.run(context.on.collect_unit_status(), state)
@@ -1270,14 +1275,14 @@ class TestCharm:
         state = State(
             storages={Storage(name="database")},
             containers={Container(name="notary", can_connect=True)},
-            networks={Network("juju-info", [], ingress_addresses=[], egress_subnets=[])},
+            networks={Network("juju-info", bind_addresses=[])},
             leader=True,
         )
 
         with patch(
             "notary.Notary",
             return_value=Mock(
-                **{"is_api_available.return_value": True, "is_initialized.return_value": True},
+                **{"is_api_available.return_value": True, "is_initialized.return_value": True},  # type: ignore
             ),
         ):
             out = context.run(context.on.collect_unit_status(), state)
@@ -1289,14 +1294,14 @@ class TestCharm:
         state = State(
             storages={Storage(name="config"), Storage(name="database")},
             containers={Container(name="notary", can_connect=True)},
-            networks={Network("juju-info", [], ingress_addresses=[], egress_subnets=[])},
+            networks={Network("juju-info", bind_addresses=[])},
             leader=True,
         )
 
         with patch(
             "notary.Notary",
             return_value=Mock(
-                **{"is_api_available.return_value": True, "is_initialized.return_value": True},
+                **{"is_api_available.return_value": True, "is_initialized.return_value": True},  # type: ignore
             ),
         ):
             out = context.run(context.on.collect_unit_status(), state)
@@ -1315,7 +1320,7 @@ class TestCharm:
         with patch(
             "notary.Notary",
             return_value=Mock(
-                **{"is_api_available.return_value": True, "is_initialized.return_value": True},
+                **{"is_api_available.return_value": True, "is_initialized.return_value": True},  # type: ignore
             ),
         ):
             out = context.run(context.on.collect_unit_status(), state)
@@ -1334,7 +1339,7 @@ class TestCharm:
         with patch(
             "notary.Notary",
             return_value=Mock(
-                **{"is_api_available.return_value": True, "is_initialized.return_value": True},
+                **{"is_api_available.return_value": True, "is_initialized.return_value": True},  # type: ignore
             ),
         ):
             out = context.run(context.on.collect_unit_status(), state)
@@ -1353,7 +1358,7 @@ class TestCharm:
         with patch(
             "notary.Notary",
             return_value=Mock(
-                **{"is_api_available.return_value": True, "is_initialized.return_value": True},
+                **{"is_api_available.return_value": True, "is_initialized.return_value": True},  # type: ignore
             ),
         ):
             out = context.run(context.on.collect_unit_status(), state)
@@ -1372,7 +1377,7 @@ class TestCharm:
         with patch(
             "notary.Notary",
             return_value=Mock(
-                **{"is_api_available.return_value": True, "is_initialized.return_value": True},
+                **{"is_api_available.return_value": True, "is_initialized.return_value": True},  # type: ignore
             ),
         ):
             out = context.run(context.on.collect_unit_status(), state)
@@ -1391,7 +1396,7 @@ class TestCharm:
         with patch(
             "notary.Notary",
             return_value=Mock(
-                **{"is_api_available.return_value": True, "is_initialized.return_value": True},
+                **{"is_api_available.return_value": True, "is_initialized.return_value": True},  # type: ignore
             ),
         ):
             out = context.run(context.on.collect_unit_status(), state)
@@ -1410,7 +1415,7 @@ class TestCharm:
         with patch(
             "notary.Notary",
             return_value=Mock(
-                **{"is_api_available.return_value": True, "is_initialized.return_value": True},
+                **{"is_api_available.return_value": True, "is_initialized.return_value": True},  # type: ignore
             ),
         ):
             out = context.run(context.on.collect_unit_status(), state)
@@ -1437,7 +1442,7 @@ class TestCharm:
             with patch(
                 "notary.Notary.__new__",
                 return_value=Mock(
-                    **{"is_api_available.return_value": True, "is_initialized.return_value": True},
+                    **{"is_api_available.return_value": True, "is_initialized.return_value": True},  # type: ignore
                 ),
             ):
                 out = context.run(context.on.collect_unit_status(), state)
@@ -1472,3 +1477,289 @@ class TestCharm:
             assert len(out.secrets) == 1
             secret = out.get_secret(label="Notary Login Details")
             assert secret.latest_content.get("token") == "example-token"
+
+    def test_given_tls_requirer_available_when_notary_unreachable_then_no_error_raised(
+        self, context
+    ):
+        state = State(
+            storages={Storage(name="config"), Storage(name="database")},
+            containers=[Container(name="notary", can_connect=True)],
+            networks={Network("juju-info")},
+            leader=True,
+            relations=[Relation(id=1, endpoint=CERTIFICATE_PROVIDER_RELATION_NAME)],
+        )
+        with patch(
+            "notary.Notary.__new__",
+            return_value=Mock(
+                **{
+                    "is_api_available.return_value": True,
+                    "is_initialized.return_value": False,
+                    "login.return_value": "example-token",
+                    "token_is_valid.return_value": False,
+                },
+            ),
+        ):
+            context.run(context.on.update_status(), state)
+
+    @patch(f"{TLS_LIB_PATH}.TLSCertificatesProvidesV4.get_certificate_requests")
+    def test_given_tls_requirer_available_when_configure_then_csrs_posted_to_notary(
+        self, mock_get_certificate_requests, context
+    ):
+        state = State(
+            storages={Storage(name="config"), Storage(name="database")},
+            containers=[Container(name="notary", can_connect=True)],
+            networks={Network("juju-info")},
+            leader=True,
+            relations=[Relation(id=1, endpoint=CERTIFICATE_PROVIDER_RELATION_NAME)],
+            secrets={
+                Secret(
+                    {"username": "hello", "password": "world", "token": "test-token"},
+                    id="1",
+                    label=NOTARY_LOGIN_SECRET_LABEL,
+                    owner="app",
+                )
+            },
+        )
+        csr = generate_csr(private_key=generate_private_key(), common_name="me")
+        mock_get_certificate_requests.return_value = [
+            RequirerCSR(
+                relation_id=1,
+                certificate_signing_request=csr,
+            )
+        ]
+        post_call = Mock()
+        with patch(
+            "notary.Notary.__new__",
+            return_value=Mock(
+                **{
+                    "is_api_available.return_value": True,
+                    "is_initialized.return_value": True,
+                    "token_is_valid.return_value": True,
+                    "get_certificate_requests_table.return_value": CertificateRequests(rows=[]),
+                    "post_csr": post_call,
+                },
+            ),
+        ):
+            context.run(context.on.update_status(), state)
+
+        post_call.assert_called_once_with(str(csr), "test-token")
+
+    @patch(f"{TLS_LIB_PATH}.TLSCertificatesProvidesV4.get_certificate_requests")
+    def test_given_tls_requirers_available_when_csrs_already_posted_then_duplicate_csr_not_posted(
+        self, mock_get_certificate_requests, context
+    ):
+        state = State(
+            storages={Storage(name="config"), Storage(name="database")},
+            containers=[Container(name="notary", can_connect=True)],
+            networks={Network("juju-info")},
+            leader=True,
+            relations=[Relation(id=1, endpoint=CERTIFICATE_PROVIDER_RELATION_NAME)],
+            secrets={
+                Secret(
+                    {"username": "hello", "password": "world", "token": "test-token"},
+                    id="1",
+                    label=NOTARY_LOGIN_SECRET_LABEL,
+                    owner="app",
+                )
+            },
+        )
+        csr = generate_csr(private_key=generate_private_key(), common_name="me")
+        mock_get_certificate_requests.return_value = [
+            RequirerCSR(
+                relation_id=1,
+                certificate_signing_request=csr,
+            )
+        ]
+        post_call = Mock()
+        with patch(
+            "notary.Notary.__new__",
+            return_value=Mock(
+                **{
+                    "is_api_available.return_value": True,
+                    "is_initialized.return_value": True,
+                    "token_is_valid.return_value": True,
+                    "get_certificate_requests_table.return_value": CertificateRequests(
+                        rows=[CertificateRequest(id=1, csr=str(csr), certificate_chain="")]
+                    ),
+                    "post_csr": post_call,
+                },
+            ),
+        ):
+            context.run(context.on.update_status(), state)
+
+        post_call.assert_not_called()
+
+    @patch(f"{TLS_LIB_PATH}.TLSCertificatesProvidesV4.set_relation_certificate")
+    @patch(f"{TLS_LIB_PATH}.TLSCertificatesProvidesV4.get_certificate_requests")
+    def test_given_tls_requirers_available_when_certificate_available_then_certs_provided_to_requirer(
+        self, mock_get_certificate_requests, mock_set_relation_certificate, context
+    ):
+        state = State(
+            storages={Storage(name="config"), Storage(name="database")},
+            containers=[Container(name="notary", can_connect=True)],
+            networks={Network("juju-info")},
+            leader=True,
+            relations=[Relation(id=1, endpoint=CERTIFICATE_PROVIDER_RELATION_NAME)],
+            secrets={
+                Secret(
+                    {"username": "hello", "password": "world", "token": "test-token"},
+                    id="1",
+                    label=NOTARY_LOGIN_SECRET_LABEL,
+                    owner="app",
+                )
+            },
+        )
+        ca_pk = generate_private_key()
+        ca = generate_ca(ca_pk, 365, "me")
+        csr = generate_csr(private_key=generate_private_key(), common_name="notary.com")
+        cert = generate_certificate(csr, ca, ca_pk, 365)
+        mock_get_certificate_requests.return_value = [
+            RequirerCSR(
+                relation_id=1,
+                certificate_signing_request=csr,
+            )
+        ]
+        with patch(
+            "notary.Notary.__new__",
+            return_value=Mock(
+                **{
+                    "is_api_available.return_value": True,
+                    "is_initialized.return_value": True,
+                    "token_is_valid.return_value": True,
+                    "get_certificate_requests_table.return_value": CertificateRequests(
+                        rows=[
+                            CertificateRequest(
+                                id=1, csr=str(csr), certificate_chain=[str(cert), str(ca)]
+                            )
+                        ]
+                    ),
+                },
+            ),
+        ):
+            context.run(context.on.update_status(), state)
+        mock_set_relation_certificate.assert_called_once()
+
+    @patch(f"{TLS_LIB_PATH}.TLSCertificatesProvidesV4.get_issued_certificates")
+    @patch(f"{TLS_LIB_PATH}.TLSCertificatesProvidesV4.set_relation_certificate")
+    @patch(f"{TLS_LIB_PATH}.TLSCertificatesProvidesV4.get_certificate_requests")
+    def test_given_tls_requirers_when_invalid_certificate_available_when_configure_then_new_cert_provided(
+        self,
+        mock_get_certificate_requests,
+        mock_set_relation_certificate,
+        mock_get_issued_certificates,
+        context,
+    ):
+        state = State(
+            storages={Storage(name="config"), Storage(name="database")},
+            containers=[Container(name="notary", can_connect=True)],
+            networks={Network("juju-info")},
+            leader=True,
+            relations=[Relation(id=1, endpoint=CERTIFICATE_PROVIDER_RELATION_NAME)],
+            secrets={
+                Secret(
+                    {"username": "hello", "password": "world", "token": "test-token"},
+                    id="1",
+                    label=NOTARY_LOGIN_SECRET_LABEL,
+                    owner="app",
+                )
+            },
+        )
+        ca_pk = generate_private_key()
+        ca = generate_ca(ca_pk, 365, "me")
+        csr = generate_csr(private_key=generate_private_key(), common_name="notary.com")
+        old_cert = generate_certificate(csr, ca, ca_pk, 365)
+        new_cert = generate_certificate(csr, ca, ca_pk, 366)
+        mock_get_certificate_requests.return_value = [
+            RequirerCSR(
+                relation_id=1,
+                certificate_signing_request=csr,
+            )
+        ]
+        mock_get_issued_certificates.return_value = [
+            ProviderCertificate(
+                relation_id=1,
+                certificate_signing_request=csr,
+                certificate=old_cert,
+                ca=ca,
+                chain=[old_cert, ca],
+            )
+        ]
+        with patch(
+            "notary.Notary.__new__",
+            return_value=Mock(
+                **{
+                    "is_api_available.return_value": True,
+                    "is_initialized.return_value": True,
+                    "token_is_valid.return_value": True,
+                    "get_certificate_requests_table.return_value": CertificateRequests(
+                        rows=[
+                            CertificateRequest(
+                                id=1, csr=str(csr), certificate_chain=[str(new_cert), str(ca)]
+                            )
+                        ]
+                    ),
+                },
+            ),
+        ):
+            context.run(context.on.update_status(), state)
+        mock_set_relation_certificate.assert_called_once()
+
+    @patch(f"{TLS_LIB_PATH}.TLSCertificatesProvidesV4.get_issued_certificates")
+    @patch(f"{TLS_LIB_PATH}.TLSCertificatesProvidesV4.set_relation_certificate")
+    @patch(f"{TLS_LIB_PATH}.TLSCertificatesProvidesV4.get_certificate_requests")
+    def test_given_certificate_rejected_in_notary_when_configure_then_certificate_revoked(
+        self,
+        mock_get_certificate_requests,
+        mock_set_relation_certificate,
+        mock_get_issued_certificates,
+        context,
+    ):
+        state = State(
+            storages={Storage(name="config"), Storage(name="database")},
+            containers=[Container(name="notary", can_connect=True)],
+            networks={Network("juju-info")},
+            leader=True,
+            relations=[Relation(id=1, endpoint=CERTIFICATE_PROVIDER_RELATION_NAME)],
+            secrets=[
+                Secret(
+                    {"username": "hello", "password": "world", "token": "test-token"},
+                    id="1",
+                    label=NOTARY_LOGIN_SECRET_LABEL,
+                    owner="app",
+                )
+            ],
+        )
+        ca_pk = generate_private_key()
+        ca = generate_ca(ca_pk, 365, "me")
+        csr = generate_csr(private_key=generate_private_key(), common_name="notary.com")
+        old_cert = generate_certificate(csr, ca, ca_pk, 365)
+        mock_get_certificate_requests.return_value = [
+            RequirerCSR(
+                relation_id=1,
+                certificate_signing_request=csr,
+            )
+        ]
+        mock_get_issued_certificates.return_value = [
+            ProviderCertificate(
+                relation_id=1,
+                certificate_signing_request=csr,
+                certificate=old_cert,
+                ca=ca,
+                chain=[old_cert, ca],
+            )
+        ]
+        with patch(
+            "notary.Notary.__new__",
+            return_value=Mock(
+                **{
+                    "is_api_available.return_value": True,
+                    "is_initialized.return_value": True,
+                    "token_is_valid.return_value": True,
+                    "get_certificate_requests_table.return_value": CertificateRequests(
+                        rows=[CertificateRequest(id=1, csr=str(csr), certificate_chain="rejected")]
+                    ),
+                },
+            ),
+        ):
+            context.run(context.on.update_status(), state)
+        mock_set_relation_certificate.assert_called_once()
