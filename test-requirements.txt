@@ -70,7 +70,7 @@ oauthlib==3.2.2
     #   requests-oauthlib
 ops==2.16.1
     # via ops-scenario
-ops-scenario==7.0.1
+ops-scenario==7.0.2
     # via -r test-requirements.in
 packaging==24.1
     # via
@@ -114,9 +114,9 @@ pyrfc3339==1.1
     # via
     #   juju
     #   macaroonbakery
-pyright==1.1.379
+pyright==1.1.380
     # via -r test-requirements.in
-pytest==8.3.2
+pytest==8.3.3
     # via
     #   -r test-requirements.in
     #   pytest-asyncio
@@ -146,7 +146,7 @@ requests-oauthlib==2.0.0
     # via kubernetes
 rsa==4.9
     # via google-auth
-ruff==0.6.4
+ruff==0.6.5
     # via -r test-requirements.in
 six==1.16.0
     # via
