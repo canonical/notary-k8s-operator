@@ -6,6 +6,7 @@
 
 import logging
 import random
+import socket
 import string
 from contextlib import suppress
 from dataclasses import dataclass
@@ -17,8 +18,12 @@ from charms.loki_k8s.v1.loki_push_api import LogForwarder
 from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointProvider
 from charms.tls_certificates_interface.v4.tls_certificates import (
     Certificate,
+    CertificateRequest,
+    Mode,
+    PrivateKey,
     ProviderCertificate,
     TLSCertificatesProvidesV4,
+    TLSCertificatesRequiresV4,
     generate_ca,
     generate_certificate,
     generate_csr,
@@ -34,6 +39,7 @@ CERTIFICATE_PROVIDER_RELATION_NAME = "certificates"
 LOGGING_RELATION_NAME = "logging"
 METRICS_RELATION_NAME = "metrics"
 GRAFANA_RELATION_NAME = "grafana-dashboard"
+TLS_ACCESS_RELATION_NAME = "access-certificates"
 
 DB_MOUNT = "database"
 CONFIG_MOUNT = "config"
@@ -68,8 +74,12 @@ class NotaryCharm(ops.CharmBase):
 
     def __init__(self, framework: ops.Framework):
         super().__init__(framework)
-
         self.port = 2111
+        self.access_csr = CertificateRequest(
+            common_name="Notary",
+            sans_dns=frozenset([socket.getfqdn()]),
+        )
+
         self.unit.set_ports(self.port)
         self.container = self.unit.get_container("notary")
         self.tls = TLSCertificatesProvidesV4(
@@ -89,9 +99,15 @@ class NotaryCharm(ops.CharmBase):
                 }
             ],
         )
+        self.tls_access = TLSCertificatesRequiresV4(
+            charm=self,
+            mode=Mode.APP,
+            relationship_name=TLS_ACCESS_RELATION_NAME,
+            certificate_requests=[self.access_csr],
+        )
 
         self.client = Notary(
-            f"https://{self._application_bind_address}:{self.port}",
+            f"https://{socket.getfqdn()}:{self.port}",
             f"{CHARM_PATH}/{CONFIG_MOUNT}/0/ca.pem",
         )
         [
@@ -100,6 +116,9 @@ class NotaryCharm(ops.CharmBase):
                 self.on["notary"].pebble_ready,
                 self.on["notary"].pebble_custom_notice,
                 self.on["certificates"].relation_changed,
+                self.on["certificates"].relation_departed,
+                self.on["access-certificates"].relation_changed,
+                self.on["access-certificates"].relation_departed,
                 self.on.config_storage_attached,
                 self.on.database_storage_attached,
                 self.on.config_changed,
@@ -131,8 +150,8 @@ class NotaryCharm(ops.CharmBase):
         if not self._storages_attached():
             event.add_status(ops.WaitingStatus("storages not yet available"))
             return
-        if not self._self_signed_certificates_generated():
-            event.add_status(ops.WaitingStatus("certificates not yet created"))
+        if not self._certificates_available():
+            event.add_status(ops.WaitingStatus("certificates not yet pushed to workload"))
             return
         if not self.client.is_api_available():
             event.add_status(ops.WaitingStatus("Notary server not yet available"))
@@ -167,14 +186,18 @@ class NotaryCharm(ops.CharmBase):
     def _configure_access_certificates(self):
         """Update the config files for notary and replan if required."""
         certificates_changed = False
-        if not self._self_signed_certificates_generated():
-            certificates_changed = True
-            self._generate_self_signed_certificates()
-        logger.info("Certificates configured.")
+        if not self.tls_access._tls_relation_created():
+            if not self._self_signed_certificates_generated():
+                certificates_changed = True
+                self._generate_self_signed_certificates()
+        else:
+            certificates_changed = self._store_certificate_from_access_relation_if_available()
         if certificates_changed:
-            self.container.add_layer("notary", self._pebble_layer, combine=True)
-            with suppress(ops.pebble.ChangeError):
-                self.container.replan()
+            logger.info("Certificates changed. Restarting service.")
+            self.container.restart("notary")
+        self.container.add_layer("notary", self._pebble_layer, combine=True)
+        with suppress(ops.pebble.ChangeError):
+            self.container.replan()
 
     def _configure_charm_authorization(self):
         """Create an admin user to manage Notary if needed, and acquire a token by logging in if needed."""
@@ -183,6 +206,13 @@ class NotaryCharm(ops.CharmBase):
             return
         if not login_details.token or not self.client.token_is_valid(login_details.token):
             login_details.token = self.client.login(login_details.username, login_details.password)
+            if not login_details.token:
+                logger.warning(
+                    "failed to login with the existing admin credentials."
+                    " If you've manually modified the admin account credentials,"
+                    " please update the charm's credentials secret accordingly."
+                )
+                return
             login_details_secret = self.model.get_secret(label=NOTARY_LOGIN_SECRET_LABEL)
             login_details_secret.set_content(login_details.to_dict())
 
@@ -270,17 +300,6 @@ class NotaryCharm(ops.CharmBase):
             },
         }
 
-    @property
-    def _application_bind_address(self) -> str | None:
-        binding = self.model.get_binding("juju-info")
-        if not binding:
-            return None
-        if not binding.network:
-            return None
-        if not binding.network.bind_address:
-            return None
-        return str(binding.network.bind_address)
-
     ## Status Checks ##
     def _storages_attached(self) -> bool:
         """Return if the storages are attached."""
@@ -289,11 +308,25 @@ class NotaryCharm(ops.CharmBase):
         )
 
     ## Helpers ##
+    def _store_certificate_from_access_relation_if_available(self) -> bool:
+        """Check if the requirer object has a certificate assigned. Save it to the workload if so.
+
+        Returns:
+            bool: True if a new certificate was saved.
+        """
+        cert, pk = self.tls_access.get_assigned_certificate(certificate_request=self.access_csr)
+        if not cert or not pk:
+            return False
+        saved_cert = self.container.pull(
+            f"{WORKLOAD_CONFIG_PATH}/{CONFIG_MOUNT}/certificate.pem",
+        ).read()
+        if str(cert.certificate) == saved_cert:
+            return False
+        self._push_files_to_workload(cert.ca, cert.certificate, pk)
+        return True
+
     def _generate_self_signed_certificates(self) -> None:
         """Generate self signed certificates and saves them to secrets and the charm."""
-        if not self._application_bind_address:
-            logger.warning("unit IP not found.")
-            return
         ca_private_key = generate_private_key()
         ca_certificate = generate_ca(
             private_key=ca_private_key,
@@ -304,8 +337,7 @@ class NotaryCharm(ops.CharmBase):
         csr = generate_csr(
             private_key=private_key,
             common_name=CERTIFICATE_COMMON_NAME,
-            sans_dns=frozenset([CERTIFICATE_COMMON_NAME]),
-            sans_ip=frozenset([self._application_bind_address]),
+            sans_dns=frozenset([socket.getfqdn()]),
         )
         certificate = generate_certificate(
             ca=ca_certificate,
@@ -313,19 +345,7 @@ class NotaryCharm(ops.CharmBase):
             csr=csr,
             validity=365,
         )
-        self.container.push(
-            f"{WORKLOAD_CONFIG_PATH}/{CONFIG_MOUNT}/ca.pem", str(ca_certificate), make_dirs=True
-        )
-        self.container.push(
-            f"{WORKLOAD_CONFIG_PATH}/{CONFIG_MOUNT}/certificate.pem",
-            str(certificate),
-            make_dirs=True,
-        )
-        self.container.push(
-            f"{WORKLOAD_CONFIG_PATH}/{CONFIG_MOUNT}/private_key.pem",
-            str(private_key),
-            make_dirs=True,
-        )
+        self._push_files_to_workload(ca_certificate, certificate, private_key)
         logger.info("Created self signed certificates.")
 
     def _self_signed_certificates_generated(self) -> bool:
@@ -338,6 +358,14 @@ class NotaryCharm(ops.CharmBase):
             return False
         cert = Certificate.from_string(existing_cert.read())
         return cert.common_name == CERTIFICATE_COMMON_NAME
+
+    def _certificates_available(self) -> bool:
+        """Check if the workload certificate is available."""
+        try:
+            self.container.pull(f"{WORKLOAD_CONFIG_PATH}/{CONFIG_MOUNT}/certificate.pem")
+        except ops.pebble.PathError:
+            return False
+        return True
 
     def _get_or_create_admin_account(self) -> LoginSecret | None:
         """Get the first admin user for the charm to use from secrets. Create one if it doesn't exist.
@@ -366,6 +394,32 @@ class NotaryCharm(ops.CharmBase):
             if not response:
                 return None
         return account
+
+    def _push_files_to_workload(
+        self,
+        ca_certificate: Certificate | None,
+        certificate: Certificate | None,
+        private_key: PrivateKey | None,
+    ) -> None:
+        """Push all given files to workload."""
+        if ca_certificate:
+            self.container.push(
+                f"{WORKLOAD_CONFIG_PATH}/{CONFIG_MOUNT}/ca.pem",
+                str(ca_certificate),
+                make_dirs=True,
+            )
+        if certificate:
+            self.container.push(
+                f"{WORKLOAD_CONFIG_PATH}/{CONFIG_MOUNT}/certificate.pem",
+                str(certificate),
+                make_dirs=True,
+            )
+        if private_key:
+            self.container.push(
+                f"{WORKLOAD_CONFIG_PATH}/{CONFIG_MOUNT}/private_key.pem",
+                str(private_key),
+                make_dirs=True,
+            )
 
 
 def _generate_password() -> str:
