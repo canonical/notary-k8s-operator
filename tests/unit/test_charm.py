@@ -6,6 +6,7 @@ from unittest.mock import Mock, patch
 
 import ops
 import pytest
+from ops.pebble import Layer
 from scenario import Container, Context, Mount, Network, Relation, Secret, State, Storage
 
 from charm import CERTIFICATE_PROVIDER_RELATION_NAME, NOTARY_LOGIN_SECRET_LABEL, NotaryCharm
@@ -58,7 +59,28 @@ class TestCharm:
     ):
         state = State(
             storages={Storage(name="config")},
-            containers={Container(name="notary", can_connect=False)},
+            containers={
+                Container(
+                    name="notary",
+                    can_connect=False,
+                    layers={
+                        "notary": Layer(
+                            {
+                                "summary": "notary layer",
+                                "description": "pebble config layer for notary",
+                                "services": {
+                                    "notary": {
+                                        "override": "replace",
+                                        "summary": "notary",
+                                        "command": "notary -config /etc/notary/config/config.yaml",
+                                        "startup": "enabled",
+                                    }
+                                },
+                            }
+                        )
+                    },
+                )
+            },
             networks={Network("juju-info", bind_addresses=[])},
             leader=True,
         )
@@ -76,7 +98,28 @@ class TestCharm:
     ):
         state = State(
             storages={Storage(name="database")},
-            containers={Container(name="notary", can_connect=False)},
+            containers={
+                Container(
+                    name="notary",
+                    can_connect=False,
+                    layers={
+                        "notary": Layer(
+                            {
+                                "summary": "notary layer",
+                                "description": "pebble config layer for notary",
+                                "services": {
+                                    "notary": {
+                                        "override": "replace",
+                                        "summary": "notary",
+                                        "command": "notary -config /etc/notary/config/config.yaml",
+                                        "startup": "enabled",
+                                    }
+                                },
+                            }
+                        )
+                    },
+                )
+            },
             networks={Network("juju-info", bind_addresses=[])},
             leader=True,
         )
@@ -94,7 +137,28 @@ class TestCharm:
     ):
         state = State(
             storages={Storage(name="config"), Storage(name="database")},
-            containers={Container(name="notary", can_connect=False)},
+            containers={
+                Container(
+                    name="notary",
+                    can_connect=False,
+                    layers={
+                        "notary": Layer(
+                            {
+                                "summary": "notary layer",
+                                "description": "pebble config layer for notary",
+                                "services": {
+                                    "notary": {
+                                        "override": "replace",
+                                        "summary": "notary",
+                                        "command": "notary -config /etc/notary/config/config.yaml",
+                                        "startup": "enabled",
+                                    }
+                                },
+                            }
+                        )
+                    },
+                )
+            },
             networks={Network("juju-info", bind_addresses=[])},
             leader=True,
         )
@@ -112,7 +176,28 @@ class TestCharm:
     ):
         state = State(
             storages={Storage(name="config")},
-            containers={Container(name="notary", can_connect=True)},
+            containers={
+                Container(
+                    name="notary",
+                    can_connect=True,
+                    layers={
+                        "notary": Layer(
+                            {
+                                "summary": "notary layer",
+                                "description": "pebble config layer for notary",
+                                "services": {
+                                    "notary": {
+                                        "override": "replace",
+                                        "summary": "notary",
+                                        "command": "notary -config /etc/notary/config/config.yaml",
+                                        "startup": "enabled",
+                                    }
+                                },
+                            }
+                        )
+                    },
+                )
+            },
             networks={Network("juju-info", bind_addresses=[])},
             leader=True,
         )
@@ -130,7 +215,28 @@ class TestCharm:
     ):
         state = State(
             storages={Storage(name="database")},
-            containers={Container(name="notary", can_connect=True)},
+            containers={
+                Container(
+                    name="notary",
+                    can_connect=True,
+                    layers={
+                        "notary": Layer(
+                            {
+                                "summary": "notary layer",
+                                "description": "pebble config layer for notary",
+                                "services": {
+                                    "notary": {
+                                        "override": "replace",
+                                        "summary": "notary",
+                                        "command": "notary -config /etc/notary/config/config.yaml",
+                                        "startup": "enabled",
+                                    }
+                                },
+                            }
+                        )
+                    },
+                )
+            },
             networks={Network("juju-info", bind_addresses=[])},
             leader=True,
         )
@@ -148,7 +254,28 @@ class TestCharm:
     ):
         state = State(
             storages={Storage(name="config"), Storage(name="database")},
-            containers={Container(name="notary", can_connect=True)},
+            containers={
+                Container(
+                    name="notary",
+                    can_connect=True,
+                    layers={
+                        "notary": Layer(
+                            {
+                                "summary": "notary layer",
+                                "description": "pebble config layer for notary",
+                                "services": {
+                                    "notary": {
+                                        "override": "replace",
+                                        "summary": "notary",
+                                        "command": "notary -config /etc/notary/config/config.yaml",
+                                        "startup": "enabled",
+                                    }
+                                },
+                            }
+                        )
+                    },
+                )
+            },
             networks={Network("juju-info", bind_addresses=[])},
             leader=True,
         )
@@ -172,7 +299,28 @@ class TestCharm:
     ):
         state = State(
             storages={Storage(name="config")},
-            containers={Container(name="notary", can_connect=False)},
+            containers={
+                Container(
+                    name="notary",
+                    can_connect=False,
+                    layers={
+                        "notary": Layer(
+                            {
+                                "summary": "notary layer",
+                                "description": "pebble config layer for notary",
+                                "services": {
+                                    "notary": {
+                                        "override": "replace",
+                                        "summary": "notary",
+                                        "command": "notary -config /etc/notary/config/config.yaml",
+                                        "startup": "enabled",
+                                    }
+                                },
+                            }
+                        )
+                    },
+                )
+            },
             networks={Network("juju-info")},
             leader=True,
         )
@@ -190,7 +338,28 @@ class TestCharm:
     ):
         state = State(
             storages={Storage(name="database")},
-            containers={Container(name="notary", can_connect=False)},
+            containers={
+                Container(
+                    name="notary",
+                    can_connect=False,
+                    layers={
+                        "notary": Layer(
+                            {
+                                "summary": "notary layer",
+                                "description": "pebble config layer for notary",
+                                "services": {
+                                    "notary": {
+                                        "override": "replace",
+                                        "summary": "notary",
+                                        "command": "notary -config /etc/notary/config/config.yaml",
+                                        "startup": "enabled",
+                                    }
+                                },
+                            }
+                        )
+                    },
+                )
+            },
             networks={Network("juju-info")},
             leader=True,
         )
@@ -208,7 +377,28 @@ class TestCharm:
     ):
         state = State(
             storages={Storage(name="config"), Storage(name="database")},
-            containers={Container(name="notary", can_connect=False)},
+            containers={
+                Container(
+                    name="notary",
+                    can_connect=False,
+                    layers={
+                        "notary": Layer(
+                            {
+                                "summary": "notary layer",
+                                "description": "pebble config layer for notary",
+                                "services": {
+                                    "notary": {
+                                        "override": "replace",
+                                        "summary": "notary",
+                                        "command": "notary -config /etc/notary/config/config.yaml",
+                                        "startup": "enabled",
+                                    }
+                                },
+                            }
+                        )
+                    },
+                )
+            },
             networks={Network("juju-info")},
             leader=True,
         )
@@ -226,7 +416,28 @@ class TestCharm:
     ):
         state = State(
             storages={Storage(name="config")},
-            containers={Container(name="notary", can_connect=True)},
+            containers={
+                Container(
+                    name="notary",
+                    can_connect=True,
+                    layers={
+                        "notary": Layer(
+                            {
+                                "summary": "notary layer",
+                                "description": "pebble config layer for notary",
+                                "services": {
+                                    "notary": {
+                                        "override": "replace",
+                                        "summary": "notary",
+                                        "command": "notary -config /etc/notary/config/config.yaml",
+                                        "startup": "enabled",
+                                    }
+                                },
+                            }
+                        )
+                    },
+                )
+            },
             networks={Network("juju-info")},
             leader=True,
         )
@@ -244,7 +455,28 @@ class TestCharm:
     ):
         state = State(
             storages={Storage(name="database")},
-            containers={Container(name="notary", can_connect=True)},
+            containers={
+                Container(
+                    name="notary",
+                    can_connect=True,
+                    layers={
+                        "notary": Layer(
+                            {
+                                "summary": "notary layer",
+                                "description": "pebble config layer for notary",
+                                "services": {
+                                    "notary": {
+                                        "override": "replace",
+                                        "summary": "notary",
+                                        "command": "notary -config /etc/notary/config/config.yaml",
+                                        "startup": "enabled",
+                                    }
+                                },
+                            }
+                        )
+                    },
+                )
+            },
             networks={Network("juju-info")},
             leader=True,
         )
@@ -262,7 +494,28 @@ class TestCharm:
     ):
         state = State(
             storages={Storage(name="config"), Storage(name="database")},
-            containers={Container(name="notary", can_connect=True)},
+            containers={
+                Container(
+                    name="notary",
+                    can_connect=True,
+                    layers={
+                        "notary": Layer(
+                            {
+                                "summary": "notary layer",
+                                "description": "pebble config layer for notary",
+                                "services": {
+                                    "notary": {
+                                        "override": "replace",
+                                        "summary": "notary",
+                                        "command": "notary -config /etc/notary/config/config.yaml",
+                                        "startup": "enabled",
+                                    }
+                                },
+                            }
+                        )
+                    },
+                )
+            },
             networks={Network("juju-info")},
             leader=True,
         )
@@ -294,7 +547,28 @@ class TestCharm:
     ):
         state = State(
             storages={Storage(name="config")},
-            containers={Container(name="notary", can_connect=False)},
+            containers={
+                Container(
+                    name="notary",
+                    can_connect=False,
+                    layers={
+                        "notary": Layer(
+                            {
+                                "summary": "notary layer",
+                                "description": "pebble config layer for notary",
+                                "services": {
+                                    "notary": {
+                                        "override": "replace",
+                                        "summary": "notary",
+                                        "command": "notary -config /etc/notary/config/config.yaml",
+                                        "startup": "enabled",
+                                    }
+                                },
+                            }
+                        )
+                    },
+                )
+            },
             networks={Network("juju-info", bind_addresses=[])},
             leader=True,
         )
@@ -312,7 +586,28 @@ class TestCharm:
     ):
         state = State(
             storages={Storage(name="database")},
-            containers={Container(name="notary", can_connect=False)},
+            containers={
+                Container(
+                    name="notary",
+                    can_connect=False,
+                    layers={
+                        "notary": Layer(
+                            {
+                                "summary": "notary layer",
+                                "description": "pebble config layer for notary",
+                                "services": {
+                                    "notary": {
+                                        "override": "replace",
+                                        "summary": "notary",
+                                        "command": "notary -config /etc/notary/config/config.yaml",
+                                        "startup": "enabled",
+                                    }
+                                },
+                            }
+                        )
+                    },
+                )
+            },
             networks={Network("juju-info", bind_addresses=[])},
             leader=True,
         )
@@ -330,7 +625,28 @@ class TestCharm:
     ):
         state = State(
             storages={Storage(name="config"), Storage(name="database")},
-            containers={Container(name="notary", can_connect=False)},
+            containers={
+                Container(
+                    name="notary",
+                    can_connect=False,
+                    layers={
+                        "notary": Layer(
+                            {
+                                "summary": "notary layer",
+                                "description": "pebble config layer for notary",
+                                "services": {
+                                    "notary": {
+                                        "override": "replace",
+                                        "summary": "notary",
+                                        "command": "notary -config /etc/notary/config/config.yaml",
+                                        "startup": "enabled",
+                                    }
+                                },
+                            }
+                        )
+                    },
+                )
+            },
             networks={Network("juju-info", bind_addresses=[])},
             leader=True,
         )
@@ -348,7 +664,28 @@ class TestCharm:
     ):
         state = State(
             storages={Storage(name="config")},
-            containers={Container(name="notary", can_connect=True)},
+            containers={
+                Container(
+                    name="notary",
+                    can_connect=True,
+                    layers={
+                        "notary": Layer(
+                            {
+                                "summary": "notary layer",
+                                "description": "pebble config layer for notary",
+                                "services": {
+                                    "notary": {
+                                        "override": "replace",
+                                        "summary": "notary",
+                                        "command": "notary -config /etc/notary/config/config.yaml",
+                                        "startup": "enabled",
+                                    }
+                                },
+                            }
+                        )
+                    },
+                )
+            },
             networks={Network("juju-info", bind_addresses=[])},
             leader=True,
         )
@@ -366,7 +703,28 @@ class TestCharm:
     ):
         state = State(
             storages={Storage(name="database")},
-            containers={Container(name="notary", can_connect=True)},
+            containers={
+                Container(
+                    name="notary",
+                    can_connect=True,
+                    layers={
+                        "notary": Layer(
+                            {
+                                "summary": "notary layer",
+                                "description": "pebble config layer for notary",
+                                "services": {
+                                    "notary": {
+                                        "override": "replace",
+                                        "summary": "notary",
+                                        "command": "notary -config /etc/notary/config/config.yaml",
+                                        "startup": "enabled",
+                                    }
+                                },
+                            }
+                        )
+                    },
+                )
+            },
             networks={Network("juju-info", bind_addresses=[])},
             leader=True,
         )
@@ -384,7 +742,28 @@ class TestCharm:
     ):
         state = State(
             storages={Storage(name="config"), Storage(name="database")},
-            containers={Container(name="notary", can_connect=True)},
+            containers={
+                Container(
+                    name="notary",
+                    can_connect=True,
+                    layers={
+                        "notary": Layer(
+                            {
+                                "summary": "notary layer",
+                                "description": "pebble config layer for notary",
+                                "services": {
+                                    "notary": {
+                                        "override": "replace",
+                                        "summary": "notary",
+                                        "command": "notary -config /etc/notary/config/config.yaml",
+                                        "startup": "enabled",
+                                    }
+                                },
+                            }
+                        )
+                    },
+                )
+            },
             networks={Network("juju-info", bind_addresses=[])},
             leader=True,
         )
@@ -408,7 +787,28 @@ class TestCharm:
     ):
         state = State(
             storages={Storage(name="config")},
-            containers={Container(name="notary", can_connect=False)},
+            containers={
+                Container(
+                    name="notary",
+                    can_connect=False,
+                    layers={
+                        "notary": Layer(
+                            {
+                                "summary": "notary layer",
+                                "description": "pebble config layer for notary",
+                                "services": {
+                                    "notary": {
+                                        "override": "replace",
+                                        "summary": "notary",
+                                        "command": "notary -config /etc/notary/config/config.yaml",
+                                        "startup": "enabled",
+                                    }
+                                },
+                            }
+                        )
+                    },
+                )
+            },
             networks={Network("juju-info")},
             leader=True,
         )
@@ -426,7 +826,28 @@ class TestCharm:
     ):
         state = State(
             storages={Storage(name="database")},
-            containers={Container(name="notary", can_connect=False)},
+            containers={
+                Container(
+                    name="notary",
+                    can_connect=False,
+                    layers={
+                        "notary": Layer(
+                            {
+                                "summary": "notary layer",
+                                "description": "pebble config layer for notary",
+                                "services": {
+                                    "notary": {
+                                        "override": "replace",
+                                        "summary": "notary",
+                                        "command": "notary -config /etc/notary/config/config.yaml",
+                                        "startup": "enabled",
+                                    }
+                                },
+                            }
+                        )
+                    },
+                )
+            },
             networks={Network("juju-info")},
             leader=True,
         )
@@ -444,7 +865,28 @@ class TestCharm:
     ):
         state = State(
             storages={Storage(name="config"), Storage(name="database")},
-            containers={Container(name="notary", can_connect=False)},
+            containers={
+                Container(
+                    name="notary",
+                    can_connect=False,
+                    layers={
+                        "notary": Layer(
+                            {
+                                "summary": "notary layer",
+                                "description": "pebble config layer for notary",
+                                "services": {
+                                    "notary": {
+                                        "override": "replace",
+                                        "summary": "notary",
+                                        "command": "notary -config /etc/notary/config/config.yaml",
+                                        "startup": "enabled",
+                                    }
+                                },
+                            }
+                        )
+                    },
+                )
+            },
             networks={Network("juju-info")},
             leader=True,
         )
@@ -462,7 +904,28 @@ class TestCharm:
     ):
         state = State(
             storages={Storage(name="config")},
-            containers={Container(name="notary", can_connect=True)},
+            containers={
+                Container(
+                    name="notary",
+                    can_connect=True,
+                    layers={
+                        "notary": Layer(
+                            {
+                                "summary": "notary layer",
+                                "description": "pebble config layer for notary",
+                                "services": {
+                                    "notary": {
+                                        "override": "replace",
+                                        "summary": "notary",
+                                        "command": "notary -config /etc/notary/config/config.yaml",
+                                        "startup": "enabled",
+                                    }
+                                },
+                            }
+                        )
+                    },
+                )
+            },
             networks={Network("juju-info")},
             leader=True,
         )
@@ -480,7 +943,28 @@ class TestCharm:
     ):
         state = State(
             storages={Storage(name="database")},
-            containers={Container(name="notary", can_connect=True)},
+            containers={
+                Container(
+                    name="notary",
+                    can_connect=True,
+                    layers={
+                        "notary": Layer(
+                            {
+                                "summary": "notary layer",
+                                "description": "pebble config layer for notary",
+                                "services": {
+                                    "notary": {
+                                        "override": "replace",
+                                        "summary": "notary",
+                                        "command": "notary -config /etc/notary/config/config.yaml",
+                                        "startup": "enabled",
+                                    }
+                                },
+                            }
+                        )
+                    },
+                )
+            },
             networks={Network("juju-info")},
             leader=True,
         )
@@ -498,7 +982,28 @@ class TestCharm:
     ):
         state = State(
             storages={Storage(name="config"), Storage(name="database")},
-            containers={Container(name="notary", can_connect=True)},
+            containers={
+                Container(
+                    name="notary",
+                    can_connect=True,
+                    layers={
+                        "notary": Layer(
+                            {
+                                "summary": "notary layer",
+                                "description": "pebble config layer for notary",
+                                "services": {
+                                    "notary": {
+                                        "override": "replace",
+                                        "summary": "notary",
+                                        "command": "notary -config /etc/notary/config/config.yaml",
+                                        "startup": "enabled",
+                                    }
+                                },
+                            }
+                        )
+                    },
+                )
+            },
             networks={Network("juju-info")},
             leader=True,
         )
@@ -516,7 +1021,28 @@ class TestCharm:
     ):
         state = State(
             storages={Storage(name="config")},
-            containers={Container(name="notary", can_connect=False)},
+            containers={
+                Container(
+                    name="notary",
+                    can_connect=False,
+                    layers={
+                        "notary": Layer(
+                            {
+                                "summary": "notary layer",
+                                "description": "pebble config layer for notary",
+                                "services": {
+                                    "notary": {
+                                        "override": "replace",
+                                        "summary": "notary",
+                                        "command": "notary -config /etc/notary/config/config.yaml",
+                                        "startup": "enabled",
+                                    }
+                                },
+                            }
+                        )
+                    },
+                )
+            },
             networks={Network("juju-info", bind_addresses=[])},
             leader=True,
         )
@@ -534,7 +1060,28 @@ class TestCharm:
     ):
         state = State(
             storages={Storage(name="database")},
-            containers={Container(name="notary", can_connect=False)},
+            containers={
+                Container(
+                    name="notary",
+                    can_connect=False,
+                    layers={
+                        "notary": Layer(
+                            {
+                                "summary": "notary layer",
+                                "description": "pebble config layer for notary",
+                                "services": {
+                                    "notary": {
+                                        "override": "replace",
+                                        "summary": "notary",
+                                        "command": "notary -config /etc/notary/config/config.yaml",
+                                        "startup": "enabled",
+                                    }
+                                },
+                            }
+                        )
+                    },
+                )
+            },
             networks={Network("juju-info", bind_addresses=[])},
             leader=True,
         )
@@ -552,7 +1099,28 @@ class TestCharm:
     ):
         state = State(
             storages={Storage(name="config"), Storage(name="database")},
-            containers={Container(name="notary", can_connect=False)},
+            containers={
+                Container(
+                    name="notary",
+                    can_connect=False,
+                    layers={
+                        "notary": Layer(
+                            {
+                                "summary": "notary layer",
+                                "description": "pebble config layer for notary",
+                                "services": {
+                                    "notary": {
+                                        "override": "replace",
+                                        "summary": "notary",
+                                        "command": "notary -config /etc/notary/config/config.yaml",
+                                        "startup": "enabled",
+                                    }
+                                },
+                            }
+                        )
+                    },
+                )
+            },
             networks={Network("juju-info", bind_addresses=[])},
             leader=True,
         )
@@ -570,7 +1138,28 @@ class TestCharm:
     ):
         state = State(
             storages={Storage(name="config")},
-            containers={Container(name="notary", can_connect=True)},
+            containers={
+                Container(
+                    name="notary",
+                    can_connect=True,
+                    layers={
+                        "notary": Layer(
+                            {
+                                "summary": "notary layer",
+                                "description": "pebble config layer for notary",
+                                "services": {
+                                    "notary": {
+                                        "override": "replace",
+                                        "summary": "notary",
+                                        "command": "notary -config /etc/notary/config/config.yaml",
+                                        "startup": "enabled",
+                                    }
+                                },
+                            }
+                        )
+                    },
+                )
+            },
             networks={Network("juju-info", bind_addresses=[])},
             leader=True,
         )
@@ -588,7 +1177,28 @@ class TestCharm:
     ):
         state = State(
             storages={Storage(name="database")},
-            containers={Container(name="notary", can_connect=True)},
+            containers={
+                Container(
+                    name="notary",
+                    can_connect=True,
+                    layers={
+                        "notary": Layer(
+                            {
+                                "summary": "notary layer",
+                                "description": "pebble config layer for notary",
+                                "services": {
+                                    "notary": {
+                                        "override": "replace",
+                                        "summary": "notary",
+                                        "command": "notary -config /etc/notary/config/config.yaml",
+                                        "startup": "enabled",
+                                    }
+                                },
+                            }
+                        )
+                    },
+                )
+            },
             networks={Network("juju-info", bind_addresses=[])},
             leader=True,
         )
@@ -606,7 +1216,28 @@ class TestCharm:
     ):
         state = State(
             storages={Storage(name="config"), Storage(name="database")},
-            containers={Container(name="notary", can_connect=True)},
+            containers={
+                Container(
+                    name="notary",
+                    can_connect=True,
+                    layers={
+                        "notary": Layer(
+                            {
+                                "summary": "notary layer",
+                                "description": "pebble config layer for notary",
+                                "services": {
+                                    "notary": {
+                                        "override": "replace",
+                                        "summary": "notary",
+                                        "command": "notary -config /etc/notary/config/config.yaml",
+                                        "startup": "enabled",
+                                    }
+                                },
+                            }
+                        )
+                    },
+                )
+            },
             networks={Network("juju-info", bind_addresses=[])},
             leader=True,
         )
@@ -631,7 +1262,28 @@ class TestCharm:
     ):
         state = State(
             storages={Storage(name="config")},
-            containers={Container(name="notary", can_connect=False)},
+            containers={
+                Container(
+                    name="notary",
+                    can_connect=False,
+                    layers={
+                        "notary": Layer(
+                            {
+                                "summary": "notary layer",
+                                "description": "pebble config layer for notary",
+                                "services": {
+                                    "notary": {
+                                        "override": "replace",
+                                        "summary": "notary",
+                                        "command": "notary -config /etc/notary/config/config.yaml",
+                                        "startup": "enabled",
+                                    }
+                                },
+                            }
+                        )
+                    },
+                )
+            },
             networks={Network("juju-info")},
             leader=True,
         )
@@ -649,7 +1301,28 @@ class TestCharm:
     ):
         state = State(
             storages={Storage(name="database")},
-            containers={Container(name="notary", can_connect=False)},
+            containers={
+                Container(
+                    name="notary",
+                    can_connect=False,
+                    layers={
+                        "notary": Layer(
+                            {
+                                "summary": "notary layer",
+                                "description": "pebble config layer for notary",
+                                "services": {
+                                    "notary": {
+                                        "override": "replace",
+                                        "summary": "notary",
+                                        "command": "notary -config /etc/notary/config/config.yaml",
+                                        "startup": "enabled",
+                                    }
+                                },
+                            }
+                        )
+                    },
+                )
+            },
             networks={Network("juju-info")},
             leader=True,
         )
@@ -667,7 +1340,28 @@ class TestCharm:
     ):
         state = State(
             storages={Storage(name="config"), Storage(name="database")},
-            containers={Container(name="notary", can_connect=False)},
+            containers={
+                Container(
+                    name="notary",
+                    can_connect=False,
+                    layers={
+                        "notary": Layer(
+                            {
+                                "summary": "notary layer",
+                                "description": "pebble config layer for notary",
+                                "services": {
+                                    "notary": {
+                                        "override": "replace",
+                                        "summary": "notary",
+                                        "command": "notary -config /etc/notary/config/config.yaml",
+                                        "startup": "enabled",
+                                    }
+                                },
+                            }
+                        )
+                    },
+                )
+            },
             networks={Network("juju-info")},
             leader=True,
         )
@@ -685,7 +1379,28 @@ class TestCharm:
     ):
         state = State(
             storages={Storage(name="config")},
-            containers={Container(name="notary", can_connect=True)},
+            containers={
+                Container(
+                    name="notary",
+                    can_connect=True,
+                    layers={
+                        "notary": Layer(
+                            {
+                                "summary": "notary layer",
+                                "description": "pebble config layer for notary",
+                                "services": {
+                                    "notary": {
+                                        "override": "replace",
+                                        "summary": "notary",
+                                        "command": "notary -config /etc/notary/config/config.yaml",
+                                        "startup": "enabled",
+                                    }
+                                },
+                            }
+                        )
+                    },
+                )
+            },
             networks={Network("juju-info")},
             leader=True,
         )
@@ -703,7 +1418,28 @@ class TestCharm:
     ):
         state = State(
             storages={Storage(name="database")},
-            containers={Container(name="notary", can_connect=True)},
+            containers={
+                Container(
+                    name="notary",
+                    can_connect=True,
+                    layers={
+                        "notary": Layer(
+                            {
+                                "summary": "notary layer",
+                                "description": "pebble config layer for notary",
+                                "services": {
+                                    "notary": {
+                                        "override": "replace",
+                                        "summary": "notary",
+                                        "command": "notary -config /etc/notary/config/config.yaml",
+                                        "startup": "enabled",
+                                    }
+                                },
+                            }
+                        )
+                    },
+                )
+            },
             networks={Network("juju-info")},
             leader=True,
         )
@@ -721,7 +1457,28 @@ class TestCharm:
     ):
         state = State(
             storages={Storage(name="config"), Storage(name="database")},
-            containers={Container(name="notary", can_connect=True)},
+            containers={
+                Container(
+                    name="notary",
+                    can_connect=True,
+                    layers={
+                        "notary": Layer(
+                            {
+                                "summary": "notary layer",
+                                "description": "pebble config layer for notary",
+                                "services": {
+                                    "notary": {
+                                        "override": "replace",
+                                        "summary": "notary",
+                                        "command": "notary -config /etc/notary/config/config.yaml",
+                                        "startup": "enabled",
+                                    }
+                                },
+                            }
+                        )
+                    },
+                )
+            },
             networks={Network("juju-info")},
             leader=True,
         )
@@ -740,7 +1497,28 @@ class TestCharm:
     ):
         state = State(
             storages={Storage(name="config")},
-            containers={Container(name="notary", can_connect=False)},
+            containers={
+                Container(
+                    name="notary",
+                    can_connect=False,
+                    layers={
+                        "notary": Layer(
+                            {
+                                "summary": "notary layer",
+                                "description": "pebble config layer for notary",
+                                "services": {
+                                    "notary": {
+                                        "override": "replace",
+                                        "summary": "notary",
+                                        "command": "notary -config /etc/notary/config/config.yaml",
+                                        "startup": "enabled",
+                                    }
+                                },
+                            }
+                        )
+                    },
+                )
+            },
             networks={Network("juju-info", bind_addresses=[])},
             leader=True,
         )
@@ -760,7 +1538,28 @@ class TestCharm:
     ):
         state = State(
             storages={Storage(name="database")},
-            containers={Container(name="notary", can_connect=False)},
+            containers={
+                Container(
+                    name="notary",
+                    can_connect=False,
+                    layers={
+                        "notary": Layer(
+                            {
+                                "summary": "notary layer",
+                                "description": "pebble config layer for notary",
+                                "services": {
+                                    "notary": {
+                                        "override": "replace",
+                                        "summary": "notary",
+                                        "command": "notary -config /etc/notary/config/config.yaml",
+                                        "startup": "enabled",
+                                    }
+                                },
+                            }
+                        )
+                    },
+                )
+            },
             networks={Network("juju-info", bind_addresses=[])},
             leader=True,
         )
@@ -779,7 +1578,28 @@ class TestCharm:
     ):
         state = State(
             storages={Storage(name="config"), Storage(name="database")},
-            containers={Container(name="notary", can_connect=False)},
+            containers={
+                Container(
+                    name="notary",
+                    can_connect=False,
+                    layers={
+                        "notary": Layer(
+                            {
+                                "summary": "notary layer",
+                                "description": "pebble config layer for notary",
+                                "services": {
+                                    "notary": {
+                                        "override": "replace",
+                                        "summary": "notary",
+                                        "command": "notary -config /etc/notary/config/config.yaml",
+                                        "startup": "enabled",
+                                    }
+                                },
+                            }
+                        )
+                    },
+                )
+            },
             networks={Network("juju-info", bind_addresses=[])},
             leader=True,
         )
@@ -799,7 +1619,28 @@ class TestCharm:
     ):
         state = State(
             storages={Storage(name="config")},
-            containers={Container(name="notary", can_connect=True)},
+            containers={
+                Container(
+                    name="notary",
+                    can_connect=True,
+                    layers={
+                        "notary": Layer(
+                            {
+                                "summary": "notary layer",
+                                "description": "pebble config layer for notary",
+                                "services": {
+                                    "notary": {
+                                        "override": "replace",
+                                        "summary": "notary",
+                                        "command": "notary -config /etc/notary/config/config.yaml",
+                                        "startup": "enabled",
+                                    }
+                                },
+                            }
+                        )
+                    },
+                )
+            },
             networks={Network("juju-info", bind_addresses=[])},
             leader=True,
         )
@@ -818,7 +1659,28 @@ class TestCharm:
     ):
         state = State(
             storages={Storage(name="database")},
-            containers={Container(name="notary", can_connect=True)},
+            containers={
+                Container(
+                    name="notary",
+                    can_connect=True,
+                    layers={
+                        "notary": Layer(
+                            {
+                                "summary": "notary layer",
+                                "description": "pebble config layer for notary",
+                                "services": {
+                                    "notary": {
+                                        "override": "replace",
+                                        "summary": "notary",
+                                        "command": "notary -config /etc/notary/config/config.yaml",
+                                        "startup": "enabled",
+                                    }
+                                },
+                            }
+                        )
+                    },
+                )
+            },
             networks={Network("juju-info", bind_addresses=[])},
             leader=True,
         )
@@ -837,7 +1699,28 @@ class TestCharm:
     ):
         state = State(
             storages={Storage(name="config"), Storage(name="database")},
-            containers={Container(name="notary", can_connect=True)},
+            containers={
+                Container(
+                    name="notary",
+                    can_connect=True,
+                    layers={
+                        "notary": Layer(
+                            {
+                                "summary": "notary layer",
+                                "description": "pebble config layer for notary",
+                                "services": {
+                                    "notary": {
+                                        "override": "replace",
+                                        "summary": "notary",
+                                        "command": "notary -config /etc/notary/config/config.yaml",
+                                        "startup": "enabled",
+                                    }
+                                },
+                            }
+                        )
+                    },
+                )
+            },
             networks={Network("juju-info", bind_addresses=[])},
             leader=True,
         )
@@ -856,7 +1739,28 @@ class TestCharm:
     ):
         state = State(
             storages={Storage(name="config")},
-            containers={Container(name="notary", can_connect=False)},
+            containers={
+                Container(
+                    name="notary",
+                    can_connect=False,
+                    layers={
+                        "notary": Layer(
+                            {
+                                "summary": "notary layer",
+                                "description": "pebble config layer for notary",
+                                "services": {
+                                    "notary": {
+                                        "override": "replace",
+                                        "summary": "notary",
+                                        "command": "notary -config /etc/notary/config/config.yaml",
+                                        "startup": "enabled",
+                                    }
+                                },
+                            }
+                        )
+                    },
+                )
+            },
             networks={Network("juju-info")},
             leader=True,
         )
@@ -875,7 +1779,28 @@ class TestCharm:
     ):
         state = State(
             storages={Storage(name="database")},
-            containers={Container(name="notary", can_connect=False)},
+            containers={
+                Container(
+                    name="notary",
+                    can_connect=False,
+                    layers={
+                        "notary": Layer(
+                            {
+                                "summary": "notary layer",
+                                "description": "pebble config layer for notary",
+                                "services": {
+                                    "notary": {
+                                        "override": "replace",
+                                        "summary": "notary",
+                                        "command": "notary -config /etc/notary/config/config.yaml",
+                                        "startup": "enabled",
+                                    }
+                                },
+                            }
+                        )
+                    },
+                )
+            },
             networks={Network("juju-info")},
             leader=True,
         )
@@ -894,7 +1819,28 @@ class TestCharm:
     ):
         state = State(
             storages={Storage(name="config"), Storage(name="database")},
-            containers={Container(name="notary", can_connect=False)},
+            containers={
+                Container(
+                    name="notary",
+                    can_connect=False,
+                    layers={
+                        "notary": Layer(
+                            {
+                                "summary": "notary layer",
+                                "description": "pebble config layer for notary",
+                                "services": {
+                                    "notary": {
+                                        "override": "replace",
+                                        "summary": "notary",
+                                        "command": "notary -config /etc/notary/config/config.yaml",
+                                        "startup": "enabled",
+                                    }
+                                },
+                            }
+                        )
+                    },
+                )
+            },
             networks={Network("juju-info")},
             leader=True,
         )
@@ -913,7 +1859,28 @@ class TestCharm:
     ):
         state = State(
             storages={Storage(name="config")},
-            containers={Container(name="notary", can_connect=True)},
+            containers={
+                Container(
+                    name="notary",
+                    can_connect=True,
+                    layers={
+                        "notary": Layer(
+                            {
+                                "summary": "notary layer",
+                                "description": "pebble config layer for notary",
+                                "services": {
+                                    "notary": {
+                                        "override": "replace",
+                                        "summary": "notary",
+                                        "command": "notary -config /etc/notary/config/config.yaml",
+                                        "startup": "enabled",
+                                    }
+                                },
+                            }
+                        )
+                    },
+                )
+            },
             networks={Network("juju-info")},
             leader=True,
         )
@@ -932,7 +1899,28 @@ class TestCharm:
     ):
         state = State(
             storages={Storage(name="database")},
-            containers={Container(name="notary", can_connect=True)},
+            containers={
+                Container(
+                    name="notary",
+                    can_connect=True,
+                    layers={
+                        "notary": Layer(
+                            {
+                                "summary": "notary layer",
+                                "description": "pebble config layer for notary",
+                                "services": {
+                                    "notary": {
+                                        "override": "replace",
+                                        "summary": "notary",
+                                        "command": "notary -config /etc/notary/config/config.yaml",
+                                        "startup": "enabled",
+                                    }
+                                },
+                            }
+                        )
+                    },
+                )
+            },
             networks={Network("juju-info")},
             leader=True,
         )
@@ -951,7 +1939,28 @@ class TestCharm:
     ):
         state = State(
             storages={Storage(name="config"), Storage(name="database")},
-            containers={Container(name="notary", can_connect=True)},
+            containers={
+                Container(
+                    name="notary",
+                    can_connect=True,
+                    layers={
+                        "notary": Layer(
+                            {
+                                "summary": "notary layer",
+                                "description": "pebble config layer for notary",
+                                "services": {
+                                    "notary": {
+                                        "override": "replace",
+                                        "summary": "notary",
+                                        "command": "notary -config /etc/notary/config/config.yaml",
+                                        "startup": "enabled",
+                                    }
+                                },
+                            }
+                        )
+                    },
+                )
+            },
             networks={Network("juju-info")},
             leader=True,
         )
@@ -970,7 +1979,28 @@ class TestCharm:
     ):
         state = State(
             storages={Storage(name="config")},
-            containers={Container(name="notary", can_connect=False)},
+            containers={
+                Container(
+                    name="notary",
+                    can_connect=False,
+                    layers={
+                        "notary": Layer(
+                            {
+                                "summary": "notary layer",
+                                "description": "pebble config layer for notary",
+                                "services": {
+                                    "notary": {
+                                        "override": "replace",
+                                        "summary": "notary",
+                                        "command": "notary -config /etc/notary/config/config.yaml",
+                                        "startup": "enabled",
+                                    }
+                                },
+                            }
+                        )
+                    },
+                )
+            },
             networks={Network("juju-info", bind_addresses=[])},
             leader=True,
         )
@@ -989,7 +2019,28 @@ class TestCharm:
     ):
         state = State(
             storages={Storage(name="database")},
-            containers={Container(name="notary", can_connect=False)},
+            containers={
+                Container(
+                    name="notary",
+                    can_connect=False,
+                    layers={
+                        "notary": Layer(
+                            {
+                                "summary": "notary layer",
+                                "description": "pebble config layer for notary",
+                                "services": {
+                                    "notary": {
+                                        "override": "replace",
+                                        "summary": "notary",
+                                        "command": "notary -config /etc/notary/config/config.yaml",
+                                        "startup": "enabled",
+                                    }
+                                },
+                            }
+                        )
+                    },
+                )
+            },
             networks={Network("juju-info", bind_addresses=[])},
             leader=True,
         )
@@ -1008,7 +2059,28 @@ class TestCharm:
     ):
         state = State(
             storages={Storage(name="config"), Storage(name="database")},
-            containers={Container(name="notary", can_connect=False)},
+            containers={
+                Container(
+                    name="notary",
+                    can_connect=False,
+                    layers={
+                        "notary": Layer(
+                            {
+                                "summary": "notary layer",
+                                "description": "pebble config layer for notary",
+                                "services": {
+                                    "notary": {
+                                        "override": "replace",
+                                        "summary": "notary",
+                                        "command": "notary -config /etc/notary/config/config.yaml",
+                                        "startup": "enabled",
+                                    }
+                                },
+                            }
+                        )
+                    },
+                )
+            },
             networks={Network("juju-info", bind_addresses=[])},
             leader=True,
         )
@@ -1027,7 +2099,28 @@ class TestCharm:
     ):
         state = State(
             storages={Storage(name="config")},
-            containers={Container(name="notary", can_connect=True)},
+            containers={
+                Container(
+                    name="notary",
+                    can_connect=True,
+                    layers={
+                        "notary": Layer(
+                            {
+                                "summary": "notary layer",
+                                "description": "pebble config layer for notary",
+                                "services": {
+                                    "notary": {
+                                        "override": "replace",
+                                        "summary": "notary",
+                                        "command": "notary -config /etc/notary/config/config.yaml",
+                                        "startup": "enabled",
+                                    }
+                                },
+                            }
+                        )
+                    },
+                )
+            },
             networks={Network("juju-info", bind_addresses=[])},
             leader=True,
         )
@@ -1046,7 +2139,28 @@ class TestCharm:
     ):
         state = State(
             storages={Storage(name="database")},
-            containers={Container(name="notary", can_connect=True)},
+            containers={
+                Container(
+                    name="notary",
+                    can_connect=True,
+                    layers={
+                        "notary": Layer(
+                            {
+                                "summary": "notary layer",
+                                "description": "pebble config layer for notary",
+                                "services": {
+                                    "notary": {
+                                        "override": "replace",
+                                        "summary": "notary",
+                                        "command": "notary -config /etc/notary/config/config.yaml",
+                                        "startup": "enabled",
+                                    }
+                                },
+                            }
+                        )
+                    },
+                )
+            },
             networks={Network("juju-info", bind_addresses=[])},
             leader=True,
         )
@@ -1065,7 +2179,28 @@ class TestCharm:
     ):
         state = State(
             storages={Storage(name="config"), Storage(name="database")},
-            containers={Container(name="notary", can_connect=True)},
+            containers={
+                Container(
+                    name="notary",
+                    can_connect=True,
+                    layers={
+                        "notary": Layer(
+                            {
+                                "summary": "notary layer",
+                                "description": "pebble config layer for notary",
+                                "services": {
+                                    "notary": {
+                                        "override": "replace",
+                                        "summary": "notary",
+                                        "command": "notary -config /etc/notary/config/config.yaml",
+                                        "startup": "enabled",
+                                    }
+                                },
+                            }
+                        )
+                    },
+                )
+            },
             networks={Network("juju-info", bind_addresses=[])},
             leader=True,
         )
@@ -1084,7 +2219,28 @@ class TestCharm:
     ):
         state = State(
             storages={Storage(name="config")},
-            containers={Container(name="notary", can_connect=False)},
+            containers={
+                Container(
+                    name="notary",
+                    can_connect=False,
+                    layers={
+                        "notary": Layer(
+                            {
+                                "summary": "notary layer",
+                                "description": "pebble config layer for notary",
+                                "services": {
+                                    "notary": {
+                                        "override": "replace",
+                                        "summary": "notary",
+                                        "command": "notary -config /etc/notary/config/config.yaml",
+                                        "startup": "enabled",
+                                    }
+                                },
+                            }
+                        )
+                    },
+                )
+            },
             networks={Network("juju-info")},
             leader=True,
         )
@@ -1103,7 +2259,28 @@ class TestCharm:
     ):
         state = State(
             storages={Storage(name="database")},
-            containers={Container(name="notary", can_connect=False)},
+            containers={
+                Container(
+                    name="notary",
+                    can_connect=False,
+                    layers={
+                        "notary": Layer(
+                            {
+                                "summary": "notary layer",
+                                "description": "pebble config layer for notary",
+                                "services": {
+                                    "notary": {
+                                        "override": "replace",
+                                        "summary": "notary",
+                                        "command": "notary -config /etc/notary/config/config.yaml",
+                                        "startup": "enabled",
+                                    }
+                                },
+                            }
+                        )
+                    },
+                )
+            },
             networks={Network("juju-info")},
             leader=True,
         )
@@ -1122,7 +2299,28 @@ class TestCharm:
     ):
         state = State(
             storages={Storage(name="config"), Storage(name="database")},
-            containers={Container(name="notary", can_connect=False)},
+            containers={
+                Container(
+                    name="notary",
+                    can_connect=False,
+                    layers={
+                        "notary": Layer(
+                            {
+                                "summary": "notary layer",
+                                "description": "pebble config layer for notary",
+                                "services": {
+                                    "notary": {
+                                        "override": "replace",
+                                        "summary": "notary",
+                                        "command": "notary -config /etc/notary/config/config.yaml",
+                                        "startup": "enabled",
+                                    }
+                                },
+                            }
+                        )
+                    },
+                )
+            },
             networks={Network("juju-info")},
             leader=True,
         )
@@ -1141,7 +2339,28 @@ class TestCharm:
     ):
         state = State(
             storages={Storage(name="config")},
-            containers={Container(name="notary", can_connect=True)},
+            containers={
+                Container(
+                    name="notary",
+                    can_connect=True,
+                    layers={
+                        "notary": Layer(
+                            {
+                                "summary": "notary layer",
+                                "description": "pebble config layer for notary",
+                                "services": {
+                                    "notary": {
+                                        "override": "replace",
+                                        "summary": "notary",
+                                        "command": "notary -config /etc/notary/config/config.yaml",
+                                        "startup": "enabled",
+                                    }
+                                },
+                            }
+                        )
+                    },
+                )
+            },
             networks={Network("juju-info")},
             leader=True,
         )
@@ -1160,7 +2379,28 @@ class TestCharm:
     ):
         state = State(
             storages={Storage(name="database")},
-            containers={Container(name="notary", can_connect=True)},
+            containers={
+                Container(
+                    name="notary",
+                    can_connect=True,
+                    layers={
+                        "notary": Layer(
+                            {
+                                "summary": "notary layer",
+                                "description": "pebble config layer for notary",
+                                "services": {
+                                    "notary": {
+                                        "override": "replace",
+                                        "summary": "notary",
+                                        "command": "notary -config /etc/notary/config/config.yaml",
+                                        "startup": "enabled",
+                                    }
+                                },
+                            }
+                        )
+                    },
+                )
+            },
             networks={Network("juju-info")},
             leader=True,
         )
@@ -1179,7 +2419,28 @@ class TestCharm:
     ):
         state = State(
             storages={Storage(name="config"), Storage(name="database")},
-            containers={Container(name="notary", can_connect=True)},
+            containers={
+                Container(
+                    name="notary",
+                    can_connect=True,
+                    layers={
+                        "notary": Layer(
+                            {
+                                "summary": "notary layer",
+                                "description": "pebble config layer for notary",
+                                "services": {
+                                    "notary": {
+                                        "override": "replace",
+                                        "summary": "notary",
+                                        "command": "notary -config /etc/notary/config/config.yaml",
+                                        "startup": "enabled",
+                                    }
+                                },
+                            }
+                        )
+                    },
+                )
+            },
             networks={Network("juju-info")},
             leader=True,
         )
@@ -1198,7 +2459,28 @@ class TestCharm:
     ):
         state = State(
             storages={Storage(name="config")},
-            containers={Container(name="notary", can_connect=False)},
+            containers={
+                Container(
+                    name="notary",
+                    can_connect=False,
+                    layers={
+                        "notary": Layer(
+                            {
+                                "summary": "notary layer",
+                                "description": "pebble config layer for notary",
+                                "services": {
+                                    "notary": {
+                                        "override": "replace",
+                                        "summary": "notary",
+                                        "command": "notary -config /etc/notary/config/config.yaml",
+                                        "startup": "enabled",
+                                    }
+                                },
+                            }
+                        )
+                    },
+                )
+            },
             networks={Network("juju-info", bind_addresses=[])},
             leader=True,
         )
@@ -1217,7 +2499,28 @@ class TestCharm:
     ):
         state = State(
             storages={Storage(name="database")},
-            containers={Container(name="notary", can_connect=False)},
+            containers={
+                Container(
+                    name="notary",
+                    can_connect=False,
+                    layers={
+                        "notary": Layer(
+                            {
+                                "summary": "notary layer",
+                                "description": "pebble config layer for notary",
+                                "services": {
+                                    "notary": {
+                                        "override": "replace",
+                                        "summary": "notary",
+                                        "command": "notary -config /etc/notary/config/config.yaml",
+                                        "startup": "enabled",
+                                    }
+                                },
+                            }
+                        )
+                    },
+                )
+            },
             networks={Network("juju-info", bind_addresses=[])},
             leader=True,
         )
@@ -1236,7 +2539,28 @@ class TestCharm:
     ):
         state = State(
             storages={Storage(name="config"), Storage(name="database")},
-            containers={Container(name="notary", can_connect=False)},
+            containers={
+                Container(
+                    name="notary",
+                    can_connect=False,
+                    layers={
+                        "notary": Layer(
+                            {
+                                "summary": "notary layer",
+                                "description": "pebble config layer for notary",
+                                "services": {
+                                    "notary": {
+                                        "override": "replace",
+                                        "summary": "notary",
+                                        "command": "notary -config /etc/notary/config/config.yaml",
+                                        "startup": "enabled",
+                                    }
+                                },
+                            }
+                        )
+                    },
+                )
+            },
             networks={Network("juju-info", bind_addresses=[])},
             leader=True,
         )
@@ -1255,7 +2579,28 @@ class TestCharm:
     ):
         state = State(
             storages={Storage(name="config")},
-            containers={Container(name="notary", can_connect=True)},
+            containers={
+                Container(
+                    name="notary",
+                    can_connect=True,
+                    layers={
+                        "notary": Layer(
+                            {
+                                "summary": "notary layer",
+                                "description": "pebble config layer for notary",
+                                "services": {
+                                    "notary": {
+                                        "override": "replace",
+                                        "summary": "notary",
+                                        "command": "notary -config /etc/notary/config/config.yaml",
+                                        "startup": "enabled",
+                                    }
+                                },
+                            }
+                        )
+                    },
+                )
+            },
             networks={Network("juju-info", bind_addresses=[])},
             leader=True,
         )
@@ -1274,7 +2619,28 @@ class TestCharm:
     ):
         state = State(
             storages={Storage(name="database")},
-            containers={Container(name="notary", can_connect=True)},
+            containers={
+                Container(
+                    name="notary",
+                    can_connect=True,
+                    layers={
+                        "notary": Layer(
+                            {
+                                "summary": "notary layer",
+                                "description": "pebble config layer for notary",
+                                "services": {
+                                    "notary": {
+                                        "override": "replace",
+                                        "summary": "notary",
+                                        "command": "notary -config /etc/notary/config/config.yaml",
+                                        "startup": "enabled",
+                                    }
+                                },
+                            }
+                        )
+                    },
+                )
+            },
             networks={Network("juju-info", bind_addresses=[])},
             leader=True,
         )
@@ -1293,7 +2659,28 @@ class TestCharm:
     ):
         state = State(
             storages={Storage(name="config"), Storage(name="database")},
-            containers={Container(name="notary", can_connect=True)},
+            containers={
+                Container(
+                    name="notary",
+                    can_connect=True,
+                    layers={
+                        "notary": Layer(
+                            {
+                                "summary": "notary layer",
+                                "description": "pebble config layer for notary",
+                                "services": {
+                                    "notary": {
+                                        "override": "replace",
+                                        "summary": "notary",
+                                        "command": "notary -config /etc/notary/config/config.yaml",
+                                        "startup": "enabled",
+                                    }
+                                },
+                            }
+                        )
+                    },
+                )
+            },
             networks={Network("juju-info", bind_addresses=[])},
             leader=True,
         )
@@ -1312,7 +2699,28 @@ class TestCharm:
     ):
         state = State(
             storages={Storage(name="config")},
-            containers={Container(name="notary", can_connect=False)},
+            containers={
+                Container(
+                    name="notary",
+                    can_connect=False,
+                    layers={
+                        "notary": Layer(
+                            {
+                                "summary": "notary layer",
+                                "description": "pebble config layer for notary",
+                                "services": {
+                                    "notary": {
+                                        "override": "replace",
+                                        "summary": "notary",
+                                        "command": "notary -config /etc/notary/config/config.yaml",
+                                        "startup": "enabled",
+                                    }
+                                },
+                            }
+                        )
+                    },
+                )
+            },
             networks={Network("juju-info")},
             leader=True,
         )
@@ -1331,7 +2739,28 @@ class TestCharm:
     ):
         state = State(
             storages={Storage(name="database")},
-            containers={Container(name="notary", can_connect=False)},
+            containers={
+                Container(
+                    name="notary",
+                    can_connect=False,
+                    layers={
+                        "notary": Layer(
+                            {
+                                "summary": "notary layer",
+                                "description": "pebble config layer for notary",
+                                "services": {
+                                    "notary": {
+                                        "override": "replace",
+                                        "summary": "notary",
+                                        "command": "notary -config /etc/notary/config/config.yaml",
+                                        "startup": "enabled",
+                                    }
+                                },
+                            }
+                        )
+                    },
+                )
+            },
             networks={Network("juju-info")},
             leader=True,
         )
@@ -1350,7 +2779,28 @@ class TestCharm:
     ):
         state = State(
             storages={Storage(name="config"), Storage(name="database")},
-            containers={Container(name="notary", can_connect=False)},
+            containers={
+                Container(
+                    name="notary",
+                    can_connect=False,
+                    layers={
+                        "notary": Layer(
+                            {
+                                "summary": "notary layer",
+                                "description": "pebble config layer for notary",
+                                "services": {
+                                    "notary": {
+                                        "override": "replace",
+                                        "summary": "notary",
+                                        "command": "notary -config /etc/notary/config/config.yaml",
+                                        "startup": "enabled",
+                                    }
+                                },
+                            }
+                        )
+                    },
+                )
+            },
             networks={Network("juju-info")},
             leader=True,
         )
@@ -1369,7 +2819,28 @@ class TestCharm:
     ):
         state = State(
             storages={Storage(name="config")},
-            containers={Container(name="notary", can_connect=True)},
+            containers={
+                Container(
+                    name="notary",
+                    can_connect=True,
+                    layers={
+                        "notary": Layer(
+                            {
+                                "summary": "notary layer",
+                                "description": "pebble config layer for notary",
+                                "services": {
+                                    "notary": {
+                                        "override": "replace",
+                                        "summary": "notary",
+                                        "command": "notary -config /etc/notary/config/config.yaml",
+                                        "startup": "enabled",
+                                    }
+                                },
+                            }
+                        )
+                    },
+                )
+            },
             networks={Network("juju-info")},
             leader=True,
         )
@@ -1388,7 +2859,28 @@ class TestCharm:
     ):
         state = State(
             storages={Storage(name="database")},
-            containers={Container(name="notary", can_connect=True)},
+            containers={
+                Container(
+                    name="notary",
+                    can_connect=True,
+                    layers={
+                        "notary": Layer(
+                            {
+                                "summary": "notary layer",
+                                "description": "pebble config layer for notary",
+                                "services": {
+                                    "notary": {
+                                        "override": "replace",
+                                        "summary": "notary",
+                                        "command": "notary -config /etc/notary/config/config.yaml",
+                                        "startup": "enabled",
+                                    }
+                                },
+                            }
+                        )
+                    },
+                )
+            },
             networks={Network("juju-info")},
             leader=True,
         )
@@ -1407,7 +2899,28 @@ class TestCharm:
     ):
         state = State(
             storages={Storage(name="config"), Storage(name="database")},
-            containers={Container(name="notary", can_connect=True)},
+            containers={
+                Container(
+                    name="notary",
+                    can_connect=True,
+                    layers={
+                        "notary": Layer(
+                            {
+                                "summary": "notary layer",
+                                "description": "pebble config layer for notary",
+                                "services": {
+                                    "notary": {
+                                        "override": "replace",
+                                        "summary": "notary",
+                                        "command": "notary -config /etc/notary/config/config.yaml",
+                                        "startup": "enabled",
+                                    }
+                                },
+                            }
+                        )
+                    },
+                )
+            },
             networks={Network("juju-info")},
             leader=True,
         )
@@ -1483,7 +2996,28 @@ class TestCharm:
     ):
         state = State(
             storages={Storage(name="config"), Storage(name="database")},
-            containers=[Container(name="notary", can_connect=True)],
+            containers=[
+                Container(
+                    name="notary",
+                    can_connect=True,
+                    layers={
+                        "notary": Layer(
+                            {
+                                "summary": "notary layer",
+                                "description": "pebble config layer for notary",
+                                "services": {
+                                    "notary": {
+                                        "override": "replace",
+                                        "summary": "notary",
+                                        "command": "notary -config /etc/notary/config/config.yaml",
+                                        "startup": "enabled",
+                                    }
+                                },
+                            }
+                        )
+                    },
+                )
+            ],
             networks={Network("juju-info")},
             leader=True,
             relations=[Relation(id=1, endpoint=CERTIFICATE_PROVIDER_RELATION_NAME)],
@@ -1507,7 +3041,28 @@ class TestCharm:
     ):
         state = State(
             storages={Storage(name="config"), Storage(name="database")},
-            containers=[Container(name="notary", can_connect=True)],
+            containers=[
+                Container(
+                    name="notary",
+                    can_connect=True,
+                    layers={
+                        "notary": Layer(
+                            {
+                                "summary": "notary layer",
+                                "description": "pebble config layer for notary",
+                                "services": {
+                                    "notary": {
+                                        "override": "replace",
+                                        "summary": "notary",
+                                        "command": "notary -config /etc/notary/config/config.yaml",
+                                        "startup": "enabled",
+                                    }
+                                },
+                            }
+                        )
+                    },
+                )
+            ],
             networks={Network("juju-info")},
             leader=True,
             relations=[Relation(id=1, endpoint=CERTIFICATE_PROVIDER_RELATION_NAME)],
@@ -1550,7 +3105,28 @@ class TestCharm:
     ):
         state = State(
             storages={Storage(name="config"), Storage(name="database")},
-            containers=[Container(name="notary", can_connect=True)],
+            containers=[
+                Container(
+                    name="notary",
+                    can_connect=True,
+                    layers={
+                        "notary": Layer(
+                            {
+                                "summary": "notary layer",
+                                "description": "pebble config layer for notary",
+                                "services": {
+                                    "notary": {
+                                        "override": "replace",
+                                        "summary": "notary",
+                                        "command": "notary -config /etc/notary/config/config.yaml",
+                                        "startup": "enabled",
+                                    }
+                                },
+                            }
+                        )
+                    },
+                )
+            ],
             networks={Network("juju-info")},
             leader=True,
             relations=[Relation(id=1, endpoint=CERTIFICATE_PROVIDER_RELATION_NAME)],
@@ -1596,7 +3172,28 @@ class TestCharm:
     ):
         state = State(
             storages={Storage(name="config"), Storage(name="database")},
-            containers=[Container(name="notary", can_connect=True)],
+            containers=[
+                Container(
+                    name="notary",
+                    can_connect=True,
+                    layers={
+                        "notary": Layer(
+                            {
+                                "summary": "notary layer",
+                                "description": "pebble config layer for notary",
+                                "services": {
+                                    "notary": {
+                                        "override": "replace",
+                                        "summary": "notary",
+                                        "command": "notary -config /etc/notary/config/config.yaml",
+                                        "startup": "enabled",
+                                    }
+                                },
+                            }
+                        )
+                    },
+                )
+            ],
             networks={Network("juju-info")},
             leader=True,
             relations=[Relation(id=1, endpoint=CERTIFICATE_PROVIDER_RELATION_NAME)],
@@ -1651,7 +3248,28 @@ class TestCharm:
     ):
         state = State(
             storages={Storage(name="config"), Storage(name="database")},
-            containers=[Container(name="notary", can_connect=True)],
+            containers=[
+                Container(
+                    name="notary",
+                    can_connect=True,
+                    layers={
+                        "notary": Layer(
+                            {
+                                "summary": "notary layer",
+                                "description": "pebble config layer for notary",
+                                "services": {
+                                    "notary": {
+                                        "override": "replace",
+                                        "summary": "notary",
+                                        "command": "notary -config /etc/notary/config/config.yaml",
+                                        "startup": "enabled",
+                                    }
+                                },
+                            }
+                        )
+                    },
+                )
+            ],
             networks={Network("juju-info")},
             leader=True,
             relations=[Relation(id=1, endpoint=CERTIFICATE_PROVIDER_RELATION_NAME)],
@@ -1716,7 +3334,28 @@ class TestCharm:
     ):
         state = State(
             storages={Storage(name="config"), Storage(name="database")},
-            containers=[Container(name="notary", can_connect=True)],
+            containers=[
+                Container(
+                    name="notary",
+                    can_connect=True,
+                    layers={
+                        "notary": Layer(
+                            {
+                                "summary": "notary layer",
+                                "description": "pebble config layer for notary",
+                                "services": {
+                                    "notary": {
+                                        "override": "replace",
+                                        "summary": "notary",
+                                        "command": "notary -config /etc/notary/config/config.yaml",
+                                        "startup": "enabled",
+                                    }
+                                },
+                            }
+                        )
+                    },
+                )
+            ],
             networks={Network("juju-info")},
             leader=True,
             relations=[Relation(id=1, endpoint=CERTIFICATE_PROVIDER_RELATION_NAME)],
