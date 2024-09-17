@@ -5,6 +5,7 @@
 import asyncio
 import json
 import logging
+import platform
 from base64 import b64decode
 from pathlib import Path
 
@@ -26,6 +27,7 @@ logger = logging.getLogger(__name__)
 
 CHARMCRAFT = yaml.safe_load(Path("./charmcraft.yaml").read_text())
 APP_NAME = CHARMCRAFT["name"]
+ARCH = "arm64" if platform.machine() == "aarch64" else "amd64"
 
 LOKI_APPLICATION_NAME = "loki-k8s"
 PROMETHEUS_APPLICATION_NAME = "prometheus-k8s"
@@ -42,7 +44,11 @@ async def test_build_and_deploy(ops_test: OpsTest, request: pytest.FixtureReques
     resources = {"notary-image": CHARMCRAFT["resources"]["notary-image"]["upstream-source"]}
 
     assert ops_test.model
-    await ops_test.model.deploy(charm, resources=resources, application_name=APP_NAME)
+    logger.info("Deploying charms for architecture: %s", ARCH)
+    await ops_test.model.set_constraints({"arch": ARCH})
+    await ops_test.model.deploy(
+        charm, resources=resources, application_name=APP_NAME, channel="edge"
+    )
     await ops_test.model.wait_for_idle(apps=[APP_NAME], status="active", timeout=1000)
 
 
@@ -58,11 +64,14 @@ async def test_given_notary_when_tls_requirer_related_then_csr_uploaded_to_notar
     client = Notary(url=endpoint)
     assert client.token_is_valid(token)
 
+    logger.info("Deploying charms for architecture: %s", ARCH)
+    await ops_test.model.set_constraints({"arch": ARCH})
     await ops_test.model.deploy(
         "tls-certificates-requirer",
         application_name=TLS_REQUIRER_APPLICATION_NAME,
         channel="edge",
         trust=True,
+        constraints={"arch": ARCH},
     )
     await ops_test.model.integrate(
         relation1=f"{APP_NAME}:certificates",
@@ -107,6 +116,8 @@ async def test_given_loki_and_prometheus_related_to_notary_all_charm_statuses_ac
     ops_test: OpsTest,
 ):
     """Deploy loki and prometheus, and make sure all applications are active."""
+    if ARCH != "amd64":
+        pytest.skip("Skipping test for non-amd64 architecture")
     assert ops_test.model
     deploy_prometheus = ops_test.model.deploy(
         "prometheus-k8s",
