@@ -32,6 +32,8 @@ ARCH = "arm64" if platform.machine() == "aarch64" else "amd64"
 LOKI_APPLICATION_NAME = "loki-k8s"
 PROMETHEUS_APPLICATION_NAME = "prometheus-k8s"
 TLS_REQUIRER_APPLICATION_NAME = "tls-certificates-requirer"
+REQUIRER_CHARM_REVISION_ARM = 103
+REQUIRER_CHARM_REVISION_AMD = 104
 
 
 @pytest.mark.abort_on_fail
@@ -65,12 +67,12 @@ async def test_given_notary_when_tls_requirer_related_then_csr_uploaded_to_notar
     assert client.token_is_valid(token)
 
     logger.info("Deploying charms for architecture: %s", ARCH)
-    await ops_test.model.set_constraints({"arch": ARCH})
     await ops_test.model.deploy(
         "tls-certificates-requirer",
         application_name=TLS_REQUIRER_APPLICATION_NAME,
         channel="edge",
         trust=True,
+        revision=REQUIRER_CHARM_REVISION_ARM if ARCH == "arm64" else REQUIRER_CHARM_REVISION_AMD,
         constraints={"arch": ARCH},
     )
     await ops_test.model.integrate(
