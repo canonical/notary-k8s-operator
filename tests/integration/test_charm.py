@@ -16,9 +16,9 @@ from charms.tls_certificates_interface.v4.tls_certificates import (
     generate_certificate,
     generate_private_key,
 )
+from juju.application import Application
 from juju.client.client import SecretsFilter
 from pytest_operator.plugin import OpsTest
-from juju.application import Application
 
 from charm import NOTARY_LOGIN_SECRET_LABEL
 from notary import Notary
