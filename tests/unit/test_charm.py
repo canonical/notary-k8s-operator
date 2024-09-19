@@ -1,7 +1,6 @@
 # Copyright 2024 Canonical Ltd.
 # See LICENSE file for licensing details.
 
-import tempfile
 from pathlib import Path
 from unittest.mock import Mock, patch
 
@@ -2938,80 +2937,78 @@ class TestCharm:
         assert out.unit_status == ops.WaitingStatus("certificates not yet pushed to workload")
 
     def test_given_notary_available_and_initialized_when_collect_status_then_status_is_active(
-        self, context
+        self, context, tmpdir
     ):
-        with tempfile.TemporaryDirectory() as tempdir:
-            config_mount = Mount(location="/etc/notary/config", source=tempdir)
-            state = State(
-                storages={Storage(name="config"), Storage(name="database")},
-                containers=[
-                    Container(name="notary", can_connect=True, mounts={"config": config_mount})
-                ],
-                leader=True,
-            )
+        config_mount = Mount(location="/etc/notary/config", source=tmpdir)
+        state = State(
+            storages={Storage(name="config"), Storage(name="database")},
+            containers=[
+                Container(name="notary", can_connect=True, mounts={"config": config_mount})
+            ],
+            leader=True,
+        )
 
-            certificate, _ = self.example_cert_and_key()
-            with open(tempdir + "/certificate.pem", "w") as f:
-                f.write(str(certificate))
+        certificate, _ = self.example_cert_and_key()
+        with open(tmpdir + "/certificate.pem", "w") as f:
+            f.write(str(certificate))
 
-            with patch(
-                "notary.Notary.__new__",
-                return_value=Mock(
-                    **{"is_api_available.return_value": True, "is_initialized.return_value": True},  # type: ignore
-                ),
-            ):
-                out = context.run(context.on.collect_unit_status(), state)
-            assert out.unit_status == ops.ActiveStatus()
+        with patch(
+            "notary.Notary.__new__",
+            return_value=Mock(
+                **{"is_api_available.return_value": True, "is_initialized.return_value": True},  # type: ignore
+            ),
+        ):
+            out = context.run(context.on.collect_unit_status(), state)
+        assert out.unit_status == ops.ActiveStatus()
 
     def test_given_notary_available_and_not_initialized_when_configure_then_admin_user_created(
-        self, context
+        self, context, tmpdir
     ):
-        with tempfile.TemporaryDirectory() as tempdir:
-            config_mount = Mount(location="/etc/notary/config", source=tempdir)
-            state = State(
-                storages={Storage(name="config"), Storage(name="database")},
-                containers=[
-                    Container(
-                        name="notary",
-                        can_connect=True,
-                        mounts={"config": config_mount},
-                        layers={
-                            "notary": Layer(
-                                {
-                                    "summary": "notary layer",
-                                    "description": "pebble config layer for notary",
-                                    "services": {
-                                        "notary": {
-                                            "override": "replace",
-                                            "summary": "notary",
-                                            "command": "notary -config /etc/notary/config/config.yaml",
-                                            "startup": "enabled",
-                                        }
-                                    },
-                                }
-                            )
-                        },
-                    )
-                ],
-                leader=True,
-            )
-
-            with patch(
-                "notary.Notary.__new__",
-                return_value=Mock(
-                    **{
-                        "is_api_available.return_value": True,
-                        "is_initialized.return_value": False,
-                        "login.return_value": "example-token",
-                        "token_is_valid.return_value": False,
+        config_mount = Mount(location="/etc/notary/config", source=tmpdir)
+        state = State(
+            storages={Storage(name="config"), Storage(name="database")},
+            containers=[
+                Container(
+                    name="notary",
+                    can_connect=True,
+                    mounts={"config": config_mount},
+                    layers={
+                        "notary": Layer(
+                            {
+                                "summary": "notary layer",
+                                "description": "pebble config layer for notary",
+                                "services": {
+                                    "notary": {
+                                        "override": "replace",
+                                        "summary": "notary",
+                                        "command": "notary -config /etc/notary/config/config.yaml",
+                                        "startup": "enabled",
+                                    }
+                                },
+                            }
+                        )
                     },
-                ),
-            ):
-                out = context.run(context.on.update_status(), state)
-            assert len(list(out.secrets)) == 1
-            secret = out.get_secret(label="Notary Login Details")
-            assert secret.latest_content
-            assert secret.latest_content.get("token") == "example-token"
+                )
+            ],
+            leader=True,
+        )
+
+        with patch(
+            "notary.Notary.__new__",
+            return_value=Mock(
+                **{
+                    "is_api_available.return_value": True,
+                    "is_initialized.return_value": False,
+                    "login.return_value": "example-token",
+                    "token_is_valid.return_value": False,
+                },
+            ),
+        ):
+            out = context.run(context.on.update_status(), state)
+        assert len(list(out.secrets)) == 1
+        secret = out.get_secret(label="Notary Login Details")
+        assert secret.latest_content
+        assert secret.latest_content.get("token") == "example-token"
 
     def test_given_tls_requirer_available_when_notary_unreachable_then_no_error_raised(
         self, context
@@ -3429,168 +3426,165 @@ class TestCharm:
 
     @patch(f"{TLS_LIB_PATH}.TLSCertificatesRequiresV4.get_assigned_certificate")
     def test_given_access_relation_created_when_configure_then_certificate_not_replaced(
-        self, mock_assigned_certificates, context
+        self, mock_assigned_certificates, context, tmpdir
     ):
-        with tempfile.TemporaryDirectory() as tempdir:
-            config_mount = Mount(location="/etc/notary/config", source=tempdir)
-            state = State(
-                storages={Storage(name="config"), Storage(name="database")},
-                containers=[
-                    Container(
-                        name="notary",
-                        can_connect=True,
-                        mounts={"config": config_mount},
-                        layers={
-                            "notary": Layer(
-                                {
-                                    "summary": "notary layer",
-                                    "description": "pebble config layer for notary",
-                                    "services": {
-                                        "notary": {
-                                            "override": "replace",
-                                            "summary": "notary",
-                                            "command": "notary -config /etc/notary/config/config.yaml",
-                                            "startup": "enabled",
-                                        }
-                                    },
-                                }
-                            )
-                        },
-                    )
-                ],
-                relations=[Relation(id=1, endpoint=TLS_ACCESS_RELATION_NAME)],
-                leader=True,
-            )
-            certificate, _ = self.example_cert_and_key()
-            with open(tempdir + "/certificate.pem", "w") as f:
-                f.write(str(certificate))
-            mock_assigned_certificates.return_value = (None, None)
-            with patch(
-                "notary.Notary.__new__",
-                return_value=Mock(
-                    **{
-                        "is_api_available.return_value": True,
-                        "is_initialized.return_value": True,
-                        "login.return_value": "example-token",
-                        "token_is_valid.return_value": True,
+        config_mount = Mount(location="/etc/notary/config", source=tmpdir)
+        state = State(
+            storages={Storage(name="config"), Storage(name="database")},
+            containers=[
+                Container(
+                    name="notary",
+                    can_connect=True,
+                    mounts={"config": config_mount},
+                    layers={
+                        "notary": Layer(
+                            {
+                                "summary": "notary layer",
+                                "description": "pebble config layer for notary",
+                                "services": {
+                                    "notary": {
+                                        "override": "replace",
+                                        "summary": "notary",
+                                        "command": "notary -config /etc/notary/config/config.yaml",
+                                        "startup": "enabled",
+                                    }
+                                },
+                            }
+                        )
                     },
-                ),
-            ):
-                context.run(context.on.update_status(), state)
-            Path(tempdir + "etc/notary/config").mkdir(parents=True, exist_ok=True)
-            with open(tempdir + "/certificate.pem") as f:
-                saved_cert = f.read()
-                assert saved_cert == str(certificate)
+                )
+            ],
+            relations=[Relation(id=1, endpoint=TLS_ACCESS_RELATION_NAME)],
+            leader=True,
+        )
+        certificate, _ = self.example_cert_and_key()
+        with open(tmpdir + "/certificate.pem", "w") as f:
+            f.write(str(certificate))
+        mock_assigned_certificates.return_value = (None, None)
+        with patch(
+            "notary.Notary.__new__",
+            return_value=Mock(
+                **{
+                    "is_api_available.return_value": True,
+                    "is_initialized.return_value": True,
+                    "login.return_value": "example-token",
+                    "token_is_valid.return_value": True,
+                },
+            ),
+        ):
+            context.run(context.on.update_status(), state)
+        Path(tmpdir + "etc/notary/config").mkdir(parents=True, exist_ok=True)
+        with open(tmpdir + "/certificate.pem") as f:
+            saved_cert = f.read()
+            assert saved_cert == str(certificate)
 
     @patch(f"{TLS_LIB_PATH}.TLSCertificatesRequiresV4.get_assigned_certificate")
     def test_given_new_certificate_available_when_configure_then_certificate_replaced(
-        self, mock_assigned_certificates, context
+        self, mock_assigned_certificates, context, tmpdir
     ):
-        with tempfile.TemporaryDirectory() as tempdir:
-            config_mount = Mount(location="/etc/notary/config", source=tempdir)
-            state = State(
-                storages={Storage(name="config"), Storage(name="database")},
-                containers=[
-                    Container(
-                        name="notary",
-                        can_connect=True,
-                        mounts={"config": config_mount},
-                        layers={
-                            "notary": Layer(
-                                {
-                                    "summary": "notary layer",
-                                    "description": "pebble config layer for notary",
-                                    "services": {
-                                        "notary": {
-                                            "override": "replace",
-                                            "summary": "notary",
-                                            "command": "notary -config /etc/notary/config/config.yaml",
-                                            "startup": "enabled",
-                                        }
-                                    },
-                                }
-                            )
-                        },
-                    )
-                ],
-                relations=[Relation(id=1, endpoint=TLS_ACCESS_RELATION_NAME)],
-                leader=True,
-            )
-            existing_certificate, _ = self.example_cert_and_key()
-            certificate, pk = self.example_cert_and_key()
-            provider_certificate_mock = Mock()
-            provider_certificate_mock.certificate = certificate.raw
-            with open(tempdir + "/certificate.pem", "w") as f:
-                f.write(str(existing_certificate))
-            mock_assigned_certificates.return_value = (provider_certificate_mock, pk)
-            with patch(
-                "notary.Notary.__new__",
-                return_value=Mock(
-                    **{
-                        "is_api_available.return_value": True,
-                        "is_initialized.return_value": True,
-                        "login.return_value": "example-token",
-                        "token_is_valid.return_value": True,
+        config_mount = Mount(location="/etc/notary/config", source=tmpdir)
+        state = State(
+            storages={Storage(name="config"), Storage(name="database")},
+            containers=[
+                Container(
+                    name="notary",
+                    can_connect=True,
+                    mounts={"config": config_mount},
+                    layers={
+                        "notary": Layer(
+                            {
+                                "summary": "notary layer",
+                                "description": "pebble config layer for notary",
+                                "services": {
+                                    "notary": {
+                                        "override": "replace",
+                                        "summary": "notary",
+                                        "command": "notary -config /etc/notary/config/config.yaml",
+                                        "startup": "enabled",
+                                    }
+                                },
+                            }
+                        )
                     },
-                ),
-            ):
-                context.run(context.on.update_status(), state)
-            with open(tempdir + "/certificate.pem") as f:
-                saved_cert = f.read()
-                assert saved_cert == str(certificate)
+                )
+            ],
+            relations=[Relation(id=1, endpoint=TLS_ACCESS_RELATION_NAME)],
+            leader=True,
+        )
+        existing_certificate, _ = self.example_cert_and_key()
+        certificate, pk = self.example_cert_and_key()
+        provider_certificate_mock = Mock()
+        provider_certificate_mock.certificate = certificate.raw
+        with open(tmpdir + "/certificate.pem", "w") as f:
+            f.write(str(existing_certificate))
+        mock_assigned_certificates.return_value = (provider_certificate_mock, pk)
+        with patch(
+            "notary.Notary.__new__",
+            return_value=Mock(
+                **{
+                    "is_api_available.return_value": True,
+                    "is_initialized.return_value": True,
+                    "login.return_value": "example-token",
+                    "token_is_valid.return_value": True,
+                },
+            ),
+        ):
+            context.run(context.on.update_status(), state)
+        with open(tmpdir + "/certificate.pem") as f:
+            saved_cert = f.read()
+            assert saved_cert == str(certificate)
 
     @patch(f"{TLS_LIB_PATH}.TLSCertificatesRequiresV4.get_assigned_certificate")
     def test_given_new_certificate_available_and_new_cert_already_saved_when_configure_then_certificate_not_replaced(
-        self, mock_assigned_certificates, context
+        self, mock_assigned_certificates, context, tmpdir
     ):
-        with tempfile.TemporaryDirectory() as tempdir:
-            config_mount = Mount(location="/etc/notary/config", source=tempdir)
-            state = State(
-                storages={Storage(name="config"), Storage(name="database")},
-                containers=[
-                    Container(
-                        name="notary",
-                        can_connect=True,
-                        mounts={"config": config_mount},
-                        layers={
-                            "notary": Layer(
-                                {
-                                    "summary": "notary layer",
-                                    "description": "pebble config layer for notary",
-                                    "services": {
-                                        "notary": {
-                                            "override": "replace",
-                                            "summary": "notary",
-                                            "command": "notary -config /etc/notary/config/config.yaml",
-                                            "startup": "enabled",
-                                        }
-                                    },
-                                }
-                            )
-                        },
-                    )
-                ],
-                relations=[Relation(id=1, endpoint=TLS_ACCESS_RELATION_NAME)],
-                leader=True,
-            )
-            certificate, pk = self.example_cert_and_key()
-            provider_certificate_mock = Mock()
-            provider_certificate_mock.certificate = certificate.raw
-            with open(tempdir + "/certificate.pem", "w") as f:
-                f.write(str(certificate))
-            mock_assigned_certificates.return_value = (provider_certificate_mock, pk)
-            with patch(
-                "notary.Notary.__new__",
-                return_value=Mock(
-                    **{
-                        "is_api_available.return_value": True,
-                        "is_initialized.return_value": True,
-                        "login.return_value": "example-token",
-                        "token_is_valid.return_value": True,
+        config_mount = Mount(location="/etc/notary/config", source=tmpdir)
+        state = State(
+            storages={Storage(name="config"), Storage(name="database")},
+            containers=[
+                Container(
+                    name="notary",
+                    can_connect=True,
+                    mounts={"config": config_mount},
+                    layers={
+                        "notary": Layer(
+                            {
+                                "summary": "notary layer",
+                                "description": "pebble config layer for notary",
+                                "services": {
+                                    "notary": {
+                                        "override": "replace",
+                                        "summary": "notary",
+                                        "command": "notary -config /etc/notary/config/config.yaml",
+                                        "startup": "enabled",
+                                    }
+                                },
+                            }
+                        )
                     },
-                ),
-            ):
-                context.run(context.on.update_status(), state)
-            with open(tempdir + "/certificate.pem") as f:
-                saved_cert = f.read()
-                assert saved_cert == str(certificate)
+                )
+            ],
+            relations=[Relation(id=1, endpoint=TLS_ACCESS_RELATION_NAME)],
+            leader=True,
+        )
+        certificate, pk = self.example_cert_and_key()
+        provider_certificate_mock = Mock()
+        provider_certificate_mock.certificate = certificate.raw
+        with open(tmpdir + "/certificate.pem", "w") as f:
+            f.write(str(certificate))
+        mock_assigned_certificates.return_value = (provider_certificate_mock, pk)
+        with patch(
+            "notary.Notary.__new__",
+            return_value=Mock(
+                **{
+                    "is_api_available.return_value": True,
+                    "is_initialized.return_value": True,
+                    "login.return_value": "example-token",
+                    "token_is_valid.return_value": True,
+                },
+            ),
+        ):
+            context.run(context.on.update_status(), state)
+        with open(tmpdir + "/certificate.pem") as f:
+            saved_cert = f.read()
+            assert saved_cert == str(certificate)
