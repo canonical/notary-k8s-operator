@@ -5,28 +5,33 @@ import tempfile
 from unittest.mock import Mock, patch
 
 import ops
-import ops.testing
 import pytest
-from scenario import Container, Context, Event, Mount, Network, State, Storage
+from ops.pebble import Layer
+from scenario import Container, Context, Mount, Network, Relation, Secret, State, Storage
 
-from charm import GocertCharm
+from charm import CERTIFICATE_PROVIDER_RELATION_NAME, NOTARY_LOGIN_SECRET_LABEL, NotaryCharm
 from lib.charms.tls_certificates_interface.v4.tls_certificates import (
     Certificate,
     PrivateKey,
+    ProviderCertificate,
+    RequirerCSR,
     generate_ca,
     generate_certificate,
     generate_csr,
     generate_private_key,
 )
+from notary import CertificateRequest, CertificateRequests
 
-CERTIFICATE_COMMON_NAME = "GoCert Self Signed Certificate"
-SELF_SIGNED_CA_COMMON_NAME = "GoCert Self Signed Root CA"
+TLS_LIB_PATH = "charms.tls_certificates_interface.v4.tls_certificates"
+
+CERTIFICATE_COMMON_NAME = "Notary Self Signed Certificate"
+SELF_SIGNED_CA_COMMON_NAME = "Notary Self Signed Root CA"
 
 
 class TestCharm:
     @pytest.fixture(scope="function")
     def context(self):
-        yield Context(GocertCharm)
+        yield Context(NotaryCharm)
 
     def example_cert_and_key(self) -> tuple[Certificate, PrivateKey]:
         private_key = generate_private_key()
@@ -49,1385 +54,2897 @@ class TestCharm:
         return certificate, private_key
 
     # Configure tests
-    def test_given_only_config_storage_container_cant_connect_network_not_available_gocert_not_running_when_configure_then_no_error_raised(
+    def test_given_only_config_storage_container_cant_connect_network_not_available_notary_not_running_when_configure_then_no_error_raised(
         self, context
     ):
         state = State(
-            storage=[Storage(name="config")],
-            containers=[Container(name="gocert", can_connect=False)],
-            networks={"juju-info": Network([], [], [])},
+            storages={Storage(name="config")},
+            containers={
+                Container(
+                    name="notary",
+                    can_connect=False,
+                    layers={
+                        "notary": Layer(
+                            {
+                                "summary": "notary layer",
+                                "description": "pebble config layer for notary",
+                                "services": {
+                                    "notary": {
+                                        "override": "replace",
+                                        "summary": "notary",
+                                        "command": "notary -config /etc/notary/config/config.yaml",
+                                        "startup": "enabled",
+                                    }
+                                },
+                            }
+                        )
+                    },
+                )
+            },
+            networks={Network("juju-info", bind_addresses=[])},
             leader=True,
         )
 
         with patch(
-            "gocert.GoCert",
+            "notary.Notary",
             return_value=Mock(
-                **{"is_api_available.return_value": False, "is_initialized.return_value": False},
+                **{"is_api_available.return_value": False, "is_initialized.return_value": False},  # type: ignore
             ),
         ):
-            context.run(Event("config-changed"), state)
+            context.run(context.on.config_changed(), state)
 
-    def test_given_only_database_storage_container_cant_connect_network_not_available_gocert_not_running_when_configure_then_no_error_raised(
+    def test_given_only_database_storage_container_cant_connect_network_not_available_notary_not_running_when_configure_then_no_error_raised(
         self, context
     ):
         state = State(
-            storage=[Storage(name="database")],
-            containers=[Container(name="gocert", can_connect=False)],
-            networks={"juju-info": Network([], [], [])},
+            storages={Storage(name="database")},
+            containers={
+                Container(
+                    name="notary",
+                    can_connect=False,
+                    layers={
+                        "notary": Layer(
+                            {
+                                "summary": "notary layer",
+                                "description": "pebble config layer for notary",
+                                "services": {
+                                    "notary": {
+                                        "override": "replace",
+                                        "summary": "notary",
+                                        "command": "notary -config /etc/notary/config/config.yaml",
+                                        "startup": "enabled",
+                                    }
+                                },
+                            }
+                        )
+                    },
+                )
+            },
+            networks={Network("juju-info", bind_addresses=[])},
             leader=True,
         )
 
         with patch(
-            "gocert.GoCert",
+            "notary.Notary",
             return_value=Mock(
-                **{"is_api_available.return_value": False, "is_initialized.return_value": False},
+                **{"is_api_available.return_value": False, "is_initialized.return_value": False},  # type: ignore
             ),
         ):
-            context.run(Event("config-changed"), state)
+            context.run(context.on.config_changed(), state)
 
-    def test_given_storages_available_container_cant_connect_network_not_available_gocert_not_running_when_configure_then_no_error_raised(
+    def test_given_storages_available_container_cant_connect_network_not_available_notary_not_running_when_configure_then_no_error_raised(
         self, context
     ):
         state = State(
-            storage=[Storage(name="config"), Storage(name="database")],
-            containers=[Container(name="gocert", can_connect=False)],
-            networks={"juju-info": Network([], [], [])},
+            storages={Storage(name="config"), Storage(name="database")},
+            containers={
+                Container(
+                    name="notary",
+                    can_connect=False,
+                    layers={
+                        "notary": Layer(
+                            {
+                                "summary": "notary layer",
+                                "description": "pebble config layer for notary",
+                                "services": {
+                                    "notary": {
+                                        "override": "replace",
+                                        "summary": "notary",
+                                        "command": "notary -config /etc/notary/config/config.yaml",
+                                        "startup": "enabled",
+                                    }
+                                },
+                            }
+                        )
+                    },
+                )
+            },
+            networks={Network("juju-info", bind_addresses=[])},
             leader=True,
         )
 
         with patch(
-            "gocert.GoCert",
+            "notary.Notary",
             return_value=Mock(
-                **{"is_api_available.return_value": False, "is_initialized.return_value": False},
+                **{"is_api_available.return_value": False, "is_initialized.return_value": False},  # type: ignore
             ),
         ):
-            context.run(Event("config-changed"), state)
+            context.run(context.on.config_changed(), state)
 
-    def test_given_only_config_storage_container_can_connect_network_not_available_gocert_not_running_when_configure_then_no_error_raised(
+    def test_given_only_config_storage_container_can_connect_network_not_available_notary_not_running_when_configure_then_no_error_raised(
         self, context
     ):
         state = State(
-            storage=[Storage(name="config")],
-            containers=[Container(name="gocert", can_connect=True)],
-            networks={"juju-info": Network([], [], [])},
+            storages={Storage(name="config")},
+            containers={
+                Container(
+                    name="notary",
+                    can_connect=True,
+                    layers={
+                        "notary": Layer(
+                            {
+                                "summary": "notary layer",
+                                "description": "pebble config layer for notary",
+                                "services": {
+                                    "notary": {
+                                        "override": "replace",
+                                        "summary": "notary",
+                                        "command": "notary -config /etc/notary/config/config.yaml",
+                                        "startup": "enabled",
+                                    }
+                                },
+                            }
+                        )
+                    },
+                )
+            },
+            networks={Network("juju-info", bind_addresses=[])},
             leader=True,
         )
 
         with patch(
-            "gocert.GoCert",
+            "notary.Notary",
             return_value=Mock(
-                **{"is_api_available.return_value": False, "is_initialized.return_value": False},
+                **{"is_api_available.return_value": False, "is_initialized.return_value": False},  # type: ignore
             ),
         ):
-            context.run(Event("config-changed"), state)
+            context.run(context.on.config_changed(), state)
 
-    def test_given_only_database_storage_container_can_connect_network_not_available_gocert_not_running_when_configure_then_no_error_raised(
+    def test_given_only_database_storage_container_can_connect_network_not_available_notary_not_running_when_configure_then_no_error_raised(
         self, context
     ):
         state = State(
-            storage=[Storage(name="database")],
-            containers=[Container(name="gocert", can_connect=True)],
-            networks={"juju-info": Network([], [], [])},
+            storages={Storage(name="database")},
+            containers={
+                Container(
+                    name="notary",
+                    can_connect=True,
+                    layers={
+                        "notary": Layer(
+                            {
+                                "summary": "notary layer",
+                                "description": "pebble config layer for notary",
+                                "services": {
+                                    "notary": {
+                                        "override": "replace",
+                                        "summary": "notary",
+                                        "command": "notary -config /etc/notary/config/config.yaml",
+                                        "startup": "enabled",
+                                    }
+                                },
+                            }
+                        )
+                    },
+                )
+            },
+            networks={Network("juju-info", bind_addresses=[])},
             leader=True,
         )
 
         with patch(
-            "gocert.GoCert",
+            "notary.Notary",
             return_value=Mock(
-                **{"is_api_available.return_value": False, "is_initialized.return_value": False},
+                **{"is_api_available.return_value": False, "is_initialized.return_value": False},  # type: ignore
             ),
         ):
-            context.run(Event("config-changed"), state)
+            context.run(context.on.config_changed(), state)
 
-    def test_given_storages_available_container_can_connect_network_not_available_gocert_not_running_when_configure_then_config_file_generated(
+    def test_given_storages_available_container_can_connect_network_not_available_notary_not_running_when_configure_then_config_file_generated(
         self, context
     ):
         state = State(
-            storage=[Storage(name="config"), Storage(name="database")],
-            containers=[Container(name="gocert", can_connect=True)],
-            networks={"juju-info": Network([], [], [])},
+            storages={Storage(name="config"), Storage(name="database")},
+            containers={
+                Container(
+                    name="notary",
+                    can_connect=True,
+                    layers={
+                        "notary": Layer(
+                            {
+                                "summary": "notary layer",
+                                "description": "pebble config layer for notary",
+                                "services": {
+                                    "notary": {
+                                        "override": "replace",
+                                        "summary": "notary",
+                                        "command": "notary -config /etc/notary/config/config.yaml",
+                                        "startup": "enabled",
+                                    }
+                                },
+                            }
+                        )
+                    },
+                )
+            },
+            networks={Network("juju-info", bind_addresses=[])},
             leader=True,
         )
 
         with patch(
-            "gocert.GoCert",
+            "notary.Notary",
             return_value=Mock(
-                **{"is_api_available.return_value": False, "is_initialized.return_value": False},
+                **{"is_api_available.return_value": False, "is_initialized.return_value": False},  # type: ignore
             ),
         ):
-            out = context.run(Event("config-changed"), state)
-        root = out.containers[0].get_filesystem(context)
-        assert (root / "etc/gocert/config/config.yaml").open("r")
-        assert not (root / "etc/gocert/config/certificate.pem").exists()
-        assert not ((root / "etc/gocert/config/private_key.pem").exists())
+            out = context.run(context.on.config_changed(), state)
+        root = out.get_container("notary").get_filesystem(context)
+        assert (root / "etc/notary/config/config.yaml").open("r")
+        assert not (root / "etc/notary/config/certificate.pem").exists()
+        assert not (root / "etc/notary/config/private_key.pem").exists()
         assert len(out.secrets) == 1
-        assert out.secrets[0].label == "GoCert Login Details"
+        assert out.get_secret(label="Notary Login Details")
 
-    def test_given_only_config_storage_container_cant_connect_network_available_gocert_not_running_when_configure_then_no_error_raised(
+    def test_given_only_config_storage_container_cant_connect_network_available_notary_not_running_when_configure_then_no_error_raised(
         self, context
     ):
         state = State(
-            storage=[Storage(name="config")],
-            containers=[Container(name="gocert", can_connect=False)],
-            networks={"juju-info": Network.default()},
+            storages={Storage(name="config")},
+            containers={
+                Container(
+                    name="notary",
+                    can_connect=False,
+                    layers={
+                        "notary": Layer(
+                            {
+                                "summary": "notary layer",
+                                "description": "pebble config layer for notary",
+                                "services": {
+                                    "notary": {
+                                        "override": "replace",
+                                        "summary": "notary",
+                                        "command": "notary -config /etc/notary/config/config.yaml",
+                                        "startup": "enabled",
+                                    }
+                                },
+                            }
+                        )
+                    },
+                )
+            },
+            networks={Network("juju-info")},
             leader=True,
         )
 
         with patch(
-            "gocert.GoCert",
+            "notary.Notary",
             return_value=Mock(
-                **{"is_api_available.return_value": False, "is_initialized.return_value": False},
+                **{"is_api_available.return_value": False, "is_initialized.return_value": False},  # type: ignore
             ),
         ):
-            context.run(Event("config-changed"), state)
+            context.run(context.on.config_changed(), state)
 
-    def test_given_only_database_storage_container_cant_connect_network_available_gocert_not_running_when_configure_then_no_error_raised(
+    def test_given_only_database_storage_container_cant_connect_network_available_notary_not_running_when_configure_then_no_error_raised(
         self, context
     ):
         state = State(
-            storage=[Storage(name="database")],
-            containers=[Container(name="gocert", can_connect=False)],
-            networks={"juju-info": Network.default()},
+            storages={Storage(name="database")},
+            containers={
+                Container(
+                    name="notary",
+                    can_connect=False,
+                    layers={
+                        "notary": Layer(
+                            {
+                                "summary": "notary layer",
+                                "description": "pebble config layer for notary",
+                                "services": {
+                                    "notary": {
+                                        "override": "replace",
+                                        "summary": "notary",
+                                        "command": "notary -config /etc/notary/config/config.yaml",
+                                        "startup": "enabled",
+                                    }
+                                },
+                            }
+                        )
+                    },
+                )
+            },
+            networks={Network("juju-info")},
             leader=True,
         )
 
         with patch(
-            "gocert.GoCert",
+            "notary.Notary",
             return_value=Mock(
-                **{"is_api_available.return_value": False, "is_initialized.return_value": False},
+                **{"is_api_available.return_value": False, "is_initialized.return_value": False},  # type: ignore
             ),
         ):
-            context.run(Event("config-changed"), state)
+            context.run(context.on.config_changed(), state)
 
-    def test_given_storages_available_container_cant_connect_network_available_gocert_not_running_when_configure_then_no_error_raised(
+    def test_given_storages_available_container_cant_connect_network_available_notary_not_running_when_configure_then_no_error_raised(
         self, context
     ):
         state = State(
-            storage=[Storage(name="config"), Storage(name="database")],
-            containers=[Container(name="gocert", can_connect=False)],
-            networks={"juju-info": Network.default()},
+            storages={Storage(name="config"), Storage(name="database")},
+            containers={
+                Container(
+                    name="notary",
+                    can_connect=False,
+                    layers={
+                        "notary": Layer(
+                            {
+                                "summary": "notary layer",
+                                "description": "pebble config layer for notary",
+                                "services": {
+                                    "notary": {
+                                        "override": "replace",
+                                        "summary": "notary",
+                                        "command": "notary -config /etc/notary/config/config.yaml",
+                                        "startup": "enabled",
+                                    }
+                                },
+                            }
+                        )
+                    },
+                )
+            },
+            networks={Network("juju-info")},
             leader=True,
         )
 
         with patch(
-            "gocert.GoCert",
+            "notary.Notary",
             return_value=Mock(
-                **{"is_api_available.return_value": False, "is_initialized.return_value": False},
+                **{"is_api_available.return_value": False, "is_initialized.return_value": False},  # type: ignore
             ),
         ):
-            context.run(Event("config-changed"), state)
+            context.run(context.on.config_changed(), state)
 
-    def test_given_only_config_storage_container_can_connect_network_available_gocert_not_running_when_configure_then_no_error_raised(
+    def test_given_only_config_storage_container_can_connect_network_available_notary_not_running_when_configure_then_no_error_raised(
         self, context
     ):
         state = State(
-            storage=[Storage(name="config")],
-            containers=[Container(name="gocert", can_connect=True)],
-            networks={"juju-info": Network.default()},
+            storages={Storage(name="config")},
+            containers={
+                Container(
+                    name="notary",
+                    can_connect=True,
+                    layers={
+                        "notary": Layer(
+                            {
+                                "summary": "notary layer",
+                                "description": "pebble config layer for notary",
+                                "services": {
+                                    "notary": {
+                                        "override": "replace",
+                                        "summary": "notary",
+                                        "command": "notary -config /etc/notary/config/config.yaml",
+                                        "startup": "enabled",
+                                    }
+                                },
+                            }
+                        )
+                    },
+                )
+            },
+            networks={Network("juju-info")},
             leader=True,
         )
 
         with patch(
-            "gocert.GoCert",
+            "notary.Notary",
             return_value=Mock(
-                **{"is_api_available.return_value": False, "is_initialized.return_value": False},
+                **{"is_api_available.return_value": False, "is_initialized.return_value": False},  # type: ignore
             ),
         ):
-            context.run(Event("config-changed"), state)
+            context.run(context.on.config_changed(), state)
 
-    def test_given_only_database_storage_container_can_connect_network_available_gocert_not_running_when_configure_then_no_error_raised(
+    def test_given_only_database_storage_container_can_connect_network_available_notary_not_running_when_configure_then_no_error_raised(
         self, context
     ):
         state = State(
-            storage=[Storage(name="database")],
-            containers=[Container(name="gocert", can_connect=True)],
-            networks={"juju-info": Network.default()},
+            storages={Storage(name="database")},
+            containers={
+                Container(
+                    name="notary",
+                    can_connect=True,
+                    layers={
+                        "notary": Layer(
+                            {
+                                "summary": "notary layer",
+                                "description": "pebble config layer for notary",
+                                "services": {
+                                    "notary": {
+                                        "override": "replace",
+                                        "summary": "notary",
+                                        "command": "notary -config /etc/notary/config/config.yaml",
+                                        "startup": "enabled",
+                                    }
+                                },
+                            }
+                        )
+                    },
+                )
+            },
+            networks={Network("juju-info")},
             leader=True,
         )
 
         with patch(
-            "gocert.GoCert",
+            "notary.Notary",
             return_value=Mock(
-                **{"is_api_available.return_value": False, "is_initialized.return_value": False},
+                **{"is_api_available.return_value": False, "is_initialized.return_value": False},  # type: ignore
             ),
         ):
-            context.run(Event("config-changed"), state)
+            context.run(context.on.config_changed(), state)
 
-    def test_given_storages_available_container_can_connect_network_available_gocert_not_running_when_configure_then_config_and_certificates_generated(
+    def test_given_storages_available_container_can_connect_network_available_notary_not_running_when_configure_then_config_and_certificates_generated(
         self, context
     ):
         state = State(
-            storage=[Storage(name="config"), Storage(name="database")],
-            containers=[Container(name="gocert", can_connect=True)],
-            networks={"juju-info": Network.default()},
+            storages={Storage(name="config"), Storage(name="database")},
+            containers={
+                Container(
+                    name="notary",
+                    can_connect=True,
+                    layers={
+                        "notary": Layer(
+                            {
+                                "summary": "notary layer",
+                                "description": "pebble config layer for notary",
+                                "services": {
+                                    "notary": {
+                                        "override": "replace",
+                                        "summary": "notary",
+                                        "command": "notary -config /etc/notary/config/config.yaml",
+                                        "startup": "enabled",
+                                    }
+                                },
+                            }
+                        )
+                    },
+                )
+            },
+            networks={Network("juju-info")},
             leader=True,
         )
 
         with patch(
-            "gocert.GoCert",
+            "notary.Notary",
             return_value=Mock(
-                **{"is_api_available.return_value": False, "is_initialized.return_value": False},
+                **{"is_api_available.return_value": False, "is_initialized.return_value": False},  # type: ignore
             ),
         ):
-            out = context.run(Event("config-changed"), state)
-        root = out.containers[0].get_filesystem(context)
-        assert (root / "etc/gocert/config/config.yaml").open("r")
+            out = context.run(context.on.config_changed(), state)
+        root = out.get_container("notary").get_filesystem(context)
+        assert (root / "etc/notary/config/config.yaml").open("r")
         assert (
-            (root / "etc/gocert/config/certificate.pem")
+            (root / "etc/notary/config/certificate.pem")
             .open("r")
             .read()
             .startswith("-----BEGIN CERTIFICATE-----")
         )
         assert (
-            (root / "etc/gocert/config/private_key.pem")
+            (root / "etc/notary/config/private_key.pem")
             .open("r")
             .read()
             .startswith("-----BEGIN RSA PRIVATE KEY-----")
         )
 
-    def test_given_only_config_storage_container_cant_connect_network_not_available_gocert_running_when_configure_then_no_error_raised(
+    def test_given_only_config_storage_container_cant_connect_network_not_available_notary_running_when_configure_then_no_error_raised(
         self, context
     ):
         state = State(
-            storage=[Storage(name="config")],
-            containers=[Container(name="gocert", can_connect=False)],
-            networks={"juju-info": Network([], [], [])},
+            storages={Storage(name="config")},
+            containers={
+                Container(
+                    name="notary",
+                    can_connect=False,
+                    layers={
+                        "notary": Layer(
+                            {
+                                "summary": "notary layer",
+                                "description": "pebble config layer for notary",
+                                "services": {
+                                    "notary": {
+                                        "override": "replace",
+                                        "summary": "notary",
+                                        "command": "notary -config /etc/notary/config/config.yaml",
+                                        "startup": "enabled",
+                                    }
+                                },
+                            }
+                        )
+                    },
+                )
+            },
+            networks={Network("juju-info", bind_addresses=[])},
             leader=True,
         )
 
         with patch(
-            "gocert.GoCert",
+            "notary.Notary",
             return_value=Mock(
-                **{"is_api_available.return_value": True, "is_initialized.return_value": False},
+                **{"is_api_available.return_value": True, "is_initialized.return_value": False},  # type: ignore
             ),
         ):
-            context.run(Event("config-changed"), state)
+            context.run(context.on.config_changed(), state)
 
-    def test_given_only_database_storage_container_cant_connect_network_not_available_gocert_running_when_configure_then_no_error_raised(
+    def test_given_only_database_storage_container_cant_connect_network_not_available_notary_running_when_configure_then_no_error_raised(
         self, context
     ):
         state = State(
-            storage=[Storage(name="database")],
-            containers=[Container(name="gocert", can_connect=False)],
-            networks={"juju-info": Network([], [], [])},
+            storages={Storage(name="database")},
+            containers={
+                Container(
+                    name="notary",
+                    can_connect=False,
+                    layers={
+                        "notary": Layer(
+                            {
+                                "summary": "notary layer",
+                                "description": "pebble config layer for notary",
+                                "services": {
+                                    "notary": {
+                                        "override": "replace",
+                                        "summary": "notary",
+                                        "command": "notary -config /etc/notary/config/config.yaml",
+                                        "startup": "enabled",
+                                    }
+                                },
+                            }
+                        )
+                    },
+                )
+            },
+            networks={Network("juju-info", bind_addresses=[])},
             leader=True,
         )
 
         with patch(
-            "gocert.GoCert",
+            "notary.Notary",
             return_value=Mock(
-                **{"is_api_available.return_value": True, "is_initialized.return_value": False},
+                **{"is_api_available.return_value": True, "is_initialized.return_value": False},  # type: ignore
             ),
         ):
-            context.run(Event("config-changed"), state)
+            context.run(context.on.config_changed(), state)
 
-    def test_given_storages_available_container_cant_connect_network_not_available_gocert_running_when_configure_then_no_error_raised(
+    def test_given_storages_available_container_cant_connect_network_not_available_notary_running_when_configure_then_no_error_raised(
         self, context
     ):
         state = State(
-            storage=[Storage(name="config"), Storage(name="database")],
-            containers=[Container(name="gocert", can_connect=False)],
-            networks={"juju-info": Network([], [], [])},
+            storages={Storage(name="config"), Storage(name="database")},
+            containers={
+                Container(
+                    name="notary",
+                    can_connect=False,
+                    layers={
+                        "notary": Layer(
+                            {
+                                "summary": "notary layer",
+                                "description": "pebble config layer for notary",
+                                "services": {
+                                    "notary": {
+                                        "override": "replace",
+                                        "summary": "notary",
+                                        "command": "notary -config /etc/notary/config/config.yaml",
+                                        "startup": "enabled",
+                                    }
+                                },
+                            }
+                        )
+                    },
+                )
+            },
+            networks={Network("juju-info", bind_addresses=[])},
             leader=True,
         )
 
         with patch(
-            "gocert.GoCert",
+            "notary.Notary",
             return_value=Mock(
-                **{"is_api_available.return_value": True, "is_initialized.return_value": False},
+                **{"is_api_available.return_value": True, "is_initialized.return_value": False},  # type: ignore
             ),
         ):
-            context.run(Event("config-changed"), state)
+            context.run(context.on.config_changed(), state)
 
-    def test_given_only_config_storage_container_can_connect_network_not_available_gocert_running_when_configure_then_no_error_raised(
+    def test_given_only_config_storage_container_can_connect_network_not_available_notary_running_when_configure_then_no_error_raised(
         self, context
     ):
         state = State(
-            storage=[Storage(name="config")],
-            containers=[Container(name="gocert", can_connect=True)],
-            networks={"juju-info": Network([], [], [])},
+            storages={Storage(name="config")},
+            containers={
+                Container(
+                    name="notary",
+                    can_connect=True,
+                    layers={
+                        "notary": Layer(
+                            {
+                                "summary": "notary layer",
+                                "description": "pebble config layer for notary",
+                                "services": {
+                                    "notary": {
+                                        "override": "replace",
+                                        "summary": "notary",
+                                        "command": "notary -config /etc/notary/config/config.yaml",
+                                        "startup": "enabled",
+                                    }
+                                },
+                            }
+                        )
+                    },
+                )
+            },
+            networks={Network("juju-info", bind_addresses=[])},
             leader=True,
         )
 
         with patch(
-            "gocert.GoCert",
+            "notary.Notary",
             return_value=Mock(
-                **{"is_api_available.return_value": True, "is_initialized.return_value": False},
+                **{"is_api_available.return_value": True, "is_initialized.return_value": False},  # type: ignore
             ),
         ):
-            context.run(Event("config-changed"), state)
+            context.run(context.on.config_changed(), state)
 
-    def test_given_only_database_storage_container_can_connect_network_not_available_gocert_running_when_configure_then_no_error_raised(
+    def test_given_only_database_storage_container_can_connect_network_not_available_notary_running_when_configure_then_no_error_raised(
         self, context
     ):
         state = State(
-            storage=[Storage(name="database")],
-            containers=[Container(name="gocert", can_connect=True)],
-            networks={"juju-info": Network([], [], [])},
+            storages={Storage(name="database")},
+            containers={
+                Container(
+                    name="notary",
+                    can_connect=True,
+                    layers={
+                        "notary": Layer(
+                            {
+                                "summary": "notary layer",
+                                "description": "pebble config layer for notary",
+                                "services": {
+                                    "notary": {
+                                        "override": "replace",
+                                        "summary": "notary",
+                                        "command": "notary -config /etc/notary/config/config.yaml",
+                                        "startup": "enabled",
+                                    }
+                                },
+                            }
+                        )
+                    },
+                )
+            },
+            networks={Network("juju-info", bind_addresses=[])},
             leader=True,
         )
 
         with patch(
-            "gocert.GoCert",
+            "notary.Notary",
             return_value=Mock(
-                **{"is_api_available.return_value": True, "is_initialized.return_value": False},
+                **{"is_api_available.return_value": True, "is_initialized.return_value": False},  # type: ignore
             ),
         ):
-            context.run(Event("config-changed"), state)
+            context.run(context.on.config_changed(), state)
 
-    def test_given_storages_available_container_can_connect_network_not_available_gocert_running_when_configure_then_config_file_generated(
+    def test_given_storages_available_container_can_connect_network_not_available_notary_running_when_configure_then_config_file_generated(
         self, context
     ):
         state = State(
-            storage=[Storage(name="config"), Storage(name="database")],
-            containers=[Container(name="gocert", can_connect=True)],
-            networks={"juju-info": Network([], [], [])},
+            storages={Storage(name="config"), Storage(name="database")},
+            containers={
+                Container(
+                    name="notary",
+                    can_connect=True,
+                    layers={
+                        "notary": Layer(
+                            {
+                                "summary": "notary layer",
+                                "description": "pebble config layer for notary",
+                                "services": {
+                                    "notary": {
+                                        "override": "replace",
+                                        "summary": "notary",
+                                        "command": "notary -config /etc/notary/config/config.yaml",
+                                        "startup": "enabled",
+                                    }
+                                },
+                            }
+                        )
+                    },
+                )
+            },
+            networks={Network("juju-info", bind_addresses=[])},
             leader=True,
         )
 
         with patch(
-            "gocert.GoCert",
+            "notary.Notary",
             return_value=Mock(
-                **{"is_api_available.return_value": True, "is_initialized.return_value": False},
+                **{"is_api_available.return_value": True, "is_initialized.return_value": False},  # type: ignore
             ),
         ):
-            out = context.run(Event("config-changed"), state)
-        root = out.containers[0].get_filesystem(context)
-        assert (root / "etc/gocert/config/config.yaml").open("r")
-        assert not (root / "etc/gocert/config/certificate.pem").exists()
-        assert not ((root / "etc/gocert/config/private_key.pem").exists())
+            out = context.run(context.on.config_changed(), state)
+        root = out.get_container("notary").get_filesystem(context)
+        assert (root / "etc/notary/config/config.yaml").open("r")
+        assert not (root / "etc/notary/config/certificate.pem").exists()
+        assert not ((root / "etc/notary/config/private_key.pem").exists())
         assert len(out.secrets) == 1
-        assert out.secrets[0].label == "GoCert Login Details"
+        assert out.get_secret(label="Notary Login Details")
 
-    def test_given_only_config_storage_container_cant_connect_network_available_gocert_running_when_configure_then_no_error_raised(
+    def test_given_only_config_storage_container_cant_connect_network_available_notary_running_when_configure_then_no_error_raised(
         self, context
     ):
         state = State(
-            storage=[Storage(name="config")],
-            containers=[Container(name="gocert", can_connect=False)],
-            networks={"juju-info": Network.default()},
+            storages={Storage(name="config")},
+            containers={
+                Container(
+                    name="notary",
+                    can_connect=False,
+                    layers={
+                        "notary": Layer(
+                            {
+                                "summary": "notary layer",
+                                "description": "pebble config layer for notary",
+                                "services": {
+                                    "notary": {
+                                        "override": "replace",
+                                        "summary": "notary",
+                                        "command": "notary -config /etc/notary/config/config.yaml",
+                                        "startup": "enabled",
+                                    }
+                                },
+                            }
+                        )
+                    },
+                )
+            },
+            networks={Network("juju-info")},
             leader=True,
         )
 
         with patch(
-            "gocert.GoCert",
+            "notary.Notary",
             return_value=Mock(
-                **{"is_api_available.return_value": True, "is_initialized.return_value": False},
+                **{"is_api_available.return_value": True, "is_initialized.return_value": False},  # type: ignore
             ),
         ):
-            context.run(Event("config-changed"), state)
+            context.run(context.on.config_changed(), state)
 
-    def test_given_only_database_storage_container_cant_connect_network_available_gocert_running_when_configure_then_no_error_raised(
+    def test_given_only_database_storage_container_cant_connect_network_available_notary_running_when_configure_then_no_error_raised(
         self, context
     ):
         state = State(
-            storage=[Storage(name="database")],
-            containers=[Container(name="gocert", can_connect=False)],
-            networks={"juju-info": Network.default()},
+            storages={Storage(name="database")},
+            containers={
+                Container(
+                    name="notary",
+                    can_connect=False,
+                    layers={
+                        "notary": Layer(
+                            {
+                                "summary": "notary layer",
+                                "description": "pebble config layer for notary",
+                                "services": {
+                                    "notary": {
+                                        "override": "replace",
+                                        "summary": "notary",
+                                        "command": "notary -config /etc/notary/config/config.yaml",
+                                        "startup": "enabled",
+                                    }
+                                },
+                            }
+                        )
+                    },
+                )
+            },
+            networks={Network("juju-info")},
             leader=True,
         )
 
         with patch(
-            "gocert.GoCert",
+            "notary.Notary",
             return_value=Mock(
-                **{"is_api_available.return_value": True, "is_initialized.return_value": False},
+                **{"is_api_available.return_value": True, "is_initialized.return_value": False},  # type: ignore
             ),
         ):
-            context.run(Event("config-changed"), state)
+            context.run(context.on.config_changed(), state)
 
-    def test_given_storages_available_container_cant_connect_network_available_gocert_running_when_configure_then_no_error_raised(
+    def test_given_storages_available_container_cant_connect_network_available_notary_running_when_configure_then_no_error_raised(
         self, context
     ):
         state = State(
-            storage=[Storage(name="config"), Storage(name="database")],
-            containers=[Container(name="gocert", can_connect=False)],
-            networks={"juju-info": Network.default()},
+            storages={Storage(name="config"), Storage(name="database")},
+            containers={
+                Container(
+                    name="notary",
+                    can_connect=False,
+                    layers={
+                        "notary": Layer(
+                            {
+                                "summary": "notary layer",
+                                "description": "pebble config layer for notary",
+                                "services": {
+                                    "notary": {
+                                        "override": "replace",
+                                        "summary": "notary",
+                                        "command": "notary -config /etc/notary/config/config.yaml",
+                                        "startup": "enabled",
+                                    }
+                                },
+                            }
+                        )
+                    },
+                )
+            },
+            networks={Network("juju-info")},
             leader=True,
         )
 
         with patch(
-            "gocert.GoCert",
+            "notary.Notary",
             return_value=Mock(
-                **{"is_api_available.return_value": True, "is_initialized.return_value": False},
+                **{"is_api_available.return_value": True, "is_initialized.return_value": False},  # type: ignore
             ),
         ):
-            context.run(Event("config-changed"), state)
+            context.run(context.on.config_changed(), state)
 
-    def test_given_only_config_storage_container_can_connect_network_available_gocert_running_when_configure_then_no_error_raised(
+    def test_given_only_config_storage_container_can_connect_network_available_notary_running_when_configure_then_no_error_raised(
         self, context
     ):
         state = State(
-            storage=[Storage(name="config")],
-            containers=[Container(name="gocert", can_connect=True)],
-            networks={"juju-info": Network.default()},
+            storages={Storage(name="config")},
+            containers={
+                Container(
+                    name="notary",
+                    can_connect=True,
+                    layers={
+                        "notary": Layer(
+                            {
+                                "summary": "notary layer",
+                                "description": "pebble config layer for notary",
+                                "services": {
+                                    "notary": {
+                                        "override": "replace",
+                                        "summary": "notary",
+                                        "command": "notary -config /etc/notary/config/config.yaml",
+                                        "startup": "enabled",
+                                    }
+                                },
+                            }
+                        )
+                    },
+                )
+            },
+            networks={Network("juju-info")},
             leader=True,
         )
 
         with patch(
-            "gocert.GoCert",
+            "notary.Notary",
             return_value=Mock(
-                **{"is_api_available.return_value": True, "is_initialized.return_value": False},
+                **{"is_api_available.return_value": True, "is_initialized.return_value": False},  # type: ignore
             ),
         ):
-            context.run(Event("config-changed"), state)
+            context.run(context.on.config_changed(), state)
 
-    def test_given_only_database_storage_container_can_connect_network_available_gocert_running_when_configure_then_no_error_raised(
+    def test_given_only_database_storage_container_can_connect_network_available_notary_running_when_configure_then_no_error_raised(
         self, context
     ):
         state = State(
-            storage=[Storage(name="database")],
-            containers=[Container(name="gocert", can_connect=True)],
-            networks={"juju-info": Network.default()},
+            storages={Storage(name="database")},
+            containers={
+                Container(
+                    name="notary",
+                    can_connect=True,
+                    layers={
+                        "notary": Layer(
+                            {
+                                "summary": "notary layer",
+                                "description": "pebble config layer for notary",
+                                "services": {
+                                    "notary": {
+                                        "override": "replace",
+                                        "summary": "notary",
+                                        "command": "notary -config /etc/notary/config/config.yaml",
+                                        "startup": "enabled",
+                                    }
+                                },
+                            }
+                        )
+                    },
+                )
+            },
+            networks={Network("juju-info")},
             leader=True,
         )
 
         with patch(
-            "gocert.GoCert",
+            "notary.Notary",
             return_value=Mock(
-                **{"is_api_available.return_value": True, "is_initialized.return_value": False},
+                **{"is_api_available.return_value": True, "is_initialized.return_value": False},  # type: ignore
             ),
         ):
-            context.run(Event("config-changed"), state)
+            context.run(context.on.config_changed(), state)
 
-    def test_given_storages_available_container_can_connect_network_available_gocert_running_when_configure_then_status_is_blocked(
+    def test_given_storages_available_container_can_connect_network_available_notary_running_when_configure_then_status_is_blocked(
         self, context
     ):
         state = State(
-            storage=[Storage(name="config"), Storage(name="database")],
-            containers=[Container(name="gocert", can_connect=True)],
-            networks={"juju-info": Network.default()},
+            storages={Storage(name="config"), Storage(name="database")},
+            containers={
+                Container(
+                    name="notary",
+                    can_connect=True,
+                    layers={
+                        "notary": Layer(
+                            {
+                                "summary": "notary layer",
+                                "description": "pebble config layer for notary",
+                                "services": {
+                                    "notary": {
+                                        "override": "replace",
+                                        "summary": "notary",
+                                        "command": "notary -config /etc/notary/config/config.yaml",
+                                        "startup": "enabled",
+                                    }
+                                },
+                            }
+                        )
+                    },
+                )
+            },
+            networks={Network("juju-info")},
             leader=True,
         )
 
         with patch(
-            "gocert.GoCert",
+            "notary.Notary",
             return_value=Mock(
-                **{"is_api_available.return_value": True, "is_initialized.return_value": False},
+                **{"is_api_available.return_value": True, "is_initialized.return_value": False},  # type: ignore
             ),
         ):
-            context.run(Event("config-changed"), state)
+            context.run(context.on.config_changed(), state)
 
-    def test_given_only_config_storage_container_cant_connect_network_not_available_gocert_initialized_when_configure_then_no_error_raised(
+    def test_given_only_config_storage_container_cant_connect_network_not_available_notary_initialized_when_configure_then_no_error_raised(
         self, context
     ):
         state = State(
-            storage=[Storage(name="config")],
-            containers=[Container(name="gocert", can_connect=False)],
-            networks={"juju-info": Network([], [], [])},
+            storages={Storage(name="config")},
+            containers={
+                Container(
+                    name="notary",
+                    can_connect=False,
+                    layers={
+                        "notary": Layer(
+                            {
+                                "summary": "notary layer",
+                                "description": "pebble config layer for notary",
+                                "services": {
+                                    "notary": {
+                                        "override": "replace",
+                                        "summary": "notary",
+                                        "command": "notary -config /etc/notary/config/config.yaml",
+                                        "startup": "enabled",
+                                    }
+                                },
+                            }
+                        )
+                    },
+                )
+            },
+            networks={Network("juju-info", bind_addresses=[])},
             leader=True,
         )
 
         with patch(
-            "gocert.GoCert",
+            "notary.Notary",
             return_value=Mock(
-                **{"is_api_available.return_value": True, "is_initialized.return_value": True},
+                **{"is_api_available.return_value": True, "is_initialized.return_value": True},  # type: ignore
             ),
         ):
-            context.run(Event("config-changed"), state)
+            context.run(context.on.config_changed(), state)
 
-    def test_given_only_database_storage_container_cant_connect_network_not_available_gocert_initialized_when_configure_then_no_error_raised(
+    def test_given_only_database_storage_container_cant_connect_network_not_available_notary_initialized_when_configure_then_no_error_raised(
         self, context
     ):
         state = State(
-            storage=[Storage(name="database")],
-            containers=[Container(name="gocert", can_connect=False)],
-            networks={"juju-info": Network([], [], [])},
+            storages={Storage(name="database")},
+            containers={
+                Container(
+                    name="notary",
+                    can_connect=False,
+                    layers={
+                        "notary": Layer(
+                            {
+                                "summary": "notary layer",
+                                "description": "pebble config layer for notary",
+                                "services": {
+                                    "notary": {
+                                        "override": "replace",
+                                        "summary": "notary",
+                                        "command": "notary -config /etc/notary/config/config.yaml",
+                                        "startup": "enabled",
+                                    }
+                                },
+                            }
+                        )
+                    },
+                )
+            },
+            networks={Network("juju-info", bind_addresses=[])},
             leader=True,
         )
 
         with patch(
-            "gocert.GoCert",
+            "notary.Notary",
             return_value=Mock(
-                **{"is_api_available.return_value": True, "is_initialized.return_value": True},
+                **{"is_api_available.return_value": True, "is_initialized.return_value": True},  # type: ignore
             ),
         ):
-            context.run(Event("config-changed"), state)
+            context.run(context.on.config_changed(), state)
 
-    def test_given_storages_available_container_cant_connect_network_not_available_gocert_initialized_when_configure_then_no_error_raised(
+    def test_given_storages_available_container_cant_connect_network_not_available_notary_initialized_when_configure_then_no_error_raised(
         self, context
     ):
         state = State(
-            storage=[Storage(name="config"), Storage(name="database")],
-            containers=[Container(name="gocert", can_connect=False)],
-            networks={"juju-info": Network([], [], [])},
+            storages={Storage(name="config"), Storage(name="database")},
+            containers={
+                Container(
+                    name="notary",
+                    can_connect=False,
+                    layers={
+                        "notary": Layer(
+                            {
+                                "summary": "notary layer",
+                                "description": "pebble config layer for notary",
+                                "services": {
+                                    "notary": {
+                                        "override": "replace",
+                                        "summary": "notary",
+                                        "command": "notary -config /etc/notary/config/config.yaml",
+                                        "startup": "enabled",
+                                    }
+                                },
+                            }
+                        )
+                    },
+                )
+            },
+            networks={Network("juju-info", bind_addresses=[])},
             leader=True,
         )
 
         with patch(
-            "gocert.GoCert",
+            "notary.Notary",
             return_value=Mock(
-                **{"is_api_available.return_value": True, "is_initialized.return_value": True},
+                **{"is_api_available.return_value": True, "is_initialized.return_value": True},  # type: ignore
             ),
         ):
-            context.run(Event("config-changed"), state)
+            context.run(context.on.config_changed(), state)
 
-    def test_given_only_config_storage_container_can_connect_network_not_available_gocert_initialized_when_configure_then_no_error_raised(
+    def test_given_only_config_storage_container_can_connect_network_not_available_notary_initialized_when_configure_then_no_error_raised(
         self, context
     ):
         state = State(
-            storage=[Storage(name="config")],
-            containers=[Container(name="gocert", can_connect=True)],
-            networks={"juju-info": Network([], [], [])},
+            storages={Storage(name="config")},
+            containers={
+                Container(
+                    name="notary",
+                    can_connect=True,
+                    layers={
+                        "notary": Layer(
+                            {
+                                "summary": "notary layer",
+                                "description": "pebble config layer for notary",
+                                "services": {
+                                    "notary": {
+                                        "override": "replace",
+                                        "summary": "notary",
+                                        "command": "notary -config /etc/notary/config/config.yaml",
+                                        "startup": "enabled",
+                                    }
+                                },
+                            }
+                        )
+                    },
+                )
+            },
+            networks={Network("juju-info", bind_addresses=[])},
             leader=True,
         )
 
         with patch(
-            "gocert.GoCert",
+            "notary.Notary",
             return_value=Mock(
-                **{"is_api_available.return_value": True, "is_initialized.return_value": True},
+                **{"is_api_available.return_value": True, "is_initialized.return_value": True},  # type: ignore
             ),
         ):
-            context.run(Event("config-changed"), state)
+            context.run(context.on.config_changed(), state)
 
-    def test_given_only_database_storage_container_can_connect_network_not_available_gocert_initialized_when_configure_then_no_error_raised(
+    def test_given_only_database_storage_container_can_connect_network_not_available_notary_initialized_when_configure_then_no_error_raised(
         self, context
     ):
         state = State(
-            storage=[Storage(name="database")],
-            containers=[Container(name="gocert", can_connect=True)],
-            networks={"juju-info": Network([], [], [])},
+            storages={Storage(name="database")},
+            containers={
+                Container(
+                    name="notary",
+                    can_connect=True,
+                    layers={
+                        "notary": Layer(
+                            {
+                                "summary": "notary layer",
+                                "description": "pebble config layer for notary",
+                                "services": {
+                                    "notary": {
+                                        "override": "replace",
+                                        "summary": "notary",
+                                        "command": "notary -config /etc/notary/config/config.yaml",
+                                        "startup": "enabled",
+                                    }
+                                },
+                            }
+                        )
+                    },
+                )
+            },
+            networks={Network("juju-info", bind_addresses=[])},
             leader=True,
         )
 
         with patch(
-            "gocert.GoCert",
+            "notary.Notary",
             return_value=Mock(
-                **{"is_api_available.return_value": True, "is_initialized.return_value": True},
+                **{"is_api_available.return_value": True, "is_initialized.return_value": True},  # type: ignore
             ),
         ):
-            context.run(Event("config-changed"), state)
+            context.run(context.on.config_changed(), state)
 
-    def test_given_storages_available_container_can_connect_network_not_available_gocert_initialized_when_configure_then_config_file_generated(
+    def test_given_storages_available_container_can_connect_network_not_available_notary_initialized_when_configure_then_config_file_generated(
         self, context
     ):
         state = State(
-            storage=[Storage(name="config"), Storage(name="database")],
-            containers=[Container(name="gocert", can_connect=True)],
-            networks={"juju-info": Network([], [], [])},
+            storages={Storage(name="config"), Storage(name="database")},
+            containers={
+                Container(
+                    name="notary",
+                    can_connect=True,
+                    layers={
+                        "notary": Layer(
+                            {
+                                "summary": "notary layer",
+                                "description": "pebble config layer for notary",
+                                "services": {
+                                    "notary": {
+                                        "override": "replace",
+                                        "summary": "notary",
+                                        "command": "notary -config /etc/notary/config/config.yaml",
+                                        "startup": "enabled",
+                                    }
+                                },
+                            }
+                        )
+                    },
+                )
+            },
+            networks={Network("juju-info", bind_addresses=[])},
             leader=True,
         )
 
         with patch(
-            "gocert.GoCert",
+            "notary.Notary",
             return_value=Mock(
-                **{"is_api_available.return_value": True, "is_initialized.return_value": True},
+                **{"is_api_available.return_value": True, "is_initialized.return_value": True},  # type: ignore
             ),
         ):
-            out = context.run(Event("config-changed"), state)
+            out = context.run(context.on.config_changed(), state)
 
-        root = out.containers[0].get_filesystem(context)
-        assert (root / "etc/gocert/config/config.yaml").open("r")
-        assert not (root / "etc/gocert/config/certificate.pem").exists()
-        assert not ((root / "etc/gocert/config/private_key.pem").exists())
+        root = out.get_container("notary").get_filesystem(context)
+        assert (root / "etc/notary/config/config.yaml").open("r")
+        assert not (root / "etc/notary/config/certificate.pem").exists()
+        assert not ((root / "etc/notary/config/private_key.pem").exists())
         assert len(out.secrets) == 1
-        assert out.secrets[0].label == "GoCert Login Details"
+        assert out.get_secret(label="Notary Login Details")
 
-    def test_given_only_config_storage_container_cant_connect_network_available_gocert_initialized_when_configure_then_no_error_raised(
+    def test_given_only_config_storage_container_cant_connect_network_available_notary_initialized_when_configure_then_no_error_raised(
         self, context
     ):
         state = State(
-            storage=[Storage(name="config")],
-            containers=[Container(name="gocert", can_connect=False)],
-            networks={"juju-info": Network.default()},
+            storages={Storage(name="config")},
+            containers={
+                Container(
+                    name="notary",
+                    can_connect=False,
+                    layers={
+                        "notary": Layer(
+                            {
+                                "summary": "notary layer",
+                                "description": "pebble config layer for notary",
+                                "services": {
+                                    "notary": {
+                                        "override": "replace",
+                                        "summary": "notary",
+                                        "command": "notary -config /etc/notary/config/config.yaml",
+                                        "startup": "enabled",
+                                    }
+                                },
+                            }
+                        )
+                    },
+                )
+            },
+            networks={Network("juju-info")},
             leader=True,
         )
 
         with patch(
-            "gocert.GoCert",
+            "notary.Notary",
             return_value=Mock(
-                **{"is_api_available.return_value": True, "is_initialized.return_value": True},
+                **{"is_api_available.return_value": True, "is_initialized.return_value": True},  # type: ignore
             ),
         ):
-            context.run(Event("config-changed"), state)
+            context.run(context.on.config_changed(), state)
 
-    def test_given_only_database_storage_container_cant_connect_network_available_gocert_initialized_when_configure_then_no_error_raised(
+    def test_given_only_database_storage_container_cant_connect_network_available_notary_initialized_when_configure_then_no_error_raised(
         self, context
     ):
         state = State(
-            storage=[Storage(name="database")],
-            containers=[Container(name="gocert", can_connect=False)],
-            networks={"juju-info": Network.default()},
+            storages={Storage(name="database")},
+            containers={
+                Container(
+                    name="notary",
+                    can_connect=False,
+                    layers={
+                        "notary": Layer(
+                            {
+                                "summary": "notary layer",
+                                "description": "pebble config layer for notary",
+                                "services": {
+                                    "notary": {
+                                        "override": "replace",
+                                        "summary": "notary",
+                                        "command": "notary -config /etc/notary/config/config.yaml",
+                                        "startup": "enabled",
+                                    }
+                                },
+                            }
+                        )
+                    },
+                )
+            },
+            networks={Network("juju-info")},
             leader=True,
         )
 
         with patch(
-            "gocert.GoCert",
+            "notary.Notary",
             return_value=Mock(
-                **{"is_api_available.return_value": True, "is_initialized.return_value": True},
+                **{"is_api_available.return_value": True, "is_initialized.return_value": True},  # type: ignore
             ),
         ):
-            context.run(Event("config-changed"), state)
+            context.run(context.on.config_changed(), state)
 
-    def test_given_storages_available_container_cant_connect_network_available_gocert_initialized_when_configure_then_no_error_raised(
+    def test_given_storages_available_container_cant_connect_network_available_notary_initialized_when_configure_then_no_error_raised(
         self, context
     ):
         state = State(
-            storage=[Storage(name="config"), Storage(name="database")],
-            containers=[Container(name="gocert", can_connect=False)],
-            networks={"juju-info": Network.default()},
+            storages={Storage(name="config"), Storage(name="database")},
+            containers={
+                Container(
+                    name="notary",
+                    can_connect=False,
+                    layers={
+                        "notary": Layer(
+                            {
+                                "summary": "notary layer",
+                                "description": "pebble config layer for notary",
+                                "services": {
+                                    "notary": {
+                                        "override": "replace",
+                                        "summary": "notary",
+                                        "command": "notary -config /etc/notary/config/config.yaml",
+                                        "startup": "enabled",
+                                    }
+                                },
+                            }
+                        )
+                    },
+                )
+            },
+            networks={Network("juju-info")},
             leader=True,
         )
 
         with patch(
-            "gocert.GoCert",
+            "notary.Notary",
             return_value=Mock(
-                **{"is_api_available.return_value": True, "is_initialized.return_value": True},
+                **{"is_api_available.return_value": True, "is_initialized.return_value": True},  # type: ignore
             ),
         ):
-            context.run(Event("config-changed"), state)
+            context.run(context.on.config_changed(), state)
 
-    def test_given_only_config_storage_container_can_connect_network_available_gocert_initialized_when_configure_then_no_error_raised(
+    def test_given_only_config_storage_container_can_connect_network_available_notary_initialized_when_configure_then_no_error_raised(
         self, context
     ):
         state = State(
-            storage=[Storage(name="config")],
-            containers=[Container(name="gocert", can_connect=True)],
-            networks={"juju-info": Network.default()},
+            storages={Storage(name="config")},
+            containers={
+                Container(
+                    name="notary",
+                    can_connect=True,
+                    layers={
+                        "notary": Layer(
+                            {
+                                "summary": "notary layer",
+                                "description": "pebble config layer for notary",
+                                "services": {
+                                    "notary": {
+                                        "override": "replace",
+                                        "summary": "notary",
+                                        "command": "notary -config /etc/notary/config/config.yaml",
+                                        "startup": "enabled",
+                                    }
+                                },
+                            }
+                        )
+                    },
+                )
+            },
+            networks={Network("juju-info")},
             leader=True,
         )
 
         with patch(
-            "gocert.GoCert",
+            "notary.Notary",
             return_value=Mock(
-                **{"is_api_available.return_value": True, "is_initialized.return_value": True},
+                **{"is_api_available.return_value": True, "is_initialized.return_value": True},  # type: ignore
             ),
         ):
-            context.run(Event("config-changed"), state)
+            context.run(context.on.config_changed(), state)
 
-    def test_given_only_database_storage_container_can_connect_network_available_gocert_initialized_when_configure_then_no_error_raised(
+    def test_given_only_database_storage_container_can_connect_network_available_notary_initialized_when_configure_then_no_error_raised(
         self, context
     ):
         state = State(
-            storage=[Storage(name="database")],
-            containers=[Container(name="gocert", can_connect=True)],
-            networks={"juju-info": Network.default()},
+            storages={Storage(name="database")},
+            containers={
+                Container(
+                    name="notary",
+                    can_connect=True,
+                    layers={
+                        "notary": Layer(
+                            {
+                                "summary": "notary layer",
+                                "description": "pebble config layer for notary",
+                                "services": {
+                                    "notary": {
+                                        "override": "replace",
+                                        "summary": "notary",
+                                        "command": "notary -config /etc/notary/config/config.yaml",
+                                        "startup": "enabled",
+                                    }
+                                },
+                            }
+                        )
+                    },
+                )
+            },
+            networks={Network("juju-info")},
             leader=True,
         )
 
         with patch(
-            "gocert.GoCert",
+            "notary.Notary",
             return_value=Mock(
-                **{"is_api_available.return_value": True, "is_initialized.return_value": True},
+                **{"is_api_available.return_value": True, "is_initialized.return_value": True},  # type: ignore
             ),
         ):
-            context.run(Event("config-changed"), state)
+            context.run(context.on.config_changed(), state)
 
-    def test_given_storages_available_container_can_connect_network_available_gocert_initialized_when_configure_then_status_is_active(
+    def test_given_storages_available_container_can_connect_network_available_notary_initialized_when_configure_then_status_is_active(
         self, context
     ):
         state = State(
-            storage=[Storage(name="config"), Storage(name="database")],
-            containers=[Container(name="gocert", can_connect=True)],
-            networks={"juju-info": Network.default()},
+            storages={Storage(name="config"), Storage(name="database")},
+            containers={
+                Container(
+                    name="notary",
+                    can_connect=True,
+                    layers={
+                        "notary": Layer(
+                            {
+                                "summary": "notary layer",
+                                "description": "pebble config layer for notary",
+                                "services": {
+                                    "notary": {
+                                        "override": "replace",
+                                        "summary": "notary",
+                                        "command": "notary -config /etc/notary/config/config.yaml",
+                                        "startup": "enabled",
+                                    }
+                                },
+                            }
+                        )
+                    },
+                )
+            },
+            networks={Network("juju-info")},
             leader=True,
         )
 
         with patch(
-            "gocert.GoCert",
+            "notary.Notary",
             return_value=Mock(
-                **{"is_api_available.return_value": True, "is_initialized.return_value": True},
+                **{"is_api_available.return_value": True, "is_initialized.return_value": True},  # type: ignore
             ),
         ):
-            context.run(Event("config-changed"), state)
+            context.run(context.on.config_changed(), state)
 
     # Unit Status Tests
-    def test_given_only_config_storage_container_cant_connect_network_not_available_gocert_not_running_when_collect_status_then_status_is_waiting(
+    def test_given_only_config_storage_container_cant_connect_network_not_available_notary_not_running_when_collect_status_then_status_is_waiting(
         self, context
     ):
         state = State(
-            storage=[Storage(name="config")],
-            containers=[Container(name="gocert", can_connect=False)],
-            networks={"juju-info": Network([], [], [])},
+            storages={Storage(name="config")},
+            containers={
+                Container(
+                    name="notary",
+                    can_connect=False,
+                    layers={
+                        "notary": Layer(
+                            {
+                                "summary": "notary layer",
+                                "description": "pebble config layer for notary",
+                                "services": {
+                                    "notary": {
+                                        "override": "replace",
+                                        "summary": "notary",
+                                        "command": "notary -config /etc/notary/config/config.yaml",
+                                        "startup": "enabled",
+                                    }
+                                },
+                            }
+                        )
+                    },
+                )
+            },
+            networks={Network("juju-info", bind_addresses=[])},
             leader=True,
         )
 
         with patch(
-            "gocert.GoCert",
+            "notary.Notary",
             return_value=Mock(
-                **{"is_api_available.return_value": False, "is_initialized.return_value": False},
+                **{"is_api_available.return_value": False, "is_initialized.return_value": False},  # type: ignore
             ),
         ):
-            out = context.run(Event("collect-unit-status"), state)
+            out = context.run(context.on.collect_unit_status(), state)
 
         assert out.unit_status == ops.WaitingStatus("container not yet connectable")
 
-    def test_given_only_database_storage_container_cant_connect_network_not_available_gocert_not_running_when_collect_status_then_status_is_waiting(
+    def test_given_only_database_storage_container_cant_connect_network_not_available_notary_not_running_when_collect_status_then_status_is_waiting(
         self, context
     ):
         state = State(
-            storage=[Storage(name="database")],
-            containers=[Container(name="gocert", can_connect=False)],
-            networks={"juju-info": Network([], [], [])},
+            storages={Storage(name="database")},
+            containers={
+                Container(
+                    name="notary",
+                    can_connect=False,
+                    layers={
+                        "notary": Layer(
+                            {
+                                "summary": "notary layer",
+                                "description": "pebble config layer for notary",
+                                "services": {
+                                    "notary": {
+                                        "override": "replace",
+                                        "summary": "notary",
+                                        "command": "notary -config /etc/notary/config/config.yaml",
+                                        "startup": "enabled",
+                                    }
+                                },
+                            }
+                        )
+                    },
+                )
+            },
+            networks={Network("juju-info", bind_addresses=[])},
             leader=True,
         )
 
         with patch(
-            "gocert.GoCert",
+            "notary.Notary",
             return_value=Mock(
-                **{"is_api_available.return_value": False, "is_initialized.return_value": False},
+                **{"is_api_available.return_value": False, "is_initialized.return_value": False},  # type: ignore
             ),
         ):
-            out = context.run(Event("collect-unit-status"), state)
+            out = context.run(context.on.collect_unit_status(), state)
         assert out.unit_status == ops.WaitingStatus("container not yet connectable")
 
-    def test_given_storages_available_container_cant_connect_network_not_available_gocert_not_running_when_collect_status_then_status_is_waiting(
+    def test_given_storages_available_container_cant_connect_network_not_available_notary_not_running_when_collect_status_then_status_is_waiting(
         self, context
     ):
         state = State(
-            storage=[Storage(name="config"), Storage(name="database")],
-            containers=[Container(name="gocert", can_connect=False)],
-            networks={"juju-info": Network([], [], [])},
+            storages={Storage(name="config"), Storage(name="database")},
+            containers={
+                Container(
+                    name="notary",
+                    can_connect=False,
+                    layers={
+                        "notary": Layer(
+                            {
+                                "summary": "notary layer",
+                                "description": "pebble config layer for notary",
+                                "services": {
+                                    "notary": {
+                                        "override": "replace",
+                                        "summary": "notary",
+                                        "command": "notary -config /etc/notary/config/config.yaml",
+                                        "startup": "enabled",
+                                    }
+                                },
+                            }
+                        )
+                    },
+                )
+            },
+            networks={Network("juju-info", bind_addresses=[])},
             leader=True,
         )
 
         with patch(
-            "gocert.GoCert",
+            "notary.Notary",
             return_value=Mock(
-                **{"is_api_available.return_value": False, "is_initialized.return_value": False},
+                **{"is_api_available.return_value": False, "is_initialized.return_value": False},  # type: ignore
             ),
         ):
-            out = context.run(Event("collect-unit-status"), state)
+            out = context.run(context.on.collect_unit_status(), state)
 
         assert out.unit_status == ops.WaitingStatus("container not yet connectable")
 
-    def test_given_only_config_storage_container_can_connect_network_not_available_gocert_not_running_when_collect_status_then_status_is_waiting(
+    def test_given_only_config_storage_container_can_connect_network_not_available_notary_not_running_when_collect_status_then_status_is_waiting(
         self, context
     ):
         state = State(
-            storage=[Storage(name="config")],
-            containers=[Container(name="gocert", can_connect=True)],
-            networks={"juju-info": Network([], [], [])},
+            storages={Storage(name="config")},
+            containers={
+                Container(
+                    name="notary",
+                    can_connect=True,
+                    layers={
+                        "notary": Layer(
+                            {
+                                "summary": "notary layer",
+                                "description": "pebble config layer for notary",
+                                "services": {
+                                    "notary": {
+                                        "override": "replace",
+                                        "summary": "notary",
+                                        "command": "notary -config /etc/notary/config/config.yaml",
+                                        "startup": "enabled",
+                                    }
+                                },
+                            }
+                        )
+                    },
+                )
+            },
+            networks={Network("juju-info", bind_addresses=[])},
             leader=True,
         )
 
         with patch(
-            "gocert.GoCert",
+            "notary.Notary",
             return_value=Mock(
-                **{"is_api_available.return_value": False, "is_initialized.return_value": False},
+                **{"is_api_available.return_value": False, "is_initialized.return_value": False},  # type: ignore
             ),
         ):
-            out = context.run(Event("collect-unit-status"), state)
+            out = context.run(context.on.collect_unit_status(), state)
         assert out.unit_status == ops.WaitingStatus("storages not yet available")
 
-    def test_given_only_database_storage_container_can_connect_network_not_available_gocert_not_running_when_collect_status_then_status_is_waiting(
+    def test_given_only_database_storage_container_can_connect_network_not_available_notary_not_running_when_collect_status_then_status_is_waiting(
         self, context
     ):
         state = State(
-            storage=[Storage(name="database")],
-            containers=[Container(name="gocert", can_connect=True)],
-            networks={"juju-info": Network([], [], [])},
+            storages={Storage(name="database")},
+            containers={
+                Container(
+                    name="notary",
+                    can_connect=True,
+                    layers={
+                        "notary": Layer(
+                            {
+                                "summary": "notary layer",
+                                "description": "pebble config layer for notary",
+                                "services": {
+                                    "notary": {
+                                        "override": "replace",
+                                        "summary": "notary",
+                                        "command": "notary -config /etc/notary/config/config.yaml",
+                                        "startup": "enabled",
+                                    }
+                                },
+                            }
+                        )
+                    },
+                )
+            },
+            networks={Network("juju-info", bind_addresses=[])},
             leader=True,
         )
 
         with patch(
-            "gocert.GoCert",
+            "notary.Notary",
             return_value=Mock(
-                **{"is_api_available.return_value": False, "is_initialized.return_value": False},
+                **{"is_api_available.return_value": False, "is_initialized.return_value": False},  # type: ignore
             ),
         ):
-            out = context.run(Event("collect-unit-status"), state)
+            out = context.run(context.on.collect_unit_status(), state)
         assert out.unit_status == ops.WaitingStatus("storages not yet available")
 
-    def test_given_storages_available_container_can_connect_network_not_available_gocert_not_running_when_collect_status_then_status_is_waiting(
+    def test_given_storages_available_container_can_connect_network_not_available_notary_not_running_when_collect_status_then_status_is_waiting(
         self, context
     ):
         state = State(
-            storage=[Storage(name="config"), Storage(name="database")],
-            containers=[Container(name="gocert", can_connect=True)],
-            networks={"juju-info": Network([], [], [])},
+            storages={Storage(name="config"), Storage(name="database")},
+            containers={
+                Container(
+                    name="notary",
+                    can_connect=True,
+                    layers={
+                        "notary": Layer(
+                            {
+                                "summary": "notary layer",
+                                "description": "pebble config layer for notary",
+                                "services": {
+                                    "notary": {
+                                        "override": "replace",
+                                        "summary": "notary",
+                                        "command": "notary -config /etc/notary/config/config.yaml",
+                                        "startup": "enabled",
+                                    }
+                                },
+                            }
+                        )
+                    },
+                )
+            },
+            networks={Network("juju-info", bind_addresses=[])},
             leader=True,
         )
 
         with patch(
-            "gocert.GoCert",
+            "notary.Notary",
             return_value=Mock(
-                **{"is_api_available.return_value": False, "is_initialized.return_value": False},
+                **{"is_api_available.return_value": False, "is_initialized.return_value": False},  # type: ignore
             ),
         ):
-            out = context.run(Event("collect-unit-status"), state)
+            out = context.run(context.on.collect_unit_status(), state)
         assert out.unit_status == ops.WaitingStatus("certificates not yet created")
 
-    def test_given_only_config_storage_container_cant_connect_network_available_gocert_not_running_when_collect_status_then_status_is_waiting(
+    def test_given_only_config_storage_container_cant_connect_network_available_notary_not_running_when_collect_status_then_status_is_waiting(
         self, context
     ):
         state = State(
-            storage=[Storage(name="config")],
-            containers=[Container(name="gocert", can_connect=False)],
-            networks={"juju-info": Network.default()},
+            storages={Storage(name="config")},
+            containers={
+                Container(
+                    name="notary",
+                    can_connect=False,
+                    layers={
+                        "notary": Layer(
+                            {
+                                "summary": "notary layer",
+                                "description": "pebble config layer for notary",
+                                "services": {
+                                    "notary": {
+                                        "override": "replace",
+                                        "summary": "notary",
+                                        "command": "notary -config /etc/notary/config/config.yaml",
+                                        "startup": "enabled",
+                                    }
+                                },
+                            }
+                        )
+                    },
+                )
+            },
+            networks={Network("juju-info")},
             leader=True,
         )
 
         with patch(
-            "gocert.GoCert",
+            "notary.Notary",
             return_value=Mock(
-                **{"is_api_available.return_value": False, "is_initialized.return_value": False},
+                **{"is_api_available.return_value": False, "is_initialized.return_value": False},  # type: ignore
             ),
         ):
-            out = context.run(Event("collect-unit-status"), state)
+            out = context.run(context.on.collect_unit_status(), state)
         assert out.unit_status == ops.WaitingStatus("container not yet connectable")
 
-    def test_given_only_database_storage_container_cant_connect_network_available_gocert_not_running_when_collect_status_then_status_is_waiting(
+    def test_given_only_database_storage_container_cant_connect_network_available_notary_not_running_when_collect_status_then_status_is_waiting(
         self, context
     ):
         state = State(
-            storage=[Storage(name="database")],
-            containers=[Container(name="gocert", can_connect=False)],
-            networks={"juju-info": Network.default()},
+            storages={Storage(name="database")},
+            containers={
+                Container(
+                    name="notary",
+                    can_connect=False,
+                    layers={
+                        "notary": Layer(
+                            {
+                                "summary": "notary layer",
+                                "description": "pebble config layer for notary",
+                                "services": {
+                                    "notary": {
+                                        "override": "replace",
+                                        "summary": "notary",
+                                        "command": "notary -config /etc/notary/config/config.yaml",
+                                        "startup": "enabled",
+                                    }
+                                },
+                            }
+                        )
+                    },
+                )
+            },
+            networks={Network("juju-info")},
             leader=True,
         )
 
         with patch(
-            "gocert.GoCert",
+            "notary.Notary",
             return_value=Mock(
-                **{"is_api_available.return_value": False, "is_initialized.return_value": False},
+                **{"is_api_available.return_value": False, "is_initialized.return_value": False},  # type: ignore
             ),
         ):
-            out = context.run(Event("collect-unit-status"), state)
+            out = context.run(context.on.collect_unit_status(), state)
         assert out.unit_status == ops.WaitingStatus("container not yet connectable")
 
-    def test_given_storages_available_container_cant_connect_network_available_gocert_not_running_when_collect_status_then_status_is_waiting(
+    def test_given_storages_available_container_cant_connect_network_available_notary_not_running_when_collect_status_then_status_is_waiting(
         self, context
     ):
         state = State(
-            storage=[Storage(name="config"), Storage(name="database")],
-            containers=[Container(name="gocert", can_connect=False)],
-            networks={"juju-info": Network.default()},
+            storages={Storage(name="config"), Storage(name="database")},
+            containers={
+                Container(
+                    name="notary",
+                    can_connect=False,
+                    layers={
+                        "notary": Layer(
+                            {
+                                "summary": "notary layer",
+                                "description": "pebble config layer for notary",
+                                "services": {
+                                    "notary": {
+                                        "override": "replace",
+                                        "summary": "notary",
+                                        "command": "notary -config /etc/notary/config/config.yaml",
+                                        "startup": "enabled",
+                                    }
+                                },
+                            }
+                        )
+                    },
+                )
+            },
+            networks={Network("juju-info")},
             leader=True,
         )
 
         with patch(
-            "gocert.GoCert",
+            "notary.Notary",
             return_value=Mock(
-                **{"is_api_available.return_value": False, "is_initialized.return_value": False},
+                **{"is_api_available.return_value": False, "is_initialized.return_value": False},  # type: ignore
             ),
         ):
-            out = context.run(Event("collect-unit-status"), state)
+            out = context.run(context.on.collect_unit_status(), state)
         assert out.unit_status == ops.WaitingStatus("container not yet connectable")
 
-    def test_given_only_config_storage_container_can_connect_network_available_gocert_not_running_when_collect_status_then_status_is_waiting(
+    def test_given_only_config_storage_container_can_connect_network_available_notary_not_running_when_collect_status_then_status_is_waiting(
         self, context
     ):
         state = State(
-            storage=[Storage(name="config")],
-            containers=[Container(name="gocert", can_connect=True)],
-            networks={"juju-info": Network.default()},
+            storages={Storage(name="config")},
+            containers={
+                Container(
+                    name="notary",
+                    can_connect=True,
+                    layers={
+                        "notary": Layer(
+                            {
+                                "summary": "notary layer",
+                                "description": "pebble config layer for notary",
+                                "services": {
+                                    "notary": {
+                                        "override": "replace",
+                                        "summary": "notary",
+                                        "command": "notary -config /etc/notary/config/config.yaml",
+                                        "startup": "enabled",
+                                    }
+                                },
+                            }
+                        )
+                    },
+                )
+            },
+            networks={Network("juju-info")},
             leader=True,
         )
 
         with patch(
-            "gocert.GoCert",
+            "notary.Notary",
             return_value=Mock(
-                **{"is_api_available.return_value": False, "is_initialized.return_value": False},
+                **{"is_api_available.return_value": False, "is_initialized.return_value": False},  # type: ignore
             ),
         ):
-            out = context.run(Event("collect-unit-status"), state)
+            out = context.run(context.on.collect_unit_status(), state)
         assert out.unit_status == ops.WaitingStatus("storages not yet available")
 
-    def test_given_only_database_storage_container_can_connect_network_available_gocert_not_running_when_collect_status_then_status_is_waiting(
+    def test_given_only_database_storage_container_can_connect_network_available_notary_not_running_when_collect_status_then_status_is_waiting(
         self, context
     ):
         state = State(
-            storage=[Storage(name="database")],
-            containers=[Container(name="gocert", can_connect=True)],
-            networks={"juju-info": Network.default()},
+            storages={Storage(name="database")},
+            containers={
+                Container(
+                    name="notary",
+                    can_connect=True,
+                    layers={
+                        "notary": Layer(
+                            {
+                                "summary": "notary layer",
+                                "description": "pebble config layer for notary",
+                                "services": {
+                                    "notary": {
+                                        "override": "replace",
+                                        "summary": "notary",
+                                        "command": "notary -config /etc/notary/config/config.yaml",
+                                        "startup": "enabled",
+                                    }
+                                },
+                            }
+                        )
+                    },
+                )
+            },
+            networks={Network("juju-info")},
             leader=True,
         )
 
         with patch(
-            "gocert.GoCert",
+            "notary.Notary",
             return_value=Mock(
-                **{"is_api_available.return_value": False, "is_initialized.return_value": False},
+                **{"is_api_available.return_value": False, "is_initialized.return_value": False},  # type: ignore
             ),
         ):
-            out = context.run(Event("collect-unit-status"), state)
+            out = context.run(context.on.collect_unit_status(), state)
         assert out.unit_status == ops.WaitingStatus("storages not yet available")
 
-    def test_given_storages_available_container_can_connect_network_available_gocert_not_running_when_collect_status_then_status_is_waiting(
+    def test_given_storages_available_container_can_connect_network_available_notary_not_running_when_collect_status_then_status_is_waiting(
         self, context
     ):
         state = State(
-            storage=[Storage(name="config"), Storage(name="database")],
-            containers=[Container(name="gocert", can_connect=True)],
-            networks={"juju-info": Network.default()},
+            storages={Storage(name="config"), Storage(name="database")},
+            containers={
+                Container(
+                    name="notary",
+                    can_connect=True,
+                    layers={
+                        "notary": Layer(
+                            {
+                                "summary": "notary layer",
+                                "description": "pebble config layer for notary",
+                                "services": {
+                                    "notary": {
+                                        "override": "replace",
+                                        "summary": "notary",
+                                        "command": "notary -config /etc/notary/config/config.yaml",
+                                        "startup": "enabled",
+                                    }
+                                },
+                            }
+                        )
+                    },
+                )
+            },
+            networks={Network("juju-info")},
             leader=True,
         )
 
         with patch(
-            "gocert.GoCert",
+            "notary.Notary",
             return_value=Mock(
-                **{"is_api_available.return_value": False, "is_initialized.return_value": False},
+                **{"is_api_available.return_value": False, "is_initialized.return_value": False},  # type: ignore
             ),
         ):
-            out = context.run(Event("collect-unit-status"), state)
+            out = context.run(context.on.collect_unit_status(), state)
         assert out.unit_status == ops.WaitingStatus("certificates not yet created")
 
-    def test_given_only_config_storage_container_cant_connect_network_not_available_gocert_running_when_collect_status_then_status_is_waiting(
+    def test_given_only_config_storage_container_cant_connect_network_not_available_notary_running_when_collect_status_then_status_is_waiting(
         self, context
     ):
         state = State(
-            storage=[Storage(name="config")],
-            containers=[Container(name="gocert", can_connect=False)],
-            networks={"juju-info": Network([], [], [])},
+            storages={Storage(name="config")},
+            containers={
+                Container(
+                    name="notary",
+                    can_connect=False,
+                    layers={
+                        "notary": Layer(
+                            {
+                                "summary": "notary layer",
+                                "description": "pebble config layer for notary",
+                                "services": {
+                                    "notary": {
+                                        "override": "replace",
+                                        "summary": "notary",
+                                        "command": "notary -config /etc/notary/config/config.yaml",
+                                        "startup": "enabled",
+                                    }
+                                },
+                            }
+                        )
+                    },
+                )
+            },
+            networks={Network("juju-info", bind_addresses=[])},
             leader=True,
         )
 
         with patch(
-            "gocert.GoCert",
+            "notary.Notary",
             return_value=Mock(
-                **{"is_api_available.return_value": True, "is_initialized.return_value": False},
+                **{"is_api_available.return_value": True, "is_initialized.return_value": False},  # type: ignore
             ),
         ):
-            out = context.run(Event("collect-unit-status"), state)
+            out = context.run(context.on.collect_unit_status(), state)
         assert out.unit_status == ops.WaitingStatus("container not yet connectable")
 
-    def test_given_only_database_storage_container_cant_connect_network_not_available_gocert_running_when_collect_status_then_status_is_waiting(
+    def test_given_only_database_storage_container_cant_connect_network_not_available_notary_running_when_collect_status_then_status_is_waiting(
         self, context
     ):
         state = State(
-            storage=[Storage(name="database")],
-            containers=[Container(name="gocert", can_connect=False)],
-            networks={"juju-info": Network([], [], [])},
+            storages={Storage(name="database")},
+            containers={
+                Container(
+                    name="notary",
+                    can_connect=False,
+                    layers={
+                        "notary": Layer(
+                            {
+                                "summary": "notary layer",
+                                "description": "pebble config layer for notary",
+                                "services": {
+                                    "notary": {
+                                        "override": "replace",
+                                        "summary": "notary",
+                                        "command": "notary -config /etc/notary/config/config.yaml",
+                                        "startup": "enabled",
+                                    }
+                                },
+                            }
+                        )
+                    },
+                )
+            },
+            networks={Network("juju-info", bind_addresses=[])},
             leader=True,
         )
 
         with patch(
-            "gocert.GoCert",
+            "notary.Notary",
             return_value=Mock(
-                **{"is_api_available.return_value": True, "is_initialized.return_value": False},
+                **{"is_api_available.return_value": True, "is_initialized.return_value": False},  # type: ignore
             ),
         ):
-            out = context.run(Event("collect-unit-status"), state)
+            out = context.run(context.on.collect_unit_status(), state)
         assert out.unit_status == ops.WaitingStatus("container not yet connectable")
 
-    def test_given_storages_available_container_cant_connect_network_not_available_gocert_running_when_collect_status_then_status_is_waiting(
+    def test_given_storages_available_container_cant_connect_network_not_available_notary_running_when_collect_status_then_status_is_waiting(
         self, context
     ):
         state = State(
-            storage=[Storage(name="config"), Storage(name="database")],
-            containers=[Container(name="gocert", can_connect=False)],
-            networks={"juju-info": Network([], [], [])},
+            storages={Storage(name="config"), Storage(name="database")},
+            containers={
+                Container(
+                    name="notary",
+                    can_connect=False,
+                    layers={
+                        "notary": Layer(
+                            {
+                                "summary": "notary layer",
+                                "description": "pebble config layer for notary",
+                                "services": {
+                                    "notary": {
+                                        "override": "replace",
+                                        "summary": "notary",
+                                        "command": "notary -config /etc/notary/config/config.yaml",
+                                        "startup": "enabled",
+                                    }
+                                },
+                            }
+                        )
+                    },
+                )
+            },
+            networks={Network("juju-info", bind_addresses=[])},
             leader=True,
         )
 
         with patch(
-            "gocert.GoCert",
+            "notary.Notary",
             return_value=Mock(
-                **{"is_api_available.return_value": True, "is_initialized.return_value": False},
+                **{"is_api_available.return_value": True, "is_initialized.return_value": False},  # type: ignore
             ),
         ):
-            out = context.run(Event("collect-unit-status"), state)
+            out = context.run(context.on.collect_unit_status(), state)
         assert out.unit_status == ops.WaitingStatus("container not yet connectable")
 
-    def test_given_only_config_storage_container_can_connect_network_not_available_gocert_running_when_collect_status_then_status_is_waiting(
+    def test_given_only_config_storage_container_can_connect_network_not_available_notary_running_when_collect_status_then_status_is_waiting(
         self, context
     ):
         state = State(
-            storage=[Storage(name="config")],
-            containers=[Container(name="gocert", can_connect=True)],
-            networks={"juju-info": Network([], [], [])},
+            storages={Storage(name="config")},
+            containers={
+                Container(
+                    name="notary",
+                    can_connect=True,
+                    layers={
+                        "notary": Layer(
+                            {
+                                "summary": "notary layer",
+                                "description": "pebble config layer for notary",
+                                "services": {
+                                    "notary": {
+                                        "override": "replace",
+                                        "summary": "notary",
+                                        "command": "notary -config /etc/notary/config/config.yaml",
+                                        "startup": "enabled",
+                                    }
+                                },
+                            }
+                        )
+                    },
+                )
+            },
+            networks={Network("juju-info", bind_addresses=[])},
             leader=True,
         )
 
         with patch(
-            "gocert.GoCert",
+            "notary.Notary",
             return_value=Mock(
-                **{"is_api_available.return_value": True, "is_initialized.return_value": False},
+                **{"is_api_available.return_value": True, "is_initialized.return_value": False},  # type: ignore
             ),
         ):
-            out = context.run(Event("collect-unit-status"), state)
+            out = context.run(context.on.collect_unit_status(), state)
         assert out.unit_status == ops.WaitingStatus("storages not yet available")
 
-    def test_given_only_database_storage_container_can_connect_network_not_available_gocert_running_when_collect_status_then_status_is_waiting(
+    def test_given_only_database_storage_container_can_connect_network_not_available_notary_running_when_collect_status_then_status_is_waiting(
         self, context
     ):
         state = State(
-            storage=[Storage(name="database")],
-            containers=[Container(name="gocert", can_connect=True)],
-            networks={"juju-info": Network([], [], [])},
+            storages={Storage(name="database")},
+            containers={
+                Container(
+                    name="notary",
+                    can_connect=True,
+                    layers={
+                        "notary": Layer(
+                            {
+                                "summary": "notary layer",
+                                "description": "pebble config layer for notary",
+                                "services": {
+                                    "notary": {
+                                        "override": "replace",
+                                        "summary": "notary",
+                                        "command": "notary -config /etc/notary/config/config.yaml",
+                                        "startup": "enabled",
+                                    }
+                                },
+                            }
+                        )
+                    },
+                )
+            },
+            networks={Network("juju-info", bind_addresses=[])},
             leader=True,
         )
 
         with patch(
-            "gocert.GoCert",
+            "notary.Notary",
             return_value=Mock(
-                **{"is_api_available.return_value": True, "is_initialized.return_value": False},
+                **{"is_api_available.return_value": True, "is_initialized.return_value": False},  # type: ignore
             ),
         ):
-            out = context.run(Event("collect-unit-status"), state)
+            out = context.run(context.on.collect_unit_status(), state)
         assert out.unit_status == ops.WaitingStatus("storages not yet available")
 
-    def test_given_storages_available_container_can_connect_network_not_available_gocert_running_when_collect_status_then_status_is_waiting(
+    def test_given_storages_available_container_can_connect_network_not_available_notary_running_when_collect_status_then_status_is_waiting(
         self, context
     ):
         state = State(
-            storage=[Storage(name="config"), Storage(name="database")],
-            containers=[Container(name="gocert", can_connect=True)],
-            networks={"juju-info": Network([], [], [])},
+            storages={Storage(name="config"), Storage(name="database")},
+            containers={
+                Container(
+                    name="notary",
+                    can_connect=True,
+                    layers={
+                        "notary": Layer(
+                            {
+                                "summary": "notary layer",
+                                "description": "pebble config layer for notary",
+                                "services": {
+                                    "notary": {
+                                        "override": "replace",
+                                        "summary": "notary",
+                                        "command": "notary -config /etc/notary/config/config.yaml",
+                                        "startup": "enabled",
+                                    }
+                                },
+                            }
+                        )
+                    },
+                )
+            },
+            networks={Network("juju-info", bind_addresses=[])},
             leader=True,
         )
 
         with patch(
-            "gocert.GoCert",
+            "notary.Notary",
             return_value=Mock(
-                **{"is_api_available.return_value": True, "is_initialized.return_value": False},
+                **{"is_api_available.return_value": True, "is_initialized.return_value": False},  # type: ignore
             ),
         ):
-            out = context.run(Event("collect-unit-status"), state)
+            out = context.run(context.on.collect_unit_status(), state)
         assert out.unit_status == ops.WaitingStatus("certificates not yet created")
 
-    def test_given_only_config_storage_container_cant_connect_network_available_gocert_running_when_collect_status_then_status_is_waiting(
+    def test_given_only_config_storage_container_cant_connect_network_available_notary_running_when_collect_status_then_status_is_waiting(
         self, context
     ):
         state = State(
-            storage=[Storage(name="config")],
-            containers=[Container(name="gocert", can_connect=False)],
-            networks={"juju-info": Network.default()},
+            storages={Storage(name="config")},
+            containers={
+                Container(
+                    name="notary",
+                    can_connect=False,
+                    layers={
+                        "notary": Layer(
+                            {
+                                "summary": "notary layer",
+                                "description": "pebble config layer for notary",
+                                "services": {
+                                    "notary": {
+                                        "override": "replace",
+                                        "summary": "notary",
+                                        "command": "notary -config /etc/notary/config/config.yaml",
+                                        "startup": "enabled",
+                                    }
+                                },
+                            }
+                        )
+                    },
+                )
+            },
+            networks={Network("juju-info")},
             leader=True,
         )
 
         with patch(
-            "gocert.GoCert",
+            "notary.Notary",
             return_value=Mock(
-                **{"is_api_available.return_value": True, "is_initialized.return_value": False},
+                **{"is_api_available.return_value": True, "is_initialized.return_value": False},  # type: ignore
             ),
         ):
-            out = context.run(Event("collect-unit-status"), state)
+            out = context.run(context.on.collect_unit_status(), state)
         assert out.unit_status == ops.WaitingStatus("container not yet connectable")
 
-    def test_given_only_database_storage_container_cant_connect_network_available_gocert_running_when_collect_status_then_status_is_waiting(
+    def test_given_only_database_storage_container_cant_connect_network_available_notary_running_when_collect_status_then_status_is_waiting(
         self, context
     ):
         state = State(
-            storage=[Storage(name="database")],
-            containers=[Container(name="gocert", can_connect=False)],
-            networks={"juju-info": Network.default()},
+            storages={Storage(name="database")},
+            containers={
+                Container(
+                    name="notary",
+                    can_connect=False,
+                    layers={
+                        "notary": Layer(
+                            {
+                                "summary": "notary layer",
+                                "description": "pebble config layer for notary",
+                                "services": {
+                                    "notary": {
+                                        "override": "replace",
+                                        "summary": "notary",
+                                        "command": "notary -config /etc/notary/config/config.yaml",
+                                        "startup": "enabled",
+                                    }
+                                },
+                            }
+                        )
+                    },
+                )
+            },
+            networks={Network("juju-info")},
             leader=True,
         )
 
         with patch(
-            "gocert.GoCert",
+            "notary.Notary",
             return_value=Mock(
-                **{"is_api_available.return_value": True, "is_initialized.return_value": False},
+                **{"is_api_available.return_value": True, "is_initialized.return_value": False},  # type: ignore
             ),
         ):
-            out = context.run(Event("collect-unit-status"), state)
+            out = context.run(context.on.collect_unit_status(), state)
         assert out.unit_status == ops.WaitingStatus("container not yet connectable")
 
-    def test_given_storages_available_container_cant_connect_network_available_gocert_running_when_collect_status_then_status_is_waiting(
+    def test_given_storages_available_container_cant_connect_network_available_notary_running_when_collect_status_then_status_is_waiting(
         self, context
     ):
         state = State(
-            storage=[Storage(name="config"), Storage(name="database")],
-            containers=[Container(name="gocert", can_connect=False)],
-            networks={"juju-info": Network.default()},
+            storages={Storage(name="config"), Storage(name="database")},
+            containers={
+                Container(
+                    name="notary",
+                    can_connect=False,
+                    layers={
+                        "notary": Layer(
+                            {
+                                "summary": "notary layer",
+                                "description": "pebble config layer for notary",
+                                "services": {
+                                    "notary": {
+                                        "override": "replace",
+                                        "summary": "notary",
+                                        "command": "notary -config /etc/notary/config/config.yaml",
+                                        "startup": "enabled",
+                                    }
+                                },
+                            }
+                        )
+                    },
+                )
+            },
+            networks={Network("juju-info")},
             leader=True,
         )
 
         with patch(
-            "gocert.GoCert",
+            "notary.Notary",
             return_value=Mock(
-                **{"is_api_available.return_value": True, "is_initialized.return_value": False},
+                **{"is_api_available.return_value": True, "is_initialized.return_value": False},  # type: ignore
             ),
         ):
-            out = context.run(Event("collect-unit-status"), state)
+            out = context.run(context.on.collect_unit_status(), state)
         assert out.unit_status == ops.WaitingStatus("container not yet connectable")
 
-    def test_given_only_config_storage_container_can_connect_network_available_gocert_running_when_collect_status_then_status_is_waiting(
+    def test_given_only_config_storage_container_can_connect_network_available_notary_running_when_collect_status_then_status_is_waiting(
         self, context
     ):
         state = State(
-            storage=[Storage(name="config")],
-            containers=[Container(name="gocert", can_connect=True)],
-            networks={"juju-info": Network.default()},
+            storages={Storage(name="config")},
+            containers={
+                Container(
+                    name="notary",
+                    can_connect=True,
+                    layers={
+                        "notary": Layer(
+                            {
+                                "summary": "notary layer",
+                                "description": "pebble config layer for notary",
+                                "services": {
+                                    "notary": {
+                                        "override": "replace",
+                                        "summary": "notary",
+                                        "command": "notary -config /etc/notary/config/config.yaml",
+                                        "startup": "enabled",
+                                    }
+                                },
+                            }
+                        )
+                    },
+                )
+            },
+            networks={Network("juju-info")},
             leader=True,
         )
 
         with patch(
-            "gocert.GoCert",
+            "notary.Notary",
             return_value=Mock(
-                **{"is_api_available.return_value": True, "is_initialized.return_value": False},
+                **{"is_api_available.return_value": True, "is_initialized.return_value": False},  # type: ignore
             ),
         ):
-            out = context.run(Event("collect-unit-status"), state)
+            out = context.run(context.on.collect_unit_status(), state)
         assert out.unit_status == ops.WaitingStatus("storages not yet available")
 
-    def test_given_only_database_storage_container_can_connect_network_available_gocert_running_when_collect_status_then_status_is_waiting(
+    def test_given_only_database_storage_container_can_connect_network_available_notary_running_when_collect_status_then_status_is_waiting(
         self, context
     ):
         state = State(
-            storage=[Storage(name="database")],
-            containers=[Container(name="gocert", can_connect=True)],
-            networks={"juju-info": Network.default()},
+            storages={Storage(name="database")},
+            containers={
+                Container(
+                    name="notary",
+                    can_connect=True,
+                    layers={
+                        "notary": Layer(
+                            {
+                                "summary": "notary layer",
+                                "description": "pebble config layer for notary",
+                                "services": {
+                                    "notary": {
+                                        "override": "replace",
+                                        "summary": "notary",
+                                        "command": "notary -config /etc/notary/config/config.yaml",
+                                        "startup": "enabled",
+                                    }
+                                },
+                            }
+                        )
+                    },
+                )
+            },
+            networks={Network("juju-info")},
             leader=True,
         )
 
         with patch(
-            "gocert.GoCert",
+            "notary.Notary",
             return_value=Mock(
-                **{"is_api_available.return_value": True, "is_initialized.return_value": False},
+                **{"is_api_available.return_value": True, "is_initialized.return_value": False},  # type: ignore
             ),
         ):
-            out = context.run(Event("collect-unit-status"), state)
+            out = context.run(context.on.collect_unit_status(), state)
         assert out.unit_status == ops.WaitingStatus("storages not yet available")
 
-    def test_given_storages_available_container_can_connect_network_available_gocert_running_when_collect_status_then_status_is_waiting(
+    def test_given_storages_available_container_can_connect_network_available_notary_running_when_collect_status_then_status_is_waiting(
         self, context
     ):
         state = State(
-            storage=[Storage(name="config"), Storage(name="database")],
-            containers=[Container(name="gocert", can_connect=True)],
-            networks={"juju-info": Network.default()},
+            storages={Storage(name="config"), Storage(name="database")},
+            containers={
+                Container(
+                    name="notary",
+                    can_connect=True,
+                    layers={
+                        "notary": Layer(
+                            {
+                                "summary": "notary layer",
+                                "description": "pebble config layer for notary",
+                                "services": {
+                                    "notary": {
+                                        "override": "replace",
+                                        "summary": "notary",
+                                        "command": "notary -config /etc/notary/config/config.yaml",
+                                        "startup": "enabled",
+                                    }
+                                },
+                            }
+                        )
+                    },
+                )
+            },
+            networks={Network("juju-info")},
             leader=True,
         )
 
         with patch(
-            "gocert.GoCert",
+            "notary.Notary",
             return_value=Mock(
-                **{"is_api_available.return_value": True, "is_initialized.return_value": False},
+                **{"is_api_available.return_value": True, "is_initialized.return_value": False},  # type: ignore
             ),
         ):
-            out = context.run(Event("collect-unit-status"), state)
+            out = context.run(context.on.collect_unit_status(), state)
         assert out.unit_status == ops.WaitingStatus("certificates not yet created")
 
-    def test_given_only_config_storage_container_cant_connect_network_not_available_gocert_initialized_when_collect_status_then_status_is_waiting(
+    def test_given_only_config_storage_container_cant_connect_network_not_available_notary_initialized_when_collect_status_then_status_is_waiting(
         self, context
     ):
         state = State(
-            storage=[Storage(name="config")],
-            containers=[Container(name="gocert", can_connect=False)],
-            networks={"juju-info": Network([], [], [])},
+            storages={Storage(name="config")},
+            containers={
+                Container(
+                    name="notary",
+                    can_connect=False,
+                    layers={
+                        "notary": Layer(
+                            {
+                                "summary": "notary layer",
+                                "description": "pebble config layer for notary",
+                                "services": {
+                                    "notary": {
+                                        "override": "replace",
+                                        "summary": "notary",
+                                        "command": "notary -config /etc/notary/config/config.yaml",
+                                        "startup": "enabled",
+                                    }
+                                },
+                            }
+                        )
+                    },
+                )
+            },
+            networks={Network("juju-info", bind_addresses=[])},
             leader=True,
         )
 
         with patch(
-            "gocert.GoCert",
+            "notary.Notary",
             return_value=Mock(
-                **{"is_api_available.return_value": True, "is_initialized.return_value": True},
+                **{"is_api_available.return_value": True, "is_initialized.return_value": True},  # type: ignore
             ),
         ):
-            out = context.run(Event("collect-unit-status"), state)
+            out = context.run(context.on.collect_unit_status(), state)
         assert out.unit_status == ops.WaitingStatus("container not yet connectable")
 
-    def test_given_only_database_storage_container_cant_connect_network_not_available_gocert_initialized_when_collect_status_then_status_is_waiting(
+    def test_given_only_database_storage_container_cant_connect_network_not_available_notary_initialized_when_collect_status_then_status_is_waiting(
         self, context
     ):
         state = State(
-            storage=[Storage(name="database")],
-            containers=[Container(name="gocert", can_connect=False)],
-            networks={"juju-info": Network([], [], [])},
+            storages={Storage(name="database")},
+            containers={
+                Container(
+                    name="notary",
+                    can_connect=False,
+                    layers={
+                        "notary": Layer(
+                            {
+                                "summary": "notary layer",
+                                "description": "pebble config layer for notary",
+                                "services": {
+                                    "notary": {
+                                        "override": "replace",
+                                        "summary": "notary",
+                                        "command": "notary -config /etc/notary/config/config.yaml",
+                                        "startup": "enabled",
+                                    }
+                                },
+                            }
+                        )
+                    },
+                )
+            },
+            networks={Network("juju-info", bind_addresses=[])},
             leader=True,
         )
 
         with patch(
-            "gocert.GoCert",
+            "notary.Notary",
             return_value=Mock(
-                **{"is_api_available.return_value": True, "is_initialized.return_value": True},
+                **{"is_api_available.return_value": True, "is_initialized.return_value": True},  # type: ignore
             ),
         ):
-            out = context.run(Event("collect-unit-status"), state)
+            out = context.run(context.on.collect_unit_status(), state)
         assert out.unit_status == ops.WaitingStatus("container not yet connectable")
 
-    def test_given_storages_available_container_cant_connect_network_not_available_gocert_initialized_when_collect_status_then_status_is_waiting(
+    def test_given_storages_available_container_cant_connect_network_not_available_notary_initialized_when_collect_status_then_status_is_waiting(
         self, context
     ):
         state = State(
-            storage=[Storage(name="config"), Storage(name="database")],
-            containers=[Container(name="gocert", can_connect=False)],
-            networks={"juju-info": Network([], [], [])},
+            storages={Storage(name="config"), Storage(name="database")},
+            containers={
+                Container(
+                    name="notary",
+                    can_connect=False,
+                    layers={
+                        "notary": Layer(
+                            {
+                                "summary": "notary layer",
+                                "description": "pebble config layer for notary",
+                                "services": {
+                                    "notary": {
+                                        "override": "replace",
+                                        "summary": "notary",
+                                        "command": "notary -config /etc/notary/config/config.yaml",
+                                        "startup": "enabled",
+                                    }
+                                },
+                            }
+                        )
+                    },
+                )
+            },
+            networks={Network("juju-info", bind_addresses=[])},
             leader=True,
         )
 
         with patch(
-            "gocert.GoCert",
+            "notary.Notary",
             return_value=Mock(
-                **{"is_api_available.return_value": True, "is_initialized.return_value": True},
+                **{"is_api_available.return_value": True, "is_initialized.return_value": True},  # type: ignore
             ),
         ):
-            out = context.run(Event("collect-unit-status"), state)
+            out = context.run(context.on.collect_unit_status(), state)
         assert out.unit_status == ops.WaitingStatus("container not yet connectable")
 
-    def test_given_only_config_storage_container_can_connect_network_not_available_gocert_initialized_when_collect_status_then_status_is_waiting(
+    def test_given_only_config_storage_container_can_connect_network_not_available_notary_initialized_when_collect_status_then_status_is_waiting(
         self, context
     ):
         state = State(
-            storage=[Storage(name="config")],
-            containers=[Container(name="gocert", can_connect=True)],
-            networks={"juju-info": Network([], [], [])},
+            storages={Storage(name="config")},
+            containers={
+                Container(
+                    name="notary",
+                    can_connect=True,
+                    layers={
+                        "notary": Layer(
+                            {
+                                "summary": "notary layer",
+                                "description": "pebble config layer for notary",
+                                "services": {
+                                    "notary": {
+                                        "override": "replace",
+                                        "summary": "notary",
+                                        "command": "notary -config /etc/notary/config/config.yaml",
+                                        "startup": "enabled",
+                                    }
+                                },
+                            }
+                        )
+                    },
+                )
+            },
+            networks={Network("juju-info", bind_addresses=[])},
             leader=True,
         )
 
         with patch(
-            "gocert.GoCert",
+            "notary.Notary",
             return_value=Mock(
-                **{"is_api_available.return_value": True, "is_initialized.return_value": True},
+                **{"is_api_available.return_value": True, "is_initialized.return_value": True},  # type: ignore
             ),
         ):
-            out = context.run(Event("collect-unit-status"), state)
+            out = context.run(context.on.collect_unit_status(), state)
         assert out.unit_status == ops.WaitingStatus("storages not yet available")
 
-    def test_given_only_database_storage_container_can_connect_network_not_available_gocert_initialized_when_collect_status_then_status_is_waiting(
+    def test_given_only_database_storage_container_can_connect_network_not_available_notary_initialized_when_collect_status_then_status_is_waiting(
         self, context
     ):
         state = State(
-            storage=[Storage(name="database")],
-            containers=[Container(name="gocert", can_connect=True)],
-            networks={"juju-info": Network([], [], [])},
+            storages={Storage(name="database")},
+            containers={
+                Container(
+                    name="notary",
+                    can_connect=True,
+                    layers={
+                        "notary": Layer(
+                            {
+                                "summary": "notary layer",
+                                "description": "pebble config layer for notary",
+                                "services": {
+                                    "notary": {
+                                        "override": "replace",
+                                        "summary": "notary",
+                                        "command": "notary -config /etc/notary/config/config.yaml",
+                                        "startup": "enabled",
+                                    }
+                                },
+                            }
+                        )
+                    },
+                )
+            },
+            networks={Network("juju-info", bind_addresses=[])},
             leader=True,
         )
 
         with patch(
-            "gocert.GoCert",
+            "notary.Notary",
             return_value=Mock(
-                **{"is_api_available.return_value": True, "is_initialized.return_value": True},
+                **{"is_api_available.return_value": True, "is_initialized.return_value": True},  # type: ignore
             ),
         ):
-            out = context.run(Event("collect-unit-status"), state)
+            out = context.run(context.on.collect_unit_status(), state)
         assert out.unit_status == ops.WaitingStatus("storages not yet available")
 
-    def test_given_storages_available_container_can_connect_network_not_available_gocert_initialized_when_collect_status_then_status_is_waiting(
+    def test_given_storages_available_container_can_connect_network_not_available_notary_initialized_when_collect_status_then_status_is_waiting(
         self, context
     ):
         state = State(
-            storage=[Storage(name="config"), Storage(name="database")],
-            containers=[Container(name="gocert", can_connect=True)],
-            networks={"juju-info": Network([], [], [])},
+            storages={Storage(name="config"), Storage(name="database")},
+            containers={
+                Container(
+                    name="notary",
+                    can_connect=True,
+                    layers={
+                        "notary": Layer(
+                            {
+                                "summary": "notary layer",
+                                "description": "pebble config layer for notary",
+                                "services": {
+                                    "notary": {
+                                        "override": "replace",
+                                        "summary": "notary",
+                                        "command": "notary -config /etc/notary/config/config.yaml",
+                                        "startup": "enabled",
+                                    }
+                                },
+                            }
+                        )
+                    },
+                )
+            },
+            networks={Network("juju-info", bind_addresses=[])},
             leader=True,
         )
 
         with patch(
-            "gocert.GoCert",
+            "notary.Notary",
             return_value=Mock(
-                **{"is_api_available.return_value": True, "is_initialized.return_value": True},
+                **{"is_api_available.return_value": True, "is_initialized.return_value": True},  # type: ignore
             ),
         ):
-            out = context.run(Event("collect-unit-status"), state)
+            out = context.run(context.on.collect_unit_status(), state)
         assert out.unit_status == ops.WaitingStatus("certificates not yet created")
 
-    def test_given_only_config_storage_container_cant_connect_network_available_gocert_initialized_when_collect_status_then_status_is_waiting(
+    def test_given_only_config_storage_container_cant_connect_network_available_notary_initialized_when_collect_status_then_status_is_waiting(
         self, context
     ):
         state = State(
-            storage=[Storage(name="config")],
-            containers=[Container(name="gocert", can_connect=False)],
-            networks={"juju-info": Network.default()},
+            storages={Storage(name="config")},
+            containers={
+                Container(
+                    name="notary",
+                    can_connect=False,
+                    layers={
+                        "notary": Layer(
+                            {
+                                "summary": "notary layer",
+                                "description": "pebble config layer for notary",
+                                "services": {
+                                    "notary": {
+                                        "override": "replace",
+                                        "summary": "notary",
+                                        "command": "notary -config /etc/notary/config/config.yaml",
+                                        "startup": "enabled",
+                                    }
+                                },
+                            }
+                        )
+                    },
+                )
+            },
+            networks={Network("juju-info")},
             leader=True,
         )
 
         with patch(
-            "gocert.GoCert",
+            "notary.Notary",
             return_value=Mock(
-                **{"is_api_available.return_value": True, "is_initialized.return_value": True},
+                **{"is_api_available.return_value": True, "is_initialized.return_value": True},  # type: ignore
             ),
         ):
-            out = context.run(Event("collect-unit-status"), state)
+            out = context.run(context.on.collect_unit_status(), state)
         assert out.unit_status == ops.WaitingStatus("container not yet connectable")
 
-    def test_given_only_database_storage_container_cant_connect_network_available_gocert_initialized_when_collect_status_then_status_is_waiting(
+    def test_given_only_database_storage_container_cant_connect_network_available_notary_initialized_when_collect_status_then_status_is_waiting(
         self, context
     ):
         state = State(
-            storage=[Storage(name="database")],
-            containers=[Container(name="gocert", can_connect=False)],
-            networks={"juju-info": Network.default()},
+            storages={Storage(name="database")},
+            containers={
+                Container(
+                    name="notary",
+                    can_connect=False,
+                    layers={
+                        "notary": Layer(
+                            {
+                                "summary": "notary layer",
+                                "description": "pebble config layer for notary",
+                                "services": {
+                                    "notary": {
+                                        "override": "replace",
+                                        "summary": "notary",
+                                        "command": "notary -config /etc/notary/config/config.yaml",
+                                        "startup": "enabled",
+                                    }
+                                },
+                            }
+                        )
+                    },
+                )
+            },
+            networks={Network("juju-info")},
             leader=True,
         )
 
         with patch(
-            "gocert.GoCert",
+            "notary.Notary",
             return_value=Mock(
-                **{"is_api_available.return_value": True, "is_initialized.return_value": True},
+                **{"is_api_available.return_value": True, "is_initialized.return_value": True},  # type: ignore
             ),
         ):
-            out = context.run(Event("collect-unit-status"), state)
+            out = context.run(context.on.collect_unit_status(), state)
         assert out.unit_status == ops.WaitingStatus("container not yet connectable")
 
-    def test_given_storages_available_container_cant_connect_network_available_gocert_initialized_when_collect_status_then_status_is_waiting(
+    def test_given_storages_available_container_cant_connect_network_available_notary_initialized_when_collect_status_then_status_is_waiting(
         self, context
     ):
         state = State(
-            storage=[Storage(name="config"), Storage(name="database")],
-            containers=[Container(name="gocert", can_connect=False)],
-            networks={"juju-info": Network.default()},
+            storages={Storage(name="config"), Storage(name="database")},
+            containers={
+                Container(
+                    name="notary",
+                    can_connect=False,
+                    layers={
+                        "notary": Layer(
+                            {
+                                "summary": "notary layer",
+                                "description": "pebble config layer for notary",
+                                "services": {
+                                    "notary": {
+                                        "override": "replace",
+                                        "summary": "notary",
+                                        "command": "notary -config /etc/notary/config/config.yaml",
+                                        "startup": "enabled",
+                                    }
+                                },
+                            }
+                        )
+                    },
+                )
+            },
+            networks={Network("juju-info")},
             leader=True,
         )
 
         with patch(
-            "gocert.GoCert",
+            "notary.Notary",
             return_value=Mock(
-                **{"is_api_available.return_value": True, "is_initialized.return_value": True},
+                **{"is_api_available.return_value": True, "is_initialized.return_value": True},  # type: ignore
             ),
         ):
-            out = context.run(Event("collect-unit-status"), state)
+            out = context.run(context.on.collect_unit_status(), state)
         assert out.unit_status == ops.WaitingStatus("container not yet connectable")
 
-    def test_given_only_config_storage_container_can_connect_network_available_gocert_initialized_when_collect_status_then_status_is_waiting(
+    def test_given_only_config_storage_container_can_connect_network_available_notary_initialized_when_collect_status_then_status_is_waiting(
         self, context
     ):
         state = State(
-            storage=[Storage(name="config")],
-            containers=[Container(name="gocert", can_connect=True)],
-            networks={"juju-info": Network.default()},
+            storages={Storage(name="config")},
+            containers={
+                Container(
+                    name="notary",
+                    can_connect=True,
+                    layers={
+                        "notary": Layer(
+                            {
+                                "summary": "notary layer",
+                                "description": "pebble config layer for notary",
+                                "services": {
+                                    "notary": {
+                                        "override": "replace",
+                                        "summary": "notary",
+                                        "command": "notary -config /etc/notary/config/config.yaml",
+                                        "startup": "enabled",
+                                    }
+                                },
+                            }
+                        )
+                    },
+                )
+            },
+            networks={Network("juju-info")},
             leader=True,
         )
 
         with patch(
-            "gocert.GoCert",
+            "notary.Notary",
             return_value=Mock(
-                **{"is_api_available.return_value": True, "is_initialized.return_value": True},
+                **{"is_api_available.return_value": True, "is_initialized.return_value": True},  # type: ignore
             ),
         ):
-            out = context.run(Event("collect-unit-status"), state)
+            out = context.run(context.on.collect_unit_status(), state)
         assert out.unit_status == ops.WaitingStatus("storages not yet available")
 
-    def test_given_only_database_storage_container_can_connect_network_available_gocert_initialized_when_collect_status_then_status_is_waiting(
+    def test_given_only_database_storage_container_can_connect_network_available_notary_initialized_when_collect_status_then_status_is_waiting(
         self, context
     ):
         state = State(
-            storage=[Storage(name="database")],
-            containers=[Container(name="gocert", can_connect=True)],
-            networks={"juju-info": Network.default()},
+            storages={Storage(name="database")},
+            containers={
+                Container(
+                    name="notary",
+                    can_connect=True,
+                    layers={
+                        "notary": Layer(
+                            {
+                                "summary": "notary layer",
+                                "description": "pebble config layer for notary",
+                                "services": {
+                                    "notary": {
+                                        "override": "replace",
+                                        "summary": "notary",
+                                        "command": "notary -config /etc/notary/config/config.yaml",
+                                        "startup": "enabled",
+                                    }
+                                },
+                            }
+                        )
+                    },
+                )
+            },
+            networks={Network("juju-info")},
             leader=True,
         )
 
         with patch(
-            "gocert.GoCert",
+            "notary.Notary",
             return_value=Mock(
-                **{"is_api_available.return_value": True, "is_initialized.return_value": True},
+                **{"is_api_available.return_value": True, "is_initialized.return_value": True},  # type: ignore
             ),
         ):
-            out = context.run(Event("collect-unit-status"), state)
+            out = context.run(context.on.collect_unit_status(), state)
         assert out.unit_status == ops.WaitingStatus("storages not yet available")
 
-    def test_given_storages_available_container_can_connect_network_available_gocert_initialized_when_collect_status_then_status_is_waiting(
+    def test_given_storages_available_container_can_connect_network_available_notary_initialized_when_collect_status_then_status_is_waiting(
         self, context
     ):
         state = State(
-            storage=[Storage(name="config"), Storage(name="database")],
-            containers=[Container(name="gocert", can_connect=True)],
-            networks={"juju-info": Network.default()},
+            storages={Storage(name="config"), Storage(name="database")},
+            containers={
+                Container(
+                    name="notary",
+                    can_connect=True,
+                    layers={
+                        "notary": Layer(
+                            {
+                                "summary": "notary layer",
+                                "description": "pebble config layer for notary",
+                                "services": {
+                                    "notary": {
+                                        "override": "replace",
+                                        "summary": "notary",
+                                        "command": "notary -config /etc/notary/config/config.yaml",
+                                        "startup": "enabled",
+                                    }
+                                },
+                            }
+                        )
+                    },
+                )
+            },
+            networks={Network("juju-info")},
             leader=True,
         )
 
         with patch(
-            "gocert.GoCert",
+            "notary.Notary",
             return_value=Mock(
-                **{"is_api_available.return_value": True, "is_initialized.return_value": True},
+                **{"is_api_available.return_value": True, "is_initialized.return_value": True},  # type: ignore
             ),
         ):
-            out = context.run(Event("collect-unit-status"), state)
+            out = context.run(context.on.collect_unit_status(), state)
         assert out.unit_status == ops.WaitingStatus("certificates not yet created")
 
-    def test_given_gocert_available_and_initialized_when_collect_status_then_status_is_active(
+    def test_given_notary_available_and_initialized_when_collect_status_then_status_is_active(
         self, context
     ):
         with tempfile.TemporaryDirectory() as tempdir:
-            config_mount = Mount("/etc/gocert/config", tempdir)
+            config_mount = Mount(location="/etc/notary/config", source=tempdir)
             state = State(
-                storage=[Storage(name="config"), Storage(name="database")],
+                storages={Storage(name="config"), Storage(name="database")},
                 containers=[
-                    Container(name="gocert", can_connect=True, mounts={"config": config_mount})
+                    Container(name="notary", can_connect=True, mounts={"config": config_mount})
                 ],
-                networks={"juju-info": Network.default()},
+                networks={Network("juju-info")},
                 leader=True,
             )
 
@@ -1436,30 +2953,30 @@ class TestCharm:
                 f.write(str(certificate))
 
             with patch(
-                "gocert.GoCert.__new__",
+                "notary.Notary.__new__",
                 return_value=Mock(
-                    **{"is_api_available.return_value": True, "is_initialized.return_value": True},
+                    **{"is_api_available.return_value": True, "is_initialized.return_value": True},  # type: ignore
                 ),
             ):
-                out = context.run(Event("collect-unit-status"), state)
+                out = context.run(context.on.collect_unit_status(), state)
             assert out.unit_status == ops.ActiveStatus()
 
-    def test_given_gocert_available_and_not_initialized_when_configure_then_admin_user_created(
+    def test_given_notary_available_and_not_initialized_when_configure_then_admin_user_created(
         self, context
     ):
         with tempfile.TemporaryDirectory() as tempdir:
-            config_mount = Mount("/etc/gocert/config", tempdir)
+            config_mount = Mount(location="/etc/notary/config", source=tempdir)
             state = State(
-                storage=[Storage(name="config"), Storage(name="database")],
+                storages={Storage(name="config"), Storage(name="database")},
                 containers=[
-                    Container(name="gocert", can_connect=True, mounts={"config": config_mount})
+                    Container(name="notary", can_connect=True, mounts={"config": config_mount})
                 ],
-                networks={"juju-info": Network.default()},
+                networks={Network("juju-info")},
                 leader=True,
             )
 
             with patch(
-                "gocert.GoCert.__new__",
+                "notary.Notary.__new__",
                 return_value=Mock(
                     **{
                         "is_api_available.return_value": True,
@@ -1469,7 +2986,419 @@ class TestCharm:
                     },
                 ),
             ):
-                out = context.run(Event("update-status"), state)
+                out = context.run(context.on.update_status(), state)
             assert len(out.secrets) == 1
-            assert out.secrets[0].label == "GoCert Login Details"
-            assert out.secrets[0].contents[1].get("token") == "example-token"
+            secret = out.get_secret(label="Notary Login Details")
+            assert secret.latest_content.get("token") == "example-token"
+
+    def test_given_tls_requirer_available_when_notary_unreachable_then_no_error_raised(
+        self, context
+    ):
+        state = State(
+            storages={Storage(name="config"), Storage(name="database")},
+            containers=[
+                Container(
+                    name="notary",
+                    can_connect=True,
+                    layers={
+                        "notary": Layer(
+                            {
+                                "summary": "notary layer",
+                                "description": "pebble config layer for notary",
+                                "services": {
+                                    "notary": {
+                                        "override": "replace",
+                                        "summary": "notary",
+                                        "command": "notary -config /etc/notary/config/config.yaml",
+                                        "startup": "enabled",
+                                    }
+                                },
+                            }
+                        )
+                    },
+                )
+            ],
+            networks={Network("juju-info")},
+            leader=True,
+            relations=[Relation(id=1, endpoint=CERTIFICATE_PROVIDER_RELATION_NAME)],
+        )
+        with patch(
+            "notary.Notary.__new__",
+            return_value=Mock(
+                **{
+                    "is_api_available.return_value": True,
+                    "is_initialized.return_value": False,
+                    "login.return_value": "example-token",
+                    "token_is_valid.return_value": False,
+                },
+            ),
+        ):
+            context.run(context.on.update_status(), state)
+
+    @patch(f"{TLS_LIB_PATH}.TLSCertificatesProvidesV4.get_certificate_requests")
+    def test_given_tls_requirer_available_when_configure_then_csrs_posted_to_notary(
+        self, mock_get_certificate_requests, context
+    ):
+        state = State(
+            storages={Storage(name="config"), Storage(name="database")},
+            containers=[
+                Container(
+                    name="notary",
+                    can_connect=True,
+                    layers={
+                        "notary": Layer(
+                            {
+                                "summary": "notary layer",
+                                "description": "pebble config layer for notary",
+                                "services": {
+                                    "notary": {
+                                        "override": "replace",
+                                        "summary": "notary",
+                                        "command": "notary -config /etc/notary/config/config.yaml",
+                                        "startup": "enabled",
+                                    }
+                                },
+                            }
+                        )
+                    },
+                )
+            ],
+            networks={Network("juju-info")},
+            leader=True,
+            relations=[Relation(id=1, endpoint=CERTIFICATE_PROVIDER_RELATION_NAME)],
+            secrets={
+                Secret(
+                    {"username": "hello", "password": "world", "token": "test-token"},
+                    id="1",
+                    label=NOTARY_LOGIN_SECRET_LABEL,
+                    owner="app",
+                )
+            },
+        )
+        csr = generate_csr(private_key=generate_private_key(), common_name="me")
+        mock_get_certificate_requests.return_value = [
+            RequirerCSR(
+                relation_id=1,
+                certificate_signing_request=csr,
+            )
+        ]
+        post_call = Mock()
+        with patch(
+            "notary.Notary.__new__",
+            return_value=Mock(
+                **{
+                    "is_api_available.return_value": True,
+                    "is_initialized.return_value": True,
+                    "token_is_valid.return_value": True,
+                    "get_certificate_requests_table.return_value": CertificateRequests(rows=[]),
+                    "post_csr": post_call,
+                },
+            ),
+        ):
+            context.run(context.on.update_status(), state)
+
+        post_call.assert_called_once_with(str(csr), "test-token")
+
+    @patch(f"{TLS_LIB_PATH}.TLSCertificatesProvidesV4.get_certificate_requests")
+    def test_given_tls_requirers_available_when_csrs_already_posted_then_duplicate_csr_not_posted(
+        self, mock_get_certificate_requests, context
+    ):
+        state = State(
+            storages={Storage(name="config"), Storage(name="database")},
+            containers=[
+                Container(
+                    name="notary",
+                    can_connect=True,
+                    layers={
+                        "notary": Layer(
+                            {
+                                "summary": "notary layer",
+                                "description": "pebble config layer for notary",
+                                "services": {
+                                    "notary": {
+                                        "override": "replace",
+                                        "summary": "notary",
+                                        "command": "notary -config /etc/notary/config/config.yaml",
+                                        "startup": "enabled",
+                                    }
+                                },
+                            }
+                        )
+                    },
+                )
+            ],
+            networks={Network("juju-info")},
+            leader=True,
+            relations=[Relation(id=1, endpoint=CERTIFICATE_PROVIDER_RELATION_NAME)],
+            secrets={
+                Secret(
+                    {"username": "hello", "password": "world", "token": "test-token"},
+                    id="1",
+                    label=NOTARY_LOGIN_SECRET_LABEL,
+                    owner="app",
+                )
+            },
+        )
+        csr = generate_csr(private_key=generate_private_key(), common_name="me")
+        mock_get_certificate_requests.return_value = [
+            RequirerCSR(
+                relation_id=1,
+                certificate_signing_request=csr,
+            )
+        ]
+        post_call = Mock()
+        with patch(
+            "notary.Notary.__new__",
+            return_value=Mock(
+                **{
+                    "is_api_available.return_value": True,
+                    "is_initialized.return_value": True,
+                    "token_is_valid.return_value": True,
+                    "get_certificate_requests_table.return_value": CertificateRequests(
+                        rows=[CertificateRequest(id=1, csr=str(csr), certificate_chain="")]
+                    ),
+                    "post_csr": post_call,
+                },
+            ),
+        ):
+            context.run(context.on.update_status(), state)
+
+        post_call.assert_not_called()
+
+    @patch(f"{TLS_LIB_PATH}.TLSCertificatesProvidesV4.set_relation_certificate")
+    @patch(f"{TLS_LIB_PATH}.TLSCertificatesProvidesV4.get_certificate_requests")
+    def test_given_tls_requirers_available_when_certificate_available_then_certs_provided_to_requirer(
+        self, mock_get_certificate_requests, mock_set_relation_certificate, context
+    ):
+        state = State(
+            storages={Storage(name="config"), Storage(name="database")},
+            containers=[
+                Container(
+                    name="notary",
+                    can_connect=True,
+                    layers={
+                        "notary": Layer(
+                            {
+                                "summary": "notary layer",
+                                "description": "pebble config layer for notary",
+                                "services": {
+                                    "notary": {
+                                        "override": "replace",
+                                        "summary": "notary",
+                                        "command": "notary -config /etc/notary/config/config.yaml",
+                                        "startup": "enabled",
+                                    }
+                                },
+                            }
+                        )
+                    },
+                )
+            ],
+            networks={Network("juju-info")},
+            leader=True,
+            relations=[Relation(id=1, endpoint=CERTIFICATE_PROVIDER_RELATION_NAME)],
+            secrets={
+                Secret(
+                    {"username": "hello", "password": "world", "token": "test-token"},
+                    id="1",
+                    label=NOTARY_LOGIN_SECRET_LABEL,
+                    owner="app",
+                )
+            },
+        )
+        ca_pk = generate_private_key()
+        ca = generate_ca(ca_pk, 365, "me")
+        csr = generate_csr(private_key=generate_private_key(), common_name="notary.com")
+        cert = generate_certificate(csr, ca, ca_pk, 365)
+        mock_get_certificate_requests.return_value = [
+            RequirerCSR(
+                relation_id=1,
+                certificate_signing_request=csr,
+            )
+        ]
+        with patch(
+            "notary.Notary.__new__",
+            return_value=Mock(
+                **{
+                    "is_api_available.return_value": True,
+                    "is_initialized.return_value": True,
+                    "token_is_valid.return_value": True,
+                    "get_certificate_requests_table.return_value": CertificateRequests(
+                        rows=[
+                            CertificateRequest(
+                                id=1, csr=str(csr), certificate_chain=[str(cert), str(ca)]
+                            )
+                        ]
+                    ),
+                },
+            ),
+        ):
+            context.run(context.on.update_status(), state)
+        mock_set_relation_certificate.assert_called_once()
+
+    @patch(f"{TLS_LIB_PATH}.TLSCertificatesProvidesV4.get_issued_certificates")
+    @patch(f"{TLS_LIB_PATH}.TLSCertificatesProvidesV4.set_relation_certificate")
+    @patch(f"{TLS_LIB_PATH}.TLSCertificatesProvidesV4.get_certificate_requests")
+    def test_given_tls_requirers_when_invalid_certificate_available_when_configure_then_new_cert_provided(
+        self,
+        mock_get_certificate_requests,
+        mock_set_relation_certificate,
+        mock_get_issued_certificates,
+        context,
+    ):
+        state = State(
+            storages={Storage(name="config"), Storage(name="database")},
+            containers=[
+                Container(
+                    name="notary",
+                    can_connect=True,
+                    layers={
+                        "notary": Layer(
+                            {
+                                "summary": "notary layer",
+                                "description": "pebble config layer for notary",
+                                "services": {
+                                    "notary": {
+                                        "override": "replace",
+                                        "summary": "notary",
+                                        "command": "notary -config /etc/notary/config/config.yaml",
+                                        "startup": "enabled",
+                                    }
+                                },
+                            }
+                        )
+                    },
+                )
+            ],
+            networks={Network("juju-info")},
+            leader=True,
+            relations=[Relation(id=1, endpoint=CERTIFICATE_PROVIDER_RELATION_NAME)],
+            secrets={
+                Secret(
+                    {"username": "hello", "password": "world", "token": "test-token"},
+                    id="1",
+                    label=NOTARY_LOGIN_SECRET_LABEL,
+                    owner="app",
+                )
+            },
+        )
+        ca_pk = generate_private_key()
+        ca = generate_ca(ca_pk, 365, "me")
+        csr = generate_csr(private_key=generate_private_key(), common_name="notary.com")
+        old_cert = generate_certificate(csr, ca, ca_pk, 365)
+        new_cert = generate_certificate(csr, ca, ca_pk, 366)
+        mock_get_certificate_requests.return_value = [
+            RequirerCSR(
+                relation_id=1,
+                certificate_signing_request=csr,
+            )
+        ]
+        mock_get_issued_certificates.return_value = [
+            ProviderCertificate(
+                relation_id=1,
+                certificate_signing_request=csr,
+                certificate=old_cert,
+                ca=ca,
+                chain=[old_cert, ca],
+            )
+        ]
+        with patch(
+            "notary.Notary.__new__",
+            return_value=Mock(
+                **{
+                    "is_api_available.return_value": True,
+                    "is_initialized.return_value": True,
+                    "token_is_valid.return_value": True,
+                    "get_certificate_requests_table.return_value": CertificateRequests(
+                        rows=[
+                            CertificateRequest(
+                                id=1, csr=str(csr), certificate_chain=[str(new_cert), str(ca)]
+                            )
+                        ]
+                    ),
+                },
+            ),
+        ):
+            context.run(context.on.update_status(), state)
+        mock_set_relation_certificate.assert_called_once()
+
+    @patch(f"{TLS_LIB_PATH}.TLSCertificatesProvidesV4.get_issued_certificates")
+    @patch(f"{TLS_LIB_PATH}.TLSCertificatesProvidesV4.set_relation_certificate")
+    @patch(f"{TLS_LIB_PATH}.TLSCertificatesProvidesV4.get_certificate_requests")
+    def test_given_certificate_rejected_in_notary_when_configure_then_certificate_revoked(
+        self,
+        mock_get_certificate_requests,
+        mock_set_relation_certificate,
+        mock_get_issued_certificates,
+        context,
+    ):
+        state = State(
+            storages={Storage(name="config"), Storage(name="database")},
+            containers=[
+                Container(
+                    name="notary",
+                    can_connect=True,
+                    layers={
+                        "notary": Layer(
+                            {
+                                "summary": "notary layer",
+                                "description": "pebble config layer for notary",
+                                "services": {
+                                    "notary": {
+                                        "override": "replace",
+                                        "summary": "notary",
+                                        "command": "notary -config /etc/notary/config/config.yaml",
+                                        "startup": "enabled",
+                                    }
+                                },
+                            }
+                        )
+                    },
+                )
+            ],
+            networks={Network("juju-info")},
+            leader=True,
+            relations=[Relation(id=1, endpoint=CERTIFICATE_PROVIDER_RELATION_NAME)],
+            secrets=[
+                Secret(
+                    {"username": "hello", "password": "world", "token": "test-token"},
+                    id="1",
+                    label=NOTARY_LOGIN_SECRET_LABEL,
+                    owner="app",
+                )
+            ],
+        )
+        ca_pk = generate_private_key()
+        ca = generate_ca(ca_pk, 365, "me")
+        csr = generate_csr(private_key=generate_private_key(), common_name="notary.com")
+        old_cert = generate_certificate(csr, ca, ca_pk, 365)
+        mock_get_certificate_requests.return_value = [
+            RequirerCSR(
+                relation_id=1,
+                certificate_signing_request=csr,
+            )
+        ]
+        mock_get_issued_certificates.return_value = [
+            ProviderCertificate(
+                relation_id=1,
+                certificate_signing_request=csr,
+                certificate=old_cert,
+                ca=ca,
+                chain=[old_cert, ca],
+            )
+        ]
+        with patch(
+            "notary.Notary.__new__",
+            return_value=Mock(
+                **{
+                    "is_api_available.return_value": True,
+                    "is_initialized.return_value": True,
+                    "token_is_valid.return_value": True,
+                    "get_certificate_requests_table.return_value": CertificateRequests(
+                        rows=[CertificateRequest(id=1, csr=str(csr), certificate_chain="rejected")]
+                    ),
+                },
+            ),
+        ):
+            context.run(context.on.update_status(), state)
+        mock_set_relation_certificate.assert_called_once()
