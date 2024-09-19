@@ -18,6 +18,7 @@ from charms.tls_certificates_interface.v4.tls_certificates import (
 )
 from juju.client.client import SecretsFilter
 from pytest_operator.plugin import OpsTest
+from juju.application import Application
 
 from charm import NOTARY_LOGIN_SECRET_LABEL
 from notary import Notary
@@ -96,12 +97,21 @@ async def test_given_tls_access_relation_when_related_and_unrelated_to_notary_th
         )
     new_ca = await get_file_from_notary(ops_test, "ca.pem")
     assert new_ca != first_ca
-    await ops_test.model.wait_for_idle(
-        apps=[APP_NAME, TLS_PROVIDER_APPLICATION_NAME],
-        status="active",
-        timeout=1000,
-        raise_on_error=True,
+
+    notary_app = ops_test.model.applications[APP_NAME]
+    assert isinstance(notary_app, Application)
+    await notary_app.remove_relation(
+        "access-certificates", f"{TLS_PROVIDER_APPLICATION_NAME}:certificates"
     )
+    async with ops_test.fast_forward():
+        await ops_test.model.wait_for_idle(
+            apps=[APP_NAME, TLS_PROVIDER_APPLICATION_NAME],
+            status="active",
+            timeout=1000,
+            raise_on_error=True,
+        )
+    final_ca = await get_file_from_notary(ops_test, "ca.pem")
+    assert final_ca != new_ca
 
 
 @pytest.mark.abort_on_fail
