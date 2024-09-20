@@ -129,7 +129,7 @@ async def test_given_notary_when_tls_requirer_related_then_csr_uploaded_to_notar
     await ops_test.model.integrate(
         relation1=f"{APP_NAME}:certificates",
         relation2=f"{TLS_REQUIRER_APPLICATION_NAME}",
-    )  # type: ignore
+    )
     await ops_test.model.wait_for_idle(
         apps=[APP_NAME, TLS_REQUIRER_APPLICATION_NAME],
         status="active",
