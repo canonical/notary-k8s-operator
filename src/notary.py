@@ -56,6 +56,7 @@ class Notary:
                 json={"username": username, "password": password},
             )
         except (requests.RequestException, OSError):
+            logger.warning("login failed: ", exc_info=True)
             return
         try:
             req.raise_for_status()

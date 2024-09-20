@@ -9,7 +9,7 @@ jobs:
       matrix:
         arch:
           - arch: amd64
-            runner: ubuntu-22.04
+            runner: [self-hosted, linux, X64, jammy, xlarge]
   
     runs-on: ${{ matrix.arch.runner }}
     steps:
