@@ -13,6 +13,9 @@ from dataclasses import dataclass
 
 import ops
 import yaml
+from charms.certificate_transfer_interface.v1.certificate_transfer import (
+    CertificateTransferProvides,
+)
 from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardProvider
 from charms.loki_k8s.v1.loki_push_api import LogForwarder
 from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointProvider
@@ -51,6 +54,7 @@ WORKLOAD_DB_PATH = "/var/lib"
 CERTIFICATE_COMMON_NAME = "Notary Self Signed Certificate"
 SELF_SIGNED_CA_COMMON_NAME = "Notary Self Signed Root CA"
 NOTARY_LOGIN_SECRET_LABEL = "Notary Login Details"
+SEND_CA_CERT_RELATION_NAME = "send-ca-cert"
 
 
 @dataclass
@@ -86,6 +90,7 @@ class NotaryCharm(ops.CharmBase):
         self.tls = TLSCertificatesProvidesV4(
             self, relationship_name=CERTIFICATE_PROVIDER_RELATION_NAME
         )
+        self.certificate_transfer = CertificateTransferProvides(self, SEND_CA_CERT_RELATION_NAME)
         self.dashboard = GrafanaDashboardProvider(self, relation_name=GRAFANA_RELATION_NAME)
         self.logs = LogForwarder(charm=self, relation_name=LOGGING_RELATION_NAME)
         self.ingress = IngressPerAppRequirer(
@@ -126,6 +131,7 @@ class NotaryCharm(ops.CharmBase):
                 self.on["certificates"].relation_departed,
                 self.on["access-certificates"].relation_changed,
                 self.on["access-certificates"].relation_departed,
+                self.on[SEND_CA_CERT_RELATION_NAME].relation_joined,
                 self.on.config_storage_attached,
                 self.on.database_storage_attached,
                 self.on.config_changed,
@@ -146,6 +152,7 @@ class NotaryCharm(ops.CharmBase):
         self._configure_access_certificates()
         self._configure_charm_authorization()
         self._configure_certificate_requirers()
+        self._send_ca_cert()
 
     def _on_collect_status(self, event: ops.CollectStatusEvent):
         if not self.unit.is_leader():
@@ -289,6 +296,18 @@ class NotaryCharm(ops.CharmBase):
                         chain=certificate_chain,
                     )
                 )
+
+    def _send_ca_cert(self):
+        """Send the existing CA cert in the workload to all relations."""
+        with self.container.pull(
+            f"{WORKLOAD_CONFIG_PATH}/{CONFIG_MOUNT}/ca.pem",
+        ) as ca_cert_file:
+            if ca_cert := ca_cert_file.read().strip():
+                for relation in self.model.relations.get(SEND_CA_CERT_RELATION_NAME, []):
+                    self.certificate_transfer.add_certificates(
+                        certificates={ca_cert}, relation_id=relation.id
+                    )
+                    logger.info("Sent CA certificate to relation %s", relation.id)
 
     ## Properties ##
     @property

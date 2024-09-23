@@ -41,7 +41,7 @@ class TestCharm:
     def context(self):
         yield Context(NotaryCharm)
 
-    def example_cert_and_key(self) -> tuple[Certificate, PrivateKey]:
+    def example_certs_and_key(self) -> tuple[Certificate, Certificate, PrivateKey]:
         private_key = generate_private_key()
         csr = generate_csr(
             private_key=private_key,
@@ -59,7 +59,7 @@ class TestCharm:
             ca_private_key=ca_private_key,
             validity=365,
         )
-        return certificate, private_key
+        return certificate, ca_certificate, private_key
 
     # Configure tests
     def test_given_only_config_storage_container_cant_connect_network_not_available_notary_not_running_when_configure_then_no_error_raised(
@@ -2948,7 +2948,7 @@ class TestCharm:
             leader=True,
         )
 
-        certificate, _ = self.example_cert_and_key()
+        certificate, _, _ = self.example_certs_and_key()
         with open(tmpdir + "/certificate.pem", "w") as f:
             f.write(str(certificate))
 
@@ -3457,9 +3457,11 @@ class TestCharm:
             relations=[Relation(id=1, endpoint=TLS_ACCESS_RELATION_NAME)],
             leader=True,
         )
-        certificate, _ = self.example_cert_and_key()
+        certificate, ca, _ = self.example_certs_and_key()
         with open(tmpdir + "/certificate.pem", "w") as f:
             f.write(str(certificate))
+        with open(tmpdir + "/ca.pem", "w") as f:
+            f.write(str(ca))
         mock_assigned_certificates.return_value = (None, None)
         with patch(
             "notary.Notary.__new__",
@@ -3511,8 +3513,8 @@ class TestCharm:
             relations=[Relation(id=1, endpoint=TLS_ACCESS_RELATION_NAME)],
             leader=True,
         )
-        existing_certificate, _ = self.example_cert_and_key()
-        certificate, pk = self.example_cert_and_key()
+        existing_certificate, _, _ = self.example_certs_and_key()
+        certificate, _, pk = self.example_certs_and_key()
         provider_certificate_mock = Mock()
         provider_certificate_mock.certificate = certificate.raw
         with open(tmpdir + "/certificate.pem", "w") as f:
@@ -3567,11 +3569,13 @@ class TestCharm:
             relations=[Relation(id=1, endpoint=TLS_ACCESS_RELATION_NAME)],
             leader=True,
         )
-        certificate, pk = self.example_cert_and_key()
+        certificate, ca, pk = self.example_certs_and_key()
         provider_certificate_mock = Mock()
         provider_certificate_mock.certificate = certificate.raw
         with open(tmpdir + "/certificate.pem", "w") as f:
             f.write(str(certificate))
+        with open(tmpdir + "/ca.pem", "w") as f:
+            f.write(str(ca))
         mock_assigned_certificates.return_value = (provider_certificate_mock, pk)
         with patch(
             "notary.Notary.__new__",
