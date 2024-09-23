@@ -17,7 +17,7 @@ cffi==1.17.0
     # via cryptography
 charset-normalizer==3.3.2
     # via requests
-cosl==0.0.33
+cosl==0.0.34
     # via -r requirements.in
 cryptography==43.0.1
     # via -r requirements.in
@@ -42,11 +42,11 @@ ops==2.16.1
     #   cosl
 pycparser==2.22
     # via cffi
-pydantic==2.9.1
+pydantic==2.9.2
     # via
     #   -r requirements.in
     #   cosl
-pydantic-core==2.23.3
+pydantic-core==2.23.4
     # via pydantic
 pyyaml==6.0.2
     # via
