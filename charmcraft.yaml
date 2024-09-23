@@ -31,6 +31,9 @@ provides:
     interface: grafana_dashboard
 
 requires:
+  access-certificates:
+    limit: 1
+    interface: tls-certificates
   logging:
     interface: loki_push_api
   ingress:
