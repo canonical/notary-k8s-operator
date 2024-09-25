@@ -186,7 +186,9 @@ class Notary:
         login_params = LoginParams(username=username, password=password)
         response = self._make_request("POST", "/login", data=asdict(login_params))
         if response and response.result:
-            return LoginResponse(**response.result)
+            return LoginResponse(
+                token=response.result.get("token"),
+            )
         return None
 
     def token_is_valid(self, token: str) -> bool:
@@ -198,7 +200,10 @@ class Notary:
         """Return if the Notary server is initialized."""
         response = self._make_request("GET", "/status")
         if response and response.result:
-            return StatusResponse(**response.result)
+            return StatusResponse(
+                initialized=response.result.get("initialized"),
+                version=response.result.get("version"),
+            )
         return None
 
     def create_first_user(self, username: str, password: str) -> CreateUserResponse | None:
@@ -208,7 +213,9 @@ class Notary:
             "POST", f"/api/{self.API_VERSION}/accounts", data=asdict(create_user_params)
         )
         if response and response.result:
-            return CreateUserResponse(**response.result)
+            return CreateUserResponse(
+                id=response.result.get("id"),
+            )
         return None
 
     def list_certificate_requests(self, token: str) -> List[CertificateRequest]:
@@ -239,7 +246,9 @@ class Notary:
             data=asdict(create_certificate_request_params),
         )
         if response and response.result:
-            return CreateCertificateRequestResponse(**response.result)
+            return CreateCertificateRequestResponse(
+                id=response.result.get("id"),
+            )
         return None
 
     def create_certificate(
@@ -262,7 +271,9 @@ class Notary:
             data=asdict(create_certificate_params),
         )
         if response and response.result:
-            return CreateCertificateResponse(**response.result)
+            return CreateCertificateResponse(
+                id=response.result.get("id"),
+            )
         return None
 
 
