@@ -136,7 +136,7 @@ async def test_given_notary_when_tls_requirer_related_then_csr_uploaded_to_notar
         timeout=1000,
         raise_on_error=True,
     )
-    table = client.get_certificate_requests_table(token)
+    table = client.list_certificate_requests(token)
     assert table
     assert len(table.rows) == 1
 
@@ -147,7 +147,7 @@ async def test_given_notary_when_tls_requirer_related_then_csr_uploaded_to_notar
     chain = [str(cert), str(ca)]
     client.post_certificate(row.csr, chain, token)
 
-    table = client.get_certificate_requests_table(token)
+    table = client.list_certificate_requests(token)
     assert table
     assert table.rows[0].certificate_chain != ""
     assert table.rows[0].certificate_chain != "rejected"
