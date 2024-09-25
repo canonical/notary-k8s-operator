@@ -242,6 +242,29 @@ class Notary:
             return CreateCertificateRequestResponse(**response.result)
         return None
 
+    def create_certificate(
+        self, csr: str, cert_chain: list[str], token: str
+    ) -> CreateCertificateResponse | None:
+        """Create a new certificate in Notary."""
+        certificate_requests = self.list_certificate_requests(token=token)
+        if not certificate_requests:
+            logger.error("couldn't list certificate requests")
+            return None
+        csr_ids = [cert for cert in certificate_requests if cert.csr == csr]
+        if len(csr_ids) != 1:
+            logger.error("given CSR not found in Notary")
+            return None
+        create_certificate_params = CreateCertificateParams(csr=csr, cert_chain=cert_chain)
+        response = self._make_request(
+            "POST",
+            f"/api/{self.API_VERSION}/certificate_requests/{csr_ids[0].id}/certificate",
+            token=token,
+            data=asdict(create_certificate_params),
+        )
+        if response and response.result:
+            return CreateCertificateResponse(**response.result)
+        return None
+
 
 def serialize(pem_string: str) -> list[str] | Literal["", "rejected"]:
     """Process the certificate entry coming from Notary.

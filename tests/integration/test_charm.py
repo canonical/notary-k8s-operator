@@ -145,7 +145,7 @@ async def test_given_notary_when_tls_requirer_related_then_csr_uploaded_to_notar
     ca = generate_ca(ca_pk, 365, "integration-test")
     cert = generate_certificate(CertificateSigningRequest.from_string(row.csr), ca, ca_pk, 365)
     chain = [str(cert), str(ca)]
-    client.post_certificate(row.csr, chain, token)
+    client.create_certificate(row.csr, chain, token)
 
     table = client.list_certificate_requests(token)
     assert table
