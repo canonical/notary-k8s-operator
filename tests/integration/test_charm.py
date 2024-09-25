@@ -136,21 +136,21 @@ async def test_given_notary_when_tls_requirer_related_then_csr_uploaded_to_notar
         timeout=1000,
         raise_on_error=True,
     )
-    table = client.list_certificate_requests(token)
-    assert table
-    assert len(table.rows) == 1
+    certificate_requests = client.list_certificate_requests(token)
+    assert len(certificate_requests) == 1
 
-    row = table.rows[0]
+    certificate_request = certificate_requests[0]
     ca_pk = generate_private_key()
     ca = generate_ca(ca_pk, 365, "integration-test")
-    cert = generate_certificate(CertificateSigningRequest.from_string(row.csr), ca, ca_pk, 365)
+    cert = generate_certificate(
+        CertificateSigningRequest.from_string(certificate_request.csr), ca, ca_pk, 365
+    )
     chain = [str(cert), str(ca)]
-    client.create_certificate(row.csr, chain, token)
+    client.create_certificate(certificate_request.csr, chain, token)
 
-    table = client.list_certificate_requests(token)
-    assert table
-    assert table.rows[0].certificate_chain != ""
-    assert table.rows[0].certificate_chain != "rejected"
+    certificate_requests = client.list_certificate_requests(token)
+    assert certificate_requests[0].certificate_chain != ""
+    assert certificate_requests[0].certificate_chain != "rejected"
 
     await ops_test.model.wait_for_idle(
         apps=[APP_NAME, TLS_REQUIRER_APPLICATION_NAME],
