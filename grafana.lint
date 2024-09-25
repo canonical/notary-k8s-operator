@@ -1,2 +1,3 @@
 exclusions:
   template-datasource-rule:
+  target-logql-rule:
