@@ -49,13 +49,11 @@ async def test_build_and_deploy(ops_test: OpsTest, request: pytest.FixtureReques
         "self-signed-certificates",
         application_name=TLS_PROVIDER_APPLICATION_NAME,
         channel="edge",
-        trust=True,
     )
     await ops_test.model.deploy(
         "tls-certificates-requirer",
         application_name=TLS_REQUIRER_APPLICATION_NAME,
         channel="edge",
-        trust=True,
     )
     await ops_test.model.deploy(
         "prometheus-k8s",

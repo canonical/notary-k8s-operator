@@ -88,8 +88,7 @@ class DeleteCertificateRequestResponse:
 class CreateCertificateParams:
     """Parameters to create a certificate in Notary."""
 
-    csr: str
-    cert_chain: list[str]
+    certificate: str
 
 
 @dataclass
@@ -263,7 +262,7 @@ class Notary:
         if len(csr_ids) != 1:
             logger.error("given CSR not found in Notary")
             return None
-        create_certificate_params = CreateCertificateParams(csr=csr, cert_chain=cert_chain)
+        create_certificate_params = CreateCertificateParams(certificate="\n".join(cert_chain))
         response = self._make_request(
             "POST",
             f"/api/{self.API_VERSION}/certificate_requests/{csr_ids[0].id}/certificate",
