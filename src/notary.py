@@ -250,10 +250,10 @@ class Notary:
             )
         return None
 
-    def create_certificate(
+    def create_certificate_from_csr(
         self, csr: str, cert_chain: list[str], token: str
     ) -> CreateCertificateResponse | None:
-        """Create a new certificate in Notary."""
+        """Create a certificate from a CSR in Notary."""
         certificate_requests = self.list_certificate_requests(token=token)
         if not certificate_requests:
             logger.error("couldn't list certificate requests")

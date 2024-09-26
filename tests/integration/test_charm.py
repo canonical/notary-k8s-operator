@@ -144,7 +144,7 @@ async def test_given_notary_when_tls_requirer_related_then_csr_uploaded_to_notar
         CertificateSigningRequest.from_string(certificate_request.csr), ca, ca_pk, 365
     )
     chain = [str(cert), str(ca)]
-    client.create_certificate(certificate_request.csr, chain, token)
+    client.create_certificate_from_csr(certificate_request.csr, chain, token)
 
     certificate_requests = client.list_certificate_requests(token)
     assert certificate_requests[0].certificate_chain != ""
