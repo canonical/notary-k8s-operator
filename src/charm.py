@@ -224,20 +224,20 @@ class NotaryCharm(ops.CharmBase):
             logger.warning("couldn't distribute certificates: not logged in")
             return
         databag_csrs = self.tls.get_certificate_requests()
-        certificate_requests = self.client.list_certificate_requests(login_details.token)
+        notary_certificate_requests = self.client.list_certificate_requests(login_details.token)
         for request in databag_csrs:
-            certificate_requests_with_matching_csr = [
-                certificate_request
-                for certificate_request in certificate_requests
-                if certificate_request.csr == str(request.certificate_signing_request)
+            notary_certificate_requests_with_matching_csr = [
+                notary_certificate_request
+                for notary_certificate_request in notary_certificate_requests
+                if notary_certificate_request.csr == str(request.certificate_signing_request)
             ]
-            if len(certificate_requests_with_matching_csr) < 1:
+            if len(notary_certificate_requests_with_matching_csr) < 1:
                 self.client.create_certificate_request(
                     str(request.certificate_signing_request), login_details.token
                 )
                 continue
-            assert len(certificate_requests_with_matching_csr) < 2
-            request_notary_entry = certificate_requests_with_matching_csr[0]
+            assert len(notary_certificate_requests_with_matching_csr) < 2
+            request_notary_entry = notary_certificate_requests_with_matching_csr[0]
             certificates_provided_for_csr = [
                 csr
                 for csr in self.tls.get_issued_certificates(request.relation_id)
