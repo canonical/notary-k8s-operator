@@ -139,6 +139,7 @@ class NotaryCharm(ops.CharmBase):
         self._configure_access_certificates()
         self._configure_charm_authorization()
         self._configure_certificate_requirers()
+        self._configure_juju_workload_version()
 
     def _on_collect_status(self, event: ops.CollectStatusEvent):
         if not self.unit.is_leader():
@@ -281,6 +282,15 @@ class NotaryCharm(ops.CharmBase):
                         chain=certificate_chain,
                     )
                 )
+
+    def _configure_juju_workload_version(self):
+        """Set the Juju workload version to the Notary version."""
+        if not self.unit.is_leader():
+            return
+        if not self.client.is_api_available():
+            return
+        if version := self.client.get_version():
+            self.unit.set_workload_version(version)
 
     ## Properties ##
     @property

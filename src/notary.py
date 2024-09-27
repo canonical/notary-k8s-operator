@@ -180,6 +180,11 @@ class Notary:
         status = self.get_status()
         return status is not None
 
+    def get_version(self) -> str | None:
+        """Return the version of the Notary server."""
+        status = self.get_status()
+        return status.version if status else None
+
     def login(self, username: str, password: str) -> LoginResponse | None:
         """Login to notary by sending the username and password and return a Token."""
         login_params = LoginParams(username=username, password=password)
