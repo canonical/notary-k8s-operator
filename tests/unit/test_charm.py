@@ -26,7 +26,7 @@ from lib.charms.tls_certificates_interface.v4.tls_certificates import (
     generate_private_key,
 )
 from notary import CertificateRequest as CertificateRequestEntry
-from notary import LoginResponse, StatusResponse
+from notary import LoginResponse
 
 TLS_LIB_PATH = "charms.tls_certificates_interface.v4.tls_certificates"
 
@@ -2998,7 +2998,8 @@ class TestCharm:
             return_value=Mock(
                 **{
                     "is_api_available.return_value": True,
-                    "get_status.return_value": StatusResponse(version="1.2.3"),
+                    "login.return_value": None,
+                    "get_version.return_value": "1.2.3",
                 },
             ),
         ):
