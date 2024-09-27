@@ -33,6 +33,8 @@ PROMETHEUS_APPLICATION_NAME = "prometheus-k8s"
 TRAEIK_K8S_APPLICATION_NAME = "traefik-k8s"
 TLS_PROVIDER_APPLICATION_NAME = "self-signed-certificates"
 TLS_REQUIRER_APPLICATION_NAME = "tls-certificates-requirer"
+# TODO: Set correct revision when https://github.com/canonical/traefik-k8s-operator/pull/407 is merged
+TRAEIK_K8S_REVISION = 1
 
 
 @pytest.mark.abort_on_fail
@@ -195,11 +197,19 @@ async def test_given_application_deployed_when_related_to_traefik_k8s_then_all_s
     ops_test: OpsTest,
 ):
     await ops_test.model.deploy(
-        TRAEIK_K8S_APPLICATION_NAME, application_name=TRAEIK_K8S_APPLICATION_NAME, trust=True
+        TRAEIK_K8S_APPLICATION_NAME,
+        application_name=TRAEIK_K8S_APPLICATION_NAME,
+        trust=True,
+        channel="stable",
+        revision=TRAEIK_K8S_REVISION,
     )
     await ops_test.model.integrate(
         relation1=f"{APP_NAME}:ingress",
         relation2=f"{TRAEIK_K8S_APPLICATION_NAME}:ingress",
+    )
+    await ops_test.model.integrate(
+        relation1=f"{APP_NAME}:send-ca-cert",
+        relation2=f"{TRAEIK_K8S_APPLICATION_NAME}:receive-ca-cert-v1",
     )
     await ops_test.model.wait_for_idle(
         apps=[APP_NAME, TRAEIK_K8S_APPLICATION_NAME],
@@ -207,6 +217,9 @@ async def test_given_application_deployed_when_related_to_traefik_k8s_then_all_s
         timeout=1000,
         raise_on_error=True,
     )
+    endpoint = await get_external_notary_endpoint(ops_test)
+    client = Notary(url=endpoint)
+    assert client.is_api_available()
 
 
 async def get_notary_endpoint(ops_test: OpsTest) -> str:
@@ -214,6 +227,12 @@ async def get_notary_endpoint(ops_test: OpsTest) -> str:
     status = await ops_test.model.get_status()
     notary_ip = status.applications[APP_NAME].units[f"{APP_NAME}/0"].address
     return f"https://{notary_ip}:2111"
+
+async def get_external_notary_endpoint(ops_test: OpsTest) -> str:
+    assert ops_test.model
+    status = await ops_test.model.get_status()
+    traefik_proxied_endpoints = await run_show_traefik_proxied_endpoints_action(ops_test)
+    return json.loads(traefik_proxied_endpoints).get(APP_NAME, "").get("url", "")
 
 
 async def get_notary_credentials(ops_test: OpsTest) -> dict[str, str]:
@@ -242,6 +261,12 @@ async def run_get_certificate_action(ops_test: OpsTest) -> str:
     action_output = await ops_test.model.get_action_output(action_uuid=action.entity_id, wait=30)
     return action_output.get("certificates", "")
 
+async def run_show_traefik_proxied_endpoints_action(ops_test: OpsTest) -> str:
+    assert ops_test.model
+    traefik_k8s_unit = ops_test.model.units[f"{TRAEIK_K8S_APPLICATION_NAME}/0"]
+    action = await traefik_k8s_unit.run_action(action_name="show-proxied-endpoints")  # type: ignore
+    action_output = await ops_test.model.get_action_output(action_uuid=action.entity_id, wait=30)
+    return action_output.get("proxied-endpoints", "")
 
 async def get_file_from_notary(ops_test: OpsTest, file_name: str) -> str:
     notary_unit = ops_test.model.units[f"{APP_NAME}/0"]  # type: ignore
