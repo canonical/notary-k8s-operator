@@ -25,8 +25,8 @@ from lib.charms.tls_certificates_interface.v4.tls_certificates import (
     generate_csr,
     generate_private_key,
 )
-from notary import CertificateRequest as CertificateRequestRow
-from notary import CertificateRequests
+from notary import CertificateRequest as CertificateRequestEntry
+from notary import LoginResponse
 
 TLS_LIB_PATH = "charms.tls_certificates_interface.v4.tls_certificates"
 
@@ -2999,7 +2999,7 @@ class TestCharm:
                 **{
                     "is_api_available.return_value": True,
                     "is_initialized.return_value": False,
-                    "login.return_value": "example-token",
+                    "login.return_value": LoginResponse(token="example-token"),
                     "token_is_valid.return_value": False,
                 },
             ),
@@ -3047,7 +3047,7 @@ class TestCharm:
                 **{
                     "is_api_available.return_value": True,
                     "is_initialized.return_value": False,
-                    "login.return_value": "example-token",
+                    "login.return_value": LoginResponse(token="example-token"),
                     "token_is_valid.return_value": False,
                 },
             ),
@@ -3109,8 +3109,8 @@ class TestCharm:
                     "is_api_available.return_value": True,
                     "is_initialized.return_value": True,
                     "token_is_valid.return_value": True,
-                    "get_certificate_requests_table.return_value": CertificateRequests(rows=[]),
-                    "post_csr": post_call,
+                    "list_certificate_requests.return_value": [],
+                    "create_certificate_request": post_call,
                 },
             ),
         ):
@@ -3173,9 +3173,9 @@ class TestCharm:
                     "is_api_available.return_value": True,
                     "is_initialized.return_value": True,
                     "token_is_valid.return_value": True,
-                    "get_certificate_requests_table.return_value": CertificateRequests(
-                        rows=[CertificateRequestRow(id=1, csr=str(csr), certificate_chain="")]
-                    ),
+                    "list_certificate_requests.return_value": [
+                        CertificateRequestEntry(id=1, csr=str(csr), certificate_chain="")
+                    ],
                     "post_csr": post_call,
                 },
             ),
@@ -3242,13 +3242,11 @@ class TestCharm:
                     "is_api_available.return_value": True,
                     "is_initialized.return_value": True,
                     "token_is_valid.return_value": True,
-                    "get_certificate_requests_table.return_value": CertificateRequests(
-                        rows=[
-                            CertificateRequestRow(
-                                id=1, csr=str(csr), certificate_chain=[str(cert), str(ca)]
-                            )
-                        ]
-                    ),
+                    "list_certificate_requests.return_value": [
+                        CertificateRequestEntry(
+                            id=1, csr=str(csr), certificate_chain=[str(cert), str(ca)]
+                        )
+                    ],
                 },
             ),
         ):
@@ -3328,13 +3326,11 @@ class TestCharm:
                     "is_api_available.return_value": True,
                     "is_initialized.return_value": True,
                     "token_is_valid.return_value": True,
-                    "get_certificate_requests_table.return_value": CertificateRequests(
-                        rows=[
-                            CertificateRequestRow(
-                                id=1, csr=str(csr), certificate_chain=[str(new_cert), str(ca)]
-                            )
-                        ]
-                    ),
+                    "list_certificate_requests.return_value": [
+                        CertificateRequestEntry(
+                            id=1, csr=str(csr), certificate_chain=[str(new_cert), str(ca)]
+                        )
+                    ],
                 },
             ),
         ):
@@ -3413,11 +3409,9 @@ class TestCharm:
                     "is_api_available.return_value": True,
                     "is_initialized.return_value": True,
                     "token_is_valid.return_value": True,
-                    "get_certificate_requests_table.return_value": CertificateRequests(
-                        rows=[
-                            CertificateRequestRow(id=1, csr=str(csr), certificate_chain="rejected")
-                        ]
-                    ),
+                    "list_certificate_requests.return_value": [
+                        CertificateRequestEntry(id=1, csr=str(csr), certificate_chain="rejected")
+                    ],
                 },
             ),
         ):
@@ -3467,7 +3461,7 @@ class TestCharm:
                 **{
                     "is_api_available.return_value": True,
                     "is_initialized.return_value": True,
-                    "login.return_value": "example-token",
+                    "login.return_value": LoginResponse(token="example-token"),
                     "token_is_valid.return_value": True,
                 },
             ),
@@ -3524,7 +3518,7 @@ class TestCharm:
                 **{
                     "is_api_available.return_value": True,
                     "is_initialized.return_value": True,
-                    "login.return_value": "example-token",
+                    "login.return_value": LoginResponse(token="example-token"),
                     "token_is_valid.return_value": True,
                 },
             ),
@@ -3579,7 +3573,7 @@ class TestCharm:
                 **{
                     "is_api_available.return_value": True,
                     "is_initialized.return_value": True,
-                    "login.return_value": "example-token",
+                    "login.return_value": LoginResponse(token="example-token"),
                     "token_is_valid.return_value": True,
                 },
             ),
