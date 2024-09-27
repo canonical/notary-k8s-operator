@@ -2998,7 +2998,7 @@ class TestCharm:
             return_value=Mock(
                 **{
                     "is_api_available.return_value": True,
-                    "get_status.returl_value": StatusResponse(version="1.2.3"),
+                    "get_status.return_value": StatusResponse(version="1.2.3"),
                 },
             ),
         ):
