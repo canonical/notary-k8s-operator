@@ -26,7 +26,7 @@ from lib.charms.tls_certificates_interface.v4.tls_certificates import (
     generate_private_key,
 )
 from notary import CertificateRequest as CertificateRequestEntry
-from notary import LoginResponse
+from notary import LoginResponse, StatusResponse
 
 TLS_LIB_PATH = "charms.tls_certificates_interface.v4.tls_certificates"
 
@@ -2961,6 +2961,50 @@ class TestCharm:
             out = context.run(context.on.collect_unit_status(), state)
         assert out.unit_status == ops.ActiveStatus()
 
+    def test_given_notary_available_when_configure_then_workload_version_is_set(
+        self, context, tmpdir
+    ):
+        config_mount = Mount(location="/etc/notary/config", source=tmpdir)
+        state = State(
+            storages={Storage(name="config"), Storage(name="database")},
+            containers=[
+                Container(
+                    name="notary",
+                    can_connect=True,
+                    mounts={"config": config_mount},
+                    layers={
+                        "notary": Layer(
+                            {
+                                "summary": "notary layer",
+                                "description": "pebble config layer for notary",
+                                "services": {
+                                    "notary": {
+                                        "override": "replace",
+                                        "summary": "notary",
+                                        "command": "notary -config /etc/notary/config/config.yaml",
+                                        "startup": "enabled",
+                                    }
+                                },
+                            }
+                        )
+                    },
+                )
+            ],
+            leader=True,
+        )
+
+        with patch(
+            "notary.Notary.__new__",
+            return_value=Mock(
+                **{
+                    "is_api_available.return_value": True,
+                    "get_status.returl_value": StatusResponse(version="1.2.3"),
+                },
+            ),
+        ):
+            out = context.run(context.on.update_status(), state)
+        assert out.workload_version == "1.2.3"
+
     def test_given_notary_available_and_not_initialized_when_configure_then_admin_user_created(
         self, context, tmpdir
     ):
@@ -3001,6 +3045,7 @@ class TestCharm:
                     "is_initialized.return_value": False,
                     "login.return_value": LoginResponse(token="example-token"),
                     "token_is_valid.return_value": False,
+                    "get_version.return_value": None,
                 },
             ),
         ):
@@ -3049,6 +3094,7 @@ class TestCharm:
                     "is_initialized.return_value": False,
                     "login.return_value": LoginResponse(token="example-token"),
                     "token_is_valid.return_value": False,
+                    "get_version.return_value": None,
                 },
             ),
         ):
@@ -3111,6 +3157,7 @@ class TestCharm:
                     "token_is_valid.return_value": True,
                     "list_certificate_requests.return_value": [],
                     "create_certificate_request": post_call,
+                    "get_version.return_value": None,
                 },
             ),
         ):
@@ -3177,6 +3224,7 @@ class TestCharm:
                         CertificateRequestEntry(id=1, csr=str(csr), certificate_chain="")
                     ],
                     "post_csr": post_call,
+                    "get_version.return_value": None,
                 },
             ),
         ):
@@ -3247,6 +3295,7 @@ class TestCharm:
                             id=1, csr=str(csr), certificate_chain=[str(cert), str(ca)]
                         )
                     ],
+                    "get_version.return_value": None,
                 },
             ),
         ):
@@ -3331,6 +3380,7 @@ class TestCharm:
                             id=1, csr=str(csr), certificate_chain=[str(new_cert), str(ca)]
                         )
                     ],
+                    "get_version.return_value": None,
                 },
             ),
         ):
@@ -3412,6 +3462,7 @@ class TestCharm:
                     "list_certificate_requests.return_value": [
                         CertificateRequestEntry(id=1, csr=str(csr), certificate_chain="rejected")
                     ],
+                    "get_version.return_value": None,
                 },
             ),
         ):
@@ -3463,6 +3514,7 @@ class TestCharm:
                     "is_initialized.return_value": True,
                     "login.return_value": LoginResponse(token="example-token"),
                     "token_is_valid.return_value": True,
+                    "get_version.return_value": None,
                 },
             ),
         ):
@@ -3520,6 +3572,7 @@ class TestCharm:
                     "is_initialized.return_value": True,
                     "login.return_value": LoginResponse(token="example-token"),
                     "token_is_valid.return_value": True,
+                    "get_version.return_value": None,
                 },
             ),
         ):
@@ -3575,6 +3628,7 @@ class TestCharm:
                     "is_initialized.return_value": True,
                     "login.return_value": LoginResponse(token="example-token"),
                     "token_is_valid.return_value": True,
+                    "get_version.return_value": None,
                 },
             ),
         ):
