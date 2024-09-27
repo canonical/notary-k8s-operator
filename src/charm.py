@@ -298,7 +298,7 @@ class NotaryCharm(ops.CharmBase):
                 )
 
     def _send_ca_cert(self):
-        """Send the existing CA cert in the workload to all relations."""
+        """Send the CA certificate in the workload to all requirers of the certificate-transfer interface."""
         with self.container.pull(
             f"{WORKLOAD_CONFIG_PATH}/{CONFIG_MOUNT}/ca.pem",
         ) as ca_cert_file:

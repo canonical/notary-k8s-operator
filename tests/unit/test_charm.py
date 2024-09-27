@@ -12,6 +12,7 @@ from scenario import Container, Context, Mount, Network, Relation, Secret, State
 from charm import (
     CERTIFICATE_PROVIDER_RELATION_NAME,
     NOTARY_LOGIN_SECRET_LABEL,
+    SEND_CA_CERT_RELATION_NAME,
     TLS_ACCESS_RELATION_NAME,
     NotaryCharm,
 )
@@ -34,6 +35,7 @@ CERTIFICATE_COMMON_NAME = "Notary Self Signed Certificate"
 SELF_SIGNED_CA_COMMON_NAME = "Notary Self Signed Root CA"
 
 TLS_LIB_PATH = "charms.tls_certificates_interface.v4.tls_certificates"
+CERT_TRANSFER_LIB_PATH = "charms.certificate_transfer_interface.v1.certificate_transfer"
 
 
 class TestCharm:
@@ -3592,3 +3594,57 @@ class TestCharm:
         with open(tmpdir + "/certificate.pem") as f:
             saved_cert = f.read()
             assert saved_cert == str(certificate)
+
+    @patch(f"{CERT_TRANSFER_LIB_PATH}.CertificateTransferProvides.add_certificates")
+    def test_given_send_ca_requirer_when_configure_then_ca_cert_sent(
+        self, mock_add_certificates, context, tmpdir
+    ):
+        config_mount = Mount(location="/etc/notary/config", source=tmpdir)
+        state = State(
+            storages={Storage(name="config"), Storage(name="database")},
+            containers=[
+                Container(
+                    name="notary",
+                    can_connect=True,
+                    mounts={"config": config_mount},
+                    layers={
+                        "notary": Layer(
+                            {
+                                "summary": "notary layer",
+                                "description": "pebble config layer for notary",
+                                "services": {
+                                    "notary": {
+                                        "override": "replace",
+                                        "summary": "notary",
+                                        "command": "notary -config /etc/notary/config/config.yaml",
+                                        "startup": "enabled",
+                                    }
+                                },
+                            }
+                        )
+                    },
+                )
+            ],
+            relations=[
+                Relation(id=1, endpoint=SEND_CA_CERT_RELATION_NAME),
+            ],
+            leader=True,
+        )
+        certificate, ca, pk = self.example_certs_and_key()
+        with open(tmpdir + "/certificate.pem", "w") as f:
+            f.write(str(certificate))
+        with open(tmpdir + "/ca.pem", "w") as f:
+            f.write(str(ca))
+        with patch(
+            "notary.Notary.__new__",
+            return_value=Mock(
+                **{
+                    "is_api_available.return_value": True,
+                    "is_initialized.return_value": True,
+                    "login.return_value": "example-token",
+                    "token_is_valid.return_value": True,
+                },
+            ),
+        ):
+            context.run(context.on.update_status(), state)
+        mock_add_certificates.assert_called_once_with(certificates={str(ca)}, relation_id=1)
