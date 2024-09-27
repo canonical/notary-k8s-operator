@@ -197,6 +197,10 @@ async def test_given_application_deployed_when_related_to_traefik_k8s_then_all_s
     await ops_test.model.deploy(
         TRAEIK_K8S_APPLICATION_NAME, application_name=TRAEIK_K8S_APPLICATION_NAME, trust=True
     )
+    await ops_test.model.integrate(
+        relation1=f"{APP_NAME}:ingress",
+        relation2=f"{TRAEIK_K8S_APPLICATION_NAME}:ingress",
+    )
     await ops_test.model.wait_for_idle(
         apps=[APP_NAME, TRAEIK_K8S_APPLICATION_NAME],
         status="active",
