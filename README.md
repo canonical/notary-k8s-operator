@@ -11,7 +11,10 @@ The Notary operator for Kubernetes automates the lifecycle operations of Notary.
 Notary K8s Operator uses the following OCI image:
 - [ghcr.io/canonical/notary](https://github.com/canonical/notary)
 
-## Contributing
+## Project & Community
 
-See the [Juju SDK documentation](https://juju.is/docs/sdk) for more information about developing and improving charms. This project's
-[CONTRIBUTING.md](CONTRIBUTING.md) file contains guidelines for getting started.
+Notary K8s Operator is an open source project that warmly welcomes community contributions, suggestions, fixes, and constructive feedback.
+
+- To contribute to the code Please see [CONTRIBUTING.md](/CONTRIBUTING.md) and the [Juju SDK docs](https://juju.is/docs/sdk) for guidelines and best practices.
+- Raise software issues or feature requests in [GitHub](https://github.com/canonical/notary-k8s-operator/issues)
+- Meet the community and chat with us on [Matrix](https://matrix.to/#/!yAkGlrYcBFYzYRvOlQ:ubuntu.com?via=ubuntu.com&via=matrix.org&via=mozilla.org)
