@@ -1,4 +1,4 @@
-# notary-k8s-operator
+# Notary Operator (Kubernetes)
 
 [Notary](https://github.com/canonical/notary/) is a certificate management software. Use it to manage certificate requests in your organization.
 
