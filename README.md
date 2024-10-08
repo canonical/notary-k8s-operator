@@ -1,21 +1,20 @@
-# notary-k8s-operator
-Manage your certificates in charms
+# Notary Operator (Kubernetes)
 
-## OCI Images
+[Notary](https://github.com/canonical/notary/) is a certificate management software. Use it to manage certificate requests in your organization.
 
-- Notary: [ghcr.io/canonical/notary](https://github.com/canonical/notary)
+The Notary operator for Kubernetes automates the lifecycle operations of Notary. It is a provider of the [tls-certificates](https://charmhub.io/integrations/tls-certificates) integration allowing for the management of certificates in the Juju ecosystem.
 
-# notary
+[Get started with Notary K8s Operator.](https://charmhub.io/notary-k8s)
 
-Charmhub package name: notary
-More information: https://charmhub.io/notary
+## OCI Image
 
-Notary helps you manage your certificates, from simple all the way up to enterprise deployments.
+Notary K8s Operator uses the following OCI image:
+- [ghcr.io/canonical/notary](https://github.com/canonical/notary)
 
-## Other resources
+## Project & Community
 
-- [Read more](https://github.com/canonical/notary/blob/main/README.md)
+Notary K8s Operator is an open source project that warmly welcomes community contributions, suggestions, fixes, and constructive feedback.
 
-- [Contributing](CONTRIBUTING.md)
-
-- See the [Juju SDK documentation](https://juju.is/docs/sdk) for more information about developing and improving charms.
+- To contribute to the code Please see [CONTRIBUTING.md](/CONTRIBUTING.md) and the [Juju SDK docs](https://juju.is/docs/sdk) for guidelines and best practices.
+- Raise software issues or feature requests in [GitHub](https://github.com/canonical/notary-k8s-operator/issues)
+- Meet the community and chat with us on [Matrix](https://matrix.to/#/!yAkGlrYcBFYzYRvOlQ:ubuntu.com?via=ubuntu.com&via=matrix.org&via=mozilla.org)
