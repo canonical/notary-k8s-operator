@@ -52,13 +52,11 @@ async def test_build_and_deploy(ops_test: OpsTest, request: pytest.FixtureReques
         "self-signed-certificates",
         application_name=TLS_PROVIDER_APPLICATION_NAME,
         channel="edge",
-        trust=True,
     )
     await ops_test.model.deploy(
         "tls-certificates-requirer",
         application_name=TLS_REQUIRER_APPLICATION_NAME,
         channel="edge",
-        trust=True,
     )
     await ops_test.model.deploy(
         "prometheus-k8s",
@@ -139,21 +137,21 @@ async def test_given_notary_when_tls_requirer_related_then_csr_uploaded_to_notar
         timeout=1000,
         raise_on_error=True,
     )
-    table = client.get_certificate_requests_table(token)
-    assert table
-    assert len(table.rows) == 1
+    certificate_requests = client.list_certificate_requests(token)
+    assert len(certificate_requests) == 1
 
-    row = table.rows[0]
+    certificate_request = certificate_requests[0]
     ca_pk = generate_private_key()
     ca = generate_ca(ca_pk, 365, "integration-test")
-    cert = generate_certificate(CertificateSigningRequest.from_string(row.csr), ca, ca_pk, 365)
+    cert = generate_certificate(
+        CertificateSigningRequest.from_string(certificate_request.csr), ca, ca_pk, 365
+    )
     chain = [str(cert), str(ca)]
-    client.post_certificate(row.csr, chain, token)
+    client.create_certificate_from_csr(certificate_request.csr, chain, token)
 
-    table = client.get_certificate_requests_table(token)
-    assert table
-    assert table.rows[0].certificate_chain != ""
-    assert table.rows[0].certificate_chain != "rejected"
+    certificate_requests = client.list_certificate_requests(token)
+    assert certificate_requests[0].certificate_chain != ""
+    assert certificate_requests[0].certificate_chain != "rejected"
 
     await ops_test.model.wait_for_idle(
         apps=[APP_NAME, TLS_REQUIRER_APPLICATION_NAME],

@@ -153,6 +153,7 @@ class NotaryCharm(ops.CharmBase):
         self._configure_charm_authorization()
         self._configure_certificate_requirers()
         self._send_ca_cert()
+        self._configure_juju_workload_version()
 
     def _on_collect_status(self, event: ops.CollectStatusEvent):
         if not self.unit.is_leader():
@@ -219,14 +220,15 @@ class NotaryCharm(ops.CharmBase):
         if not login_details:
             return
         if not login_details.token or not self.client.token_is_valid(login_details.token):
-            login_details.token = self.client.login(login_details.username, login_details.password)
-            if not login_details.token:
+            login_response = self.client.login(login_details.username, login_details.password)
+            if not login_response or not login_response.token:
                 logger.warning(
                     "failed to login with the existing admin credentials."
                     " If you've manually modified the admin account credentials,"
                     " please update the charm's credentials secret accordingly."
                 )
                 return
+            login_details.token = login_response.token
             login_details_secret = self.model.get_secret(label=NOTARY_LOGIN_SECRET_LABEL)
             login_details_secret.set_content(login_details.to_dict())
 
@@ -237,22 +239,20 @@ class NotaryCharm(ops.CharmBase):
             logger.warning("couldn't distribute certificates: not logged in")
             return
         databag_csrs = self.tls.get_certificate_requests()
-        notary_table = self.client.get_certificate_requests_table(login_details.token)
-        if not notary_table:
-            logger.warning("couldn't distribute certificates: couldn't get table from notary")
-            return
-
+        notary_certificate_requests = self.client.list_certificate_requests(login_details.token)
         for request in databag_csrs:
-            notary_rows_with_matching_csr = [
-                row
-                for row in notary_table.rows
-                if row.csr == str(request.certificate_signing_request)
+            notary_certificate_requests_with_matching_csr = [
+                notary_certificate_request
+                for notary_certificate_request in notary_certificate_requests
+                if notary_certificate_request.csr == str(request.certificate_signing_request)
             ]
-            if len(notary_rows_with_matching_csr) < 1:
-                self.client.post_csr(str(request.certificate_signing_request), login_details.token)
+            if len(notary_certificate_requests_with_matching_csr) < 1:
+                self.client.create_certificate_request(
+                    str(request.certificate_signing_request), login_details.token
+                )
                 continue
-            assert len(notary_rows_with_matching_csr) < 2
-            request_notary_entry = notary_rows_with_matching_csr[0]
+            assert len(notary_certificate_requests_with_matching_csr) < 2
+            request_notary_entry = notary_certificate_requests_with_matching_csr[0]
             certificates_provided_for_csr = [
                 csr
                 for csr in self.tls.get_issued_certificates(request.relation_id)
@@ -308,6 +308,14 @@ class NotaryCharm(ops.CharmBase):
                         certificates={ca_cert}, relation_id=relation.id
                     )
                     logger.info("Sent CA certificate to relation %s", relation.id)
+    def _configure_juju_workload_version(self):
+        """Set the Juju workload version to the Notary version."""
+        if not self.unit.is_leader():
+            return
+        if not self.client.is_api_available():
+            return
+        if version := self.client.get_version():
+            self.unit.set_workload_version(version)
 
     ## Properties ##
     @property
