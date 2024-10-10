@@ -308,6 +308,7 @@ class NotaryCharm(ops.CharmBase):
                         certificates={ca_cert}, relation_id=relation.id
                     )
                     logger.info("Sent CA certificate to relation %s", relation.id)
+
     def _configure_juju_workload_version(self):
         """Set the Juju workload version to the Notary version."""
         if not self.unit.is_leader():

@@ -3690,8 +3690,9 @@ class TestCharm:
                 **{
                     "is_api_available.return_value": True,
                     "is_initialized.return_value": True,
-                    "login.return_value": "example-token",
+                    "login.return_value": LoginResponse(token="example-token"),
                     "token_is_valid.return_value": True,
+                    "get_version.return_value": "1.2.3",
                 },
             ),
         ):
