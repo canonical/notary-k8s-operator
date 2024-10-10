@@ -10,6 +10,7 @@ import socket
 import string
 from contextlib import suppress
 from dataclasses import dataclass
+from datetime import timedelta
 
 import ops
 import yaml
@@ -18,7 +19,7 @@ from charms.loki_k8s.v1.loki_push_api import LogForwarder
 from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointProvider
 from charms.tls_certificates_interface.v4.tls_certificates import (
     Certificate,
-    CertificateRequest,
+    CertificateRequestAttributes,
     Mode,
     PrivateKey,
     ProviderCertificate,
@@ -75,7 +76,7 @@ class NotaryCharm(ops.CharmBase):
     def __init__(self, framework: ops.Framework):
         super().__init__(framework)
         self.port = 2111
-        self.access_csr = CertificateRequest(
+        self.access_csr = CertificateRequestAttributes(
             common_name="Notary",
             sans_dns=frozenset([socket.getfqdn()]),
         )
@@ -340,7 +341,7 @@ class NotaryCharm(ops.CharmBase):
         ca_certificate = generate_ca(
             private_key=ca_private_key,
             common_name=SELF_SIGNED_CA_COMMON_NAME,
-            validity=365,
+            validity=timedelta(days=365),
         )
         private_key = generate_private_key()
         csr = generate_csr(
@@ -352,7 +353,7 @@ class NotaryCharm(ops.CharmBase):
             ca=ca_certificate,
             ca_private_key=ca_private_key,
             csr=csr,
-            validity=365,
+            validity=timedelta(days=365),
         )
         self._push_files_to_workload(ca_certificate, certificate, private_key)
         logger.info("Created self signed certificates.")

@@ -6,6 +6,7 @@ import asyncio
 import json
 import logging
 from base64 import b64decode
+from datetime import timedelta
 from pathlib import Path
 
 import pytest
@@ -139,9 +140,12 @@ async def test_given_notary_when_tls_requirer_related_then_csr_uploaded_to_notar
 
     certificate_request = certificate_requests[0]
     ca_pk = generate_private_key()
-    ca = generate_ca(ca_pk, 365, "integration-test")
+    ca = generate_ca(ca_pk, timedelta(days=365), "integration-test")
     cert = generate_certificate(
-        CertificateSigningRequest.from_string(certificate_request.csr), ca, ca_pk, 365
+        CertificateSigningRequest.from_string(certificate_request.csr),
+        ca,
+        ca_pk,
+        timedelta(days=365),
     )
     chain = [str(cert), str(ca)]
     client.create_certificate_from_csr(certificate_request.csr, chain, token)

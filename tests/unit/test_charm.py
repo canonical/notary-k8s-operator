@@ -1,6 +1,7 @@
 # Copyright 2024 Canonical Ltd.
 # See LICENSE file for licensing details.
 
+from datetime import timedelta
 from pathlib import Path
 from unittest.mock import Mock, patch
 
@@ -19,7 +20,7 @@ from lib.charms.tls_certificates_interface.v4.tls_certificates import (
     Certificate,
     PrivateKey,
     ProviderCertificate,
-    RequirerCSR,
+    RequirerCertificateRequest,
     generate_ca,
     generate_certificate,
     generate_csr,
@@ -51,13 +52,13 @@ class TestCharm:
         ca_certificate = generate_ca(
             private_key=ca_private_key,
             common_name=SELF_SIGNED_CA_COMMON_NAME,
-            validity=365,
+            validity=timedelta(days=365),
         )
         certificate = generate_certificate(
             csr=csr,
             ca=ca_certificate,
             ca_private_key=ca_private_key,
-            validity=365,
+            validity=timedelta(days=365),
         )
         return certificate, private_key
 
@@ -3143,9 +3144,10 @@ class TestCharm:
         )
         csr = generate_csr(private_key=generate_private_key(), common_name="me")
         mock_get_certificate_requests.return_value = [
-            RequirerCSR(
+            RequirerCertificateRequest(
                 relation_id=1,
                 certificate_signing_request=csr,
+                is_ca=False,
             )
         ]
         post_call = Mock()
@@ -3208,9 +3210,10 @@ class TestCharm:
         )
         csr = generate_csr(private_key=generate_private_key(), common_name="me")
         mock_get_certificate_requests.return_value = [
-            RequirerCSR(
+            RequirerCertificateRequest(
                 relation_id=1,
                 certificate_signing_request=csr,
+                is_ca=False,
             )
         ]
         post_call = Mock()
@@ -3275,13 +3278,14 @@ class TestCharm:
             },
         )
         ca_pk = generate_private_key()
-        ca = generate_ca(ca_pk, 365, "me")
+        ca = generate_ca(ca_pk, timedelta(days=365), "me")
         csr = generate_csr(private_key=generate_private_key(), common_name="notary.com")
-        cert = generate_certificate(csr, ca, ca_pk, 365)
+        cert = generate_certificate(csr, ca, ca_pk, timedelta(days=365))
         mock_get_certificate_requests.return_value = [
-            RequirerCSR(
+            RequirerCertificateRequest(
                 relation_id=1,
                 certificate_signing_request=csr,
+                is_ca=False,
             )
         ]
         with patch(
@@ -3350,14 +3354,15 @@ class TestCharm:
             },
         )
         ca_pk = generate_private_key()
-        ca = generate_ca(ca_pk, 365, "me")
+        ca = generate_ca(ca_pk, timedelta(days=365), "me")
         csr = generate_csr(private_key=generate_private_key(), common_name="notary.com")
-        old_cert = generate_certificate(csr, ca, ca_pk, 365)
-        new_cert = generate_certificate(csr, ca, ca_pk, 366)
+        old_cert = generate_certificate(csr, ca, ca_pk, timedelta(days=365))
+        new_cert = generate_certificate(csr, ca, ca_pk, timedelta(days=366))
         mock_get_certificate_requests.return_value = [
-            RequirerCSR(
+            RequirerCertificateRequest(
                 relation_id=1,
                 certificate_signing_request=csr,
+                is_ca=False,
             )
         ]
         mock_get_issued_certificates.return_value = [
@@ -3435,13 +3440,14 @@ class TestCharm:
             ],
         )
         ca_pk = generate_private_key()
-        ca = generate_ca(ca_pk, 365, "me")
+        ca = generate_ca(ca_pk, timedelta(days=365), "me")
         csr = generate_csr(private_key=generate_private_key(), common_name="notary.com")
-        old_cert = generate_certificate(csr, ca, ca_pk, 365)
+        old_cert = generate_certificate(csr, ca, ca_pk, timedelta(days=365))
         mock_get_certificate_requests.return_value = [
-            RequirerCSR(
+            RequirerCertificateRequest(
                 relation_id=1,
                 certificate_signing_request=csr,
+                is_ca=False,
             )
         ]
         mock_get_issued_certificates.return_value = [
