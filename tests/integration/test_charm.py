@@ -64,6 +64,12 @@ async def test_build_and_deploy(ops_test: OpsTest, request: pytest.FixtureReques
     await ops_test.model.deploy(
         "loki-k8s", application_name=LOKI_APPLICATION_NAME, trust=True, channel="stable"
     )
+    await ops_test.model.deploy(
+        TRAEIK_K8S_APPLICATION_NAME,
+        application_name=TRAEIK_K8S_APPLICATION_NAME,
+        trust=True,
+        channel="stable",
+    )
     await ops_test.model.wait_for_idle(apps=[APP_NAME], status="active", timeout=1000)
 
 
@@ -192,12 +198,6 @@ async def test_given_loki_and_prometheus_related_to_notary_all_charm_statuses_ac
 async def test_given_application_deployed_when_related_to_traefik_k8s_then_all_statuses_active(
     ops_test: OpsTest,
 ):
-    await ops_test.model.deploy(
-        TRAEIK_K8S_APPLICATION_NAME,
-        application_name=TRAEIK_K8S_APPLICATION_NAME,
-        trust=True,
-        channel="stable",
-    )
     # TODO (Tracked in TLSENG-475): This is a workaround so Traefik has the same CA as Notary
     # This should be removed and certificate transfer should be used instead
     # Notary k8s implements V1 of the certificate transfer interface,
@@ -218,8 +218,12 @@ async def test_given_application_deployed_when_related_to_traefik_k8s_then_all_s
         raise_on_error=True,
     )
     endpoint = await get_external_notary_endpoint(ops_test)
+    assert ops_test.model
+    admin_credentials = await get_notary_credentials(ops_test)
+    token = admin_credentials.get("token")
+    assert token
     client = Notary(url=endpoint)
-    assert client.is_api_available()
+    assert client.token_is_valid(token)
 
 
 async def get_notary_endpoint(ops_test: OpsTest) -> str:
