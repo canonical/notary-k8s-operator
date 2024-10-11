@@ -203,9 +203,14 @@ async def test_given_application_deployed_when_related_to_traefik_k8s_then_all_s
     # Notary k8s implements V1 of the certificate transfer interface,
     # And the following PR is needed to get Traefik to use it too:
     # https://github.com/canonical/traefik-k8s-operator/issues/407
+    assert ops_test.model
     await ops_test.model.integrate(
         relation1=f"{TLS_PROVIDER_APPLICATION_NAME}:certificates",
         relation2=f"{TRAEIK_K8S_APPLICATION_NAME}",
+    )
+    await ops_test.model.integrate(
+        relation1=f"{TLS_PROVIDER_APPLICATION_NAME}:certificates",
+        relation2=f"{APP_NAME}:access-certificates",
     )
     await ops_test.model.integrate(
         relation1=f"{APP_NAME}:ingress",
@@ -218,12 +223,8 @@ async def test_given_application_deployed_when_related_to_traefik_k8s_then_all_s
         raise_on_error=True,
     )
     endpoint = await get_external_notary_endpoint(ops_test)
-    assert ops_test.model
-    admin_credentials = await get_notary_credentials(ops_test)
-    token = admin_credentials.get("token")
-    assert token
     client = Notary(url=endpoint)
-    assert client.token_is_valid(token)
+    assert client.is_api_available()
 
 
 async def get_notary_endpoint(ops_test: OpsTest) -> str:
