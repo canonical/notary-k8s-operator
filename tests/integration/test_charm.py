@@ -30,7 +30,7 @@ APP_NAME = CHARMCRAFT["name"]
 
 LOKI_APPLICATION_NAME = "loki-k8s"
 PROMETHEUS_APPLICATION_NAME = "prometheus-k8s"
-TRAEIK_K8S_APPLICATION_NAME = "traefik-k8s"
+TRAEFIK_K8S_APPLICATION_NAME = "traefik-k8s"
 TLS_PROVIDER_APPLICATION_NAME = "self-signed-certificates"
 TLS_REQUIRER_APPLICATION_NAME = "tls-certificates-requirer"
 
@@ -65,8 +65,8 @@ async def test_build_and_deploy(ops_test: OpsTest, request: pytest.FixtureReques
         "loki-k8s", application_name=LOKI_APPLICATION_NAME, trust=True, channel="stable"
     )
     await ops_test.model.deploy(
-        TRAEIK_K8S_APPLICATION_NAME,
-        application_name=TRAEIK_K8S_APPLICATION_NAME,
+        TRAEFIK_K8S_APPLICATION_NAME,
+        application_name=TRAEFIK_K8S_APPLICATION_NAME,
         trust=True,
         channel="stable",
     )
@@ -206,7 +206,7 @@ async def test_given_application_deployed_when_related_to_traefik_k8s_then_all_s
     assert ops_test.model
     await ops_test.model.integrate(
         relation1=f"{TLS_PROVIDER_APPLICATION_NAME}:certificates",
-        relation2=f"{TRAEIK_K8S_APPLICATION_NAME}",
+        relation2=f"{TRAEFIK_K8S_APPLICATION_NAME}",
     )
     await ops_test.model.integrate(
         relation1=f"{TLS_PROVIDER_APPLICATION_NAME}:certificates",
@@ -214,10 +214,10 @@ async def test_given_application_deployed_when_related_to_traefik_k8s_then_all_s
     )
     await ops_test.model.integrate(
         relation1=f"{APP_NAME}:ingress",
-        relation2=f"{TRAEIK_K8S_APPLICATION_NAME}:ingress",
+        relation2=f"{TRAEFIK_K8S_APPLICATION_NAME}:ingress",
     )
     await ops_test.model.wait_for_idle(
-        apps=[APP_NAME, TRAEIK_K8S_APPLICATION_NAME],
+        apps=[APP_NAME, TRAEFIK_K8S_APPLICATION_NAME],
         status="active",
         timeout=1000,
         raise_on_error=True,
@@ -269,7 +269,7 @@ async def run_get_certificate_action(ops_test: OpsTest) -> str:
 
 async def run_show_traefik_proxied_endpoints_action(ops_test: OpsTest) -> str:
     assert ops_test.model
-    traefik_k8s_unit = ops_test.model.units[f"{TRAEIK_K8S_APPLICATION_NAME}/0"]
+    traefik_k8s_unit = ops_test.model.units[f"{TRAEFIK_K8S_APPLICATION_NAME}/0"]
     action = await traefik_k8s_unit.run_action(action_name="show-proxied-endpoints")  # type: ignore
     action_output = await ops_test.model.get_action_output(action_uuid=action.entity_id, wait=30)
     return action_output.get("proxied-endpoints", "")
