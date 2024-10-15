@@ -31,6 +31,7 @@ APP_NAME = CHARMCRAFT["name"]
 
 LOKI_APPLICATION_NAME = "loki-k8s"
 PROMETHEUS_APPLICATION_NAME = "prometheus-k8s"
+TRAEFIK_K8S_APPLICATION_NAME = "traefik-k8s"
 TLS_PROVIDER_APPLICATION_NAME = "self-signed-certificates"
 TLS_REQUIRER_APPLICATION_NAME = "tls-certificates-requirer"
 
@@ -63,6 +64,12 @@ async def test_build_and_deploy(ops_test: OpsTest, request: pytest.FixtureReques
     )
     await ops_test.model.deploy(
         "loki-k8s", application_name=LOKI_APPLICATION_NAME, trust=True, channel="stable"
+    )
+    await ops_test.model.deploy(
+        TRAEFIK_K8S_APPLICATION_NAME,
+        application_name=TRAEFIK_K8S_APPLICATION_NAME,
+        trust=True,
+        channel="stable",
     )
     await ops_test.model.wait_for_idle(apps=[APP_NAME], status="active", timeout=1000)
 
@@ -191,11 +198,50 @@ async def test_given_loki_and_prometheus_related_to_notary_all_charm_statuses_ac
     )
 
 
+@pytest.mark.abort_on_fail
+async def test_given_application_deployed_when_related_to_traefik_k8s_then_all_statuses_active(
+    ops_test: OpsTest,
+):
+    # TODO (Tracked in TLSENG-475): This is a workaround so Traefik has the same CA as Notary
+    # This should be removed and certificate transfer should be used instead
+    # Notary k8s implements V1 of the certificate transfer interface,
+    # And the following PR is needed to get Traefik to use it too:
+    # https://github.com/canonical/traefik-k8s-operator/issues/407
+    assert ops_test.model
+    await ops_test.model.integrate(
+        relation1=f"{TLS_PROVIDER_APPLICATION_NAME}:certificates",
+        relation2=f"{TRAEFIK_K8S_APPLICATION_NAME}",
+    )
+    await ops_test.model.integrate(
+        relation1=f"{TLS_PROVIDER_APPLICATION_NAME}:certificates",
+        relation2=f"{APP_NAME}:access-certificates",
+    )
+    await ops_test.model.integrate(
+        relation1=f"{APP_NAME}:ingress",
+        relation2=f"{TRAEFIK_K8S_APPLICATION_NAME}:ingress",
+    )
+    await ops_test.model.wait_for_idle(
+        apps=[APP_NAME, TRAEFIK_K8S_APPLICATION_NAME],
+        status="active",
+        timeout=1000,
+        raise_on_error=True,
+    )
+    endpoint = await get_external_notary_endpoint(ops_test)
+    client = Notary(url=endpoint)
+    assert client.is_api_available()
+
+
 async def get_notary_endpoint(ops_test: OpsTest) -> str:
     assert ops_test.model
     status = await ops_test.model.get_status()
     notary_ip = status.applications[APP_NAME].units[f"{APP_NAME}/0"].address
     return f"https://{notary_ip}:2111"
+
+
+async def get_external_notary_endpoint(ops_test: OpsTest) -> str:
+    assert ops_test.model
+    traefik_proxied_endpoints = await run_show_traefik_proxied_endpoints_action(ops_test)
+    return json.loads(traefik_proxied_endpoints).get(APP_NAME, "").get("url", "")
 
 
 async def get_notary_credentials(ops_test: OpsTest) -> dict[str, str]:
@@ -223,6 +269,14 @@ async def run_get_certificate_action(ops_test: OpsTest) -> str:
     action = await tls_requirer_unit.run_action(action_name="get-certificate")  # type: ignore
     action_output = await ops_test.model.get_action_output(action_uuid=action.entity_id, wait=30)
     return action_output.get("certificates", "")
+
+
+async def run_show_traefik_proxied_endpoints_action(ops_test: OpsTest) -> str:
+    assert ops_test.model
+    traefik_k8s_unit = ops_test.model.units[f"{TRAEFIK_K8S_APPLICATION_NAME}/0"]
+    action = await traefik_k8s_unit.run_action(action_name="show-proxied-endpoints")  # type: ignore
+    action_output = await ops_test.model.get_action_output(action_uuid=action.entity_id, wait=30)
+    return action_output.get("proxied-endpoints", "")
 
 
 async def get_file_from_notary(ops_test: OpsTest, file_name: str) -> str:
