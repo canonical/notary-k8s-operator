@@ -17,9 +17,9 @@ cffi==1.17.0
     # via cryptography
 charset-normalizer==3.3.2
     # via requests
-cosl==0.0.40
+cosl==0.0.42
     # via -r requirements.in
-cryptography==43.0.1
+cryptography==43.0.3
     # via -r requirements.in
 h11==0.14.0
     # via httpcore
