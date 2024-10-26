@@ -76,6 +76,7 @@ class LoginSecret:
             "token": self.token if self.token else "",
         }
 
+
 @trace_charm(
     tracing_endpoint="_tracing_endpoint",
     server_cert="_tracing_server_cert",
@@ -98,9 +99,7 @@ class NotaryCharm(ops.CharmBase):
             self, relationship_name=CERTIFICATE_PROVIDER_RELATION_NAME
         )
         self.tracing = TracingEndpointRequirer(self, protocols=["otlp_http"])
-        self._tracing_endpoint, self._tracing_server_cert = charm_tracing_config(
-            self.tracing
-        )
+        self._tracing_endpoint, self._tracing_server_cert = charm_tracing_config(self.tracing, cert_path=None)
         self.certificate_transfer = CertificateTransferProvides(self, SEND_CA_CERT_RELATION_NAME)
         self.dashboard = GrafanaDashboardProvider(self, relation_name=GRAFANA_RELATION_NAME)
         self.logs = LogForwarder(charm=self, relation_name=LOGGING_RELATION_NAME)
