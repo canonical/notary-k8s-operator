@@ -17,11 +17,11 @@ import yaml
 from charms.certificate_transfer_interface.v1.certificate_transfer import (
     CertificateTransferProvides,
 )
-from charms.tempo_coordinator_k8s.v0.charm_tracing import trace_charm
-from charms.tempo_coordinator_k8s.v0.tracing import TracingEndpointRequirer, charm_tracing_config
 from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardProvider
 from charms.loki_k8s.v1.loki_push_api import LogForwarder
 from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointProvider
+from charms.tempo_coordinator_k8s.v0.charm_tracing import trace_charm
+from charms.tempo_coordinator_k8s.v0.tracing import TracingEndpointRequirer, charm_tracing_config
 from charms.tls_certificates_interface.v4.tls_certificates import (
     Certificate,
     CertificateRequestAttributes,
@@ -99,7 +99,9 @@ class NotaryCharm(ops.CharmBase):
             self, relationship_name=CERTIFICATE_PROVIDER_RELATION_NAME
         )
         self.tracing = TracingEndpointRequirer(self, protocols=["otlp_http"])
-        self._tracing_endpoint, self._tracing_server_cert = charm_tracing_config(self.tracing, cert_path=None)
+        self._tracing_endpoint, self._tracing_server_cert = charm_tracing_config(
+            self.tracing, cert_path=None
+        )
         self.certificate_transfer = CertificateTransferProvides(self, SEND_CA_CERT_RELATION_NAME)
         self.dashboard = GrafanaDashboardProvider(self, relation_name=GRAFANA_RELATION_NAME)
         self.logs = LogForwarder(charm=self, relation_name=LOGGING_RELATION_NAME)
