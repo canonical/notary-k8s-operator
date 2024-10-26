@@ -17,6 +17,8 @@ import yaml
 from charms.certificate_transfer_interface.v1.certificate_transfer import (
     CertificateTransferProvides,
 )
+from charms.tempo_coordinator_k8s.v0.charm_tracing import trace_charm
+from charms.tempo_coordinator_k8s.v0.tracing import TracingEndpointRequirer, charm_tracing_config
 from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardProvider
 from charms.loki_k8s.v1.loki_push_api import LogForwarder
 from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointProvider
@@ -74,7 +76,11 @@ class LoginSecret:
             "token": self.token if self.token else "",
         }
 
-
+@trace_charm(
+    tracing_endpoint="_tracing_endpoint",
+    server_cert="_tracing_server_cert",
+    extra_types=(TLSCertificatesProvidesV4,),
+)
 class NotaryCharm(ops.CharmBase):
     """Charmed Notary."""
 
@@ -90,6 +96,10 @@ class NotaryCharm(ops.CharmBase):
         self.container = self.unit.get_container("notary")
         self.tls = TLSCertificatesProvidesV4(
             self, relationship_name=CERTIFICATE_PROVIDER_RELATION_NAME
+        )
+        self.tracing = TracingEndpointRequirer(self, protocols=["otlp_http"])
+        self._tracing_endpoint, self._tracing_server_cert = charm_tracing_config(
+            self.tracing
         )
         self.certificate_transfer = CertificateTransferProvides(self, SEND_CA_CERT_RELATION_NAME)
         self.dashboard = GrafanaDashboardProvider(self, relation_name=GRAFANA_RELATION_NAME)
