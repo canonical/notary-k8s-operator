@@ -12,26 +12,20 @@ cachetools==5.5.0
     # via google-auth
 certifi==2024.8.30
     # via
-    #   -c requirements.txt
     #   kubernetes
     #   requests
 cffi==1.17.1
     # via
-    #   -c requirements.txt
     #   cryptography
     #   pynacl
 charset-normalizer==3.4.0
-    # via
-    #   -c requirements.txt
-    #   requests
+    # via requests
 codespell==2.3.0
     # via -r test-requirements.in
-coverage[toml]==7.6.4
+coverage[toml]==7.6.7
     # via -r test-requirements.in
 cryptography==43.0.3
-    # via
-    #   -c requirements.txt
-    #   paramiko
+    # via paramiko
 decorator==5.1.1
     # via
     #   ipdb
@@ -45,9 +39,7 @@ google-auth==2.36.0
 hvac==2.3.0
     # via juju
 idna==3.10
-    # via
-    #   -c requirements.txt
-    #   requests
+    # via requests
 iniconfig==2.0.0
     # via pytest
 ipdb==0.13.13
@@ -79,9 +71,7 @@ oauthlib==3.2.2
     #   kubernetes
     #   requests-oauthlib
 ops==2.17.0
-    # via
-    #   -c requirements.txt
-    #   ops-scenario
+    # via ops-scenario
 ops-scenario==7.0.5
     # via -r test-requirements.in
 packaging==24.2
@@ -99,9 +89,7 @@ pluggy==1.5.0
 prompt-toolkit==3.0.48
     # via ipython
 protobuf==5.28.3
-    # via
-    #   -c requirements.txt
-    #   macaroonbakery
+    # via macaroonbakery
 ptyprocess==0.7.0
     # via pexpect
 pure-eval==0.2.3
@@ -114,9 +102,7 @@ pyasn1==0.6.1
 pyasn1-modules==0.4.1
     # via google-auth
 pycparser==2.22
-    # via
-    #   -c requirements.txt
-    #   cffi
+    # via cffi
 pygments==2.18.0
     # via ipython
 pymacaroons==0.13.0
@@ -130,7 +116,7 @@ pyrfc3339==1.1
     # via
     #   juju
     #   macaroonbakery
-pyright==1.1.388
+pyright==1.1.389
     # via -r test-requirements.in
 pytest==8.3.3
     # via
@@ -147,7 +133,6 @@ pytz==2024.2
     # via pyrfc3339
 pyyaml==6.0.2
     # via
-    #   -c requirements.txt
     #   juju
     #   kubernetes
     #   ops
@@ -155,7 +140,6 @@ pyyaml==6.0.2
     #   pytest-operator
 requests==2.32.3
     # via
-    #   -c requirements.txt
     #   hvac
     #   kubernetes
     #   macaroonbakery
@@ -164,7 +148,7 @@ requests-oauthlib==2.0.0
     # via kubernetes
 rsa==4.9
     # via google-auth
-ruff==0.7.3
+ruff==0.7.4
     # via -r test-requirements.in
 six==1.16.0
     # via
@@ -183,7 +167,6 @@ traitlets==5.14.3
     #   matplotlib-inline
 typing-extensions==4.12.2
     # via
-    #   -c requirements.txt
     #   ipython
     #   pyright
     #   typing-inspect
@@ -191,14 +174,12 @@ typing-inspect==0.9.0
     # via juju
 urllib3==2.2.3
     # via
-    #   -c requirements.txt
     #   kubernetes
     #   requests
 wcwidth==0.2.13
     # via prompt-toolkit
 websocket-client==1.8.0
     # via
-    #   -c requirements.txt
     #   kubernetes
     #   ops
 websockets==13.1
