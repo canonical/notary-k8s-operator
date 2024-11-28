@@ -1,7 +1,0 @@
-ops
-pydantic
-cryptography
-requests
-rpds-py==0.18.0
-cosl
-opentelemetry-exporter-otlp-proto-http
