@@ -17,9 +17,9 @@ cffi==1.17.1
     # via cryptography
 charset-normalizer==3.4.0
     # via requests
-cosl==0.0.43
+cosl==0.0.45
     # via -r requirements.in
-cryptography==43.0.3
+cryptography==44.0.0
     # via -r requirements.in
 deprecated==1.2.14
     # via
@@ -45,24 +45,24 @@ lightkube==0.15.5
     # via cosl
 lightkube-models==1.31.1.8
     # via lightkube
-opentelemetry-api==1.28.1
+opentelemetry-api==1.28.2
     # via
     #   opentelemetry-exporter-otlp-proto-http
     #   opentelemetry-sdk
     #   opentelemetry-semantic-conventions
-opentelemetry-exporter-otlp-proto-common==1.28.1
+opentelemetry-exporter-otlp-proto-common==1.28.2
     # via opentelemetry-exporter-otlp-proto-http
-opentelemetry-exporter-otlp-proto-http==1.28.1
+opentelemetry-exporter-otlp-proto-http==1.28.2
     # via -r requirements.in
-opentelemetry-proto==1.28.1
+opentelemetry-proto==1.28.2
     # via
     #   opentelemetry-exporter-otlp-proto-common
     #   opentelemetry-exporter-otlp-proto-http
-opentelemetry-sdk==1.28.1
+opentelemetry-sdk==1.28.2
     # via opentelemetry-exporter-otlp-proto-http
-opentelemetry-semantic-conventions==0.49b1
+opentelemetry-semantic-conventions==0.49b2
     # via opentelemetry-sdk
-ops==2.17.0
+ops==2.17.1
     # via
     #   -r requirements.in
     #   cosl
@@ -72,11 +72,11 @@ protobuf==5.28.3
     #   opentelemetry-proto
 pycparser==2.22
     # via cffi
-pydantic==2.9.2
+pydantic==2.10.2
     # via
     #   -r requirements.in
     #   cosl
-pydantic-core==2.23.4
+pydantic-core==2.27.1
     # via pydantic
 pyyaml==6.0.2
     # via
