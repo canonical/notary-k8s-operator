@@ -3227,7 +3227,9 @@ class TestCharm:
                     "is_initialized.return_value": True,
                     "token_is_valid.return_value": True,
                     "list_certificate_requests.return_value": [
-                        CertificateRequestEntry(id=1, csr=str(csr), certificate_chain="")
+                        CertificateRequestEntry(
+                            id=1, csr=str(csr), certificate_chain=[], status="Outstanding"
+                        )
                     ],
                     "post_csr": post_call,
                     "get_version.return_value": None,
@@ -3299,7 +3301,10 @@ class TestCharm:
                     "token_is_valid.return_value": True,
                     "list_certificate_requests.return_value": [
                         CertificateRequestEntry(
-                            id=1, csr=str(csr), certificate_chain=[str(cert), str(ca)]
+                            id=1,
+                            csr=str(csr),
+                            certificate_chain=[str(cert), str(ca)],
+                            status="Active",
                         )
                     ],
                     "get_version.return_value": None,
@@ -3385,7 +3390,10 @@ class TestCharm:
                     "token_is_valid.return_value": True,
                     "list_certificate_requests.return_value": [
                         CertificateRequestEntry(
-                            id=1, csr=str(csr), certificate_chain=[str(new_cert), str(ca)]
+                            id=1,
+                            csr=str(csr),
+                            certificate_chain=[str(new_cert), str(ca)],
+                            status="Active",
                         )
                     ],
                     "get_version.return_value": None,
@@ -3469,7 +3477,9 @@ class TestCharm:
                     "is_initialized.return_value": True,
                     "token_is_valid.return_value": True,
                     "list_certificate_requests.return_value": [
-                        CertificateRequestEntry(id=1, csr=str(csr), certificate_chain="rejected")
+                        CertificateRequestEntry(
+                            id=1, csr=str(csr), certificate_chain=[], status="Rejected"
+                        )
                     ],
                     "get_version.return_value": None,
                 },

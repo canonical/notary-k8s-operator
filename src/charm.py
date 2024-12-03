@@ -271,8 +271,9 @@ class NotaryCharm(ops.CharmBase):
                 if str(csr.certificate_signing_request) == request_notary_entry.csr
             ]
             if (
-                request_notary_entry.certificate_chain == "rejected"
-                or request_notary_entry.certificate_chain == ""
+                request_notary_entry.status == "Rejected"
+                or request_notary_entry.status == "Revoked"
+                or request_notary_entry.status == "Outstanding"
             ):
                 if len(certificates_provided_for_csr) > 0:
                     last_provided_certificate = certificates_provided_for_csr[0]
