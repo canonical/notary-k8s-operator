@@ -32,7 +32,7 @@ jobs:
           provider: microk8s
           channel: 1.29-strict/stable
           juju-channel: 3.4/stable
-          lxd-channel: 5.20/stable
+          lxd-channel: 5.21/stable
 
       - name: Enable Metallb
         run: /usr/bin/sg snap_microk8s -c "sudo microk8s enable metallb:10.0.0.2-10.0.0.10"

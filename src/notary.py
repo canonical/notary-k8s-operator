@@ -104,7 +104,8 @@ class CertificateRequest:
 
     id: int
     csr: str
-    certificate_chain: list[str] | Literal["", "rejected"]
+    certificate_chain: list[str]
+    status: Literal["Outstanding", "Rejected", "Revoked", "Active"]
 
 
 class Notary:
@@ -232,7 +233,8 @@ class Notary:
                 CertificateRequest(
                     id=cert.get("id"),
                     csr=cert.get("csr"),
-                    certificate_chain=serialize(cert.get("certificate")),
+                    certificate_chain=serialize(cert.get("certificate_chain")),
+                    status=cert.get("status"),
                 )
                 for cert in response.result
             ]
@@ -281,16 +283,14 @@ class Notary:
         return None
 
 
-def serialize(pem_string: str) -> list[str] | Literal["", "rejected"]:
+def serialize(pem_string: str) -> list[str]:
     """Process the certificate entry coming from Notary.
 
     Returns:
         a list of pem strings, an empty string or a rejected string.
     """
-    if pem_string != "" and pem_string != "rejected":
-        return [
-            cert.strip() + "-----END CERTIFICATE-----"
-            for cert in pem_string.split("-----END CERTIFICATE-----")
-            if cert.strip()
-        ]
-    return pem_string
+    return [
+        cert.strip() + "-----END CERTIFICATE-----"
+        for cert in pem_string.split("-----END CERTIFICATE-----")
+        if cert.strip()
+    ]
