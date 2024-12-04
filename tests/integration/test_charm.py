@@ -234,7 +234,7 @@ async def test_given_application_deployed_when_related_to_traefik_k8s_then_all_s
 async def get_notary_endpoint(ops_test: OpsTest) -> str:
     assert ops_test.model
     status = await ops_test.model.get_status()
-    notary_ip = status.applications[APP_NAME].units[f"{APP_NAME}/0"].address
+    notary_ip = status.applications[APP_NAME].units[f"{APP_NAME}/0"].address  # type: ignore[reportOptionalMemberAccess]
     return f"https://{notary_ip}:2111"
 
 
