@@ -10,6 +10,8 @@ jobs:
         arch:
           - arch: amd64
             runner: ubuntu-22.04
+          - arch: arm64
+            runner: [self-hosted, linux, ARM64, medium, jammy]
     runs-on: ${{ matrix.arch.runner }}
     steps:
       - uses: actions/checkout@v4
