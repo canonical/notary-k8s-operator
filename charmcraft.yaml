@@ -38,14 +38,18 @@ requires:
   access-certificates:
     limit: 1
     interface: tls-certificates
+    optional: true
   logging:
     interface: loki_push_api
+    optional: true
   ingress:
     interface: ingress
     limit: 1
+    optional: true
   tracing:
     interface: tracing
     limit: 1
+    optional: true
 
 containers:
   notary:
