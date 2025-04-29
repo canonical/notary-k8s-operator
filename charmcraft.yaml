@@ -1,4 +1,3 @@
-
 name: notary-k8s
 type: charm
 title: Notary
@@ -11,16 +10,17 @@ description: |
 
 links:
   documentation: https://discourse.charmhub.io/t/gocert-docs-index/15216
-  issues: 
+  issues:
     - https://github.com/canonical/notary-k8s-operator/issues
-  source: 
+  source:
     - https://github.com/canonical/notary-k8s-operator
-  website: 
+  website:
     - https://charmhub.io/notary-k8s
-  
+
 base: ubuntu@24.04
 platforms:
   amd64:
+  arm64:
 
 provides:
   certificates:
@@ -55,10 +55,10 @@ containers:
   notary:
     resource: notary-image
     mounts:
-    - storage: config
-      location: /etc/notary/config
-    - storage: database
-      location: /var/lib/notary/database
+      - storage: config
+        location: /etc/notary/config
+      - storage: database
+        location: /var/lib/notary/database
 
 storage:
   config:
