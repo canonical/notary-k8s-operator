@@ -205,6 +205,12 @@ class NotaryCharm(ops.CharmBase):
                         "db_path": f"{WORKLOAD_DB_PATH}/notary/database/certs.db",
                         "port": self.port,
                         "pebble_notifications": True,
+                        "logging": {
+                            "system": {
+                                "level": "debug",
+                                "output": "stderr",
+                            },
+                        },
                     }
                 ),
             )
