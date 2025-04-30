@@ -9,7 +9,7 @@ description: |
   you've deployed in your model.
 
 links:
-  documentation: https://discourse.charmhub.io/t/gocert-docs-index/15216
+  documentation: https://discourse.charmhub.io/t/notary-docs-index/15216
   issues:
     - https://github.com/canonical/notary-k8s-operator/issues
   source:

@@ -205,6 +205,12 @@ class NotaryCharm(ops.CharmBase):
                         "db_path": f"{WORKLOAD_DB_PATH}/notary/database/certs.db",
                         "port": self.port,
                         "pebble_notifications": True,
+                        "logging": {
+                            "system": {
+                                "level": "debug",
+                                "output": "stderr",
+                            },
+                        },
                     }
                 ),
             )
@@ -476,7 +482,7 @@ def _generate_password() -> str:
     pw.append(random.choice(string.ascii_lowercase))
     pw.append(random.choice(string.ascii_uppercase))
     pw.append(random.choice(string.digits))
-    pw.append(random.choice(string.punctuation))
+    pw.append(random.choice(["!", "@", "#", "$", "%", "^", "&", "*"]))
     for i in range(8):
         pw.append(random.choice(string.ascii_letters + string.digits + string.punctuation))
     random.shuffle(pw)
@@ -485,8 +491,8 @@ def _generate_password() -> str:
 
 def _generate_username() -> str:
     """Generate a username for the Notary Account."""
-    suffix = [random.choice(string.ascii_uppercase) for i in range(4)]
-    return "charm-admin-" + "".join(suffix)
+    suffix = [random.choice(string.ascii_lowercase) for i in range(4)]
+    return "charm-" + "".join(suffix)
 
 
 if __name__ == "__main__":  # pragma: nocover
