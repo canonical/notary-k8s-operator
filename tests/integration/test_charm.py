@@ -5,6 +5,7 @@
 import asyncio
 import json
 import logging
+import platform
 from base64 import b64decode
 from datetime import timedelta
 from pathlib import Path
@@ -35,6 +36,8 @@ TRAEFIK_K8S_APPLICATION_NAME = "traefik-k8s"
 TLS_PROVIDER_APPLICATION_NAME = "self-signed-certificates"
 TLS_REQUIRER_APPLICATION_NAME = "tls-certificates-requirer"
 
+ARCH = "arm64" if platform.machine() == "aarch64" else "amd64"
+
 
 @pytest.mark.abort_on_fail
 async def test_build_and_deploy(ops_test: OpsTest, request: pytest.FixtureRequest):
@@ -46,31 +49,40 @@ async def test_build_and_deploy(ops_test: OpsTest, request: pytest.FixtureReques
     resources = {"notary-image": CHARMCRAFT["resources"]["notary-image"]["upstream-source"]}
 
     assert ops_test.model
-    await ops_test.model.deploy(charm, resources=resources, application_name=APP_NAME)
+    await ops_test.model.set_constraints({"arch": ARCH})
+    await ops_test.model.deploy(
+        charm,
+        resources=resources,
+        application_name=APP_NAME,
+        constraints={"arch": ARCH},
+    )
     await ops_test.model.deploy(
         "self-signed-certificates",
         application_name=TLS_PROVIDER_APPLICATION_NAME,
         channel="edge",
+        constraints={"arch": ARCH},
     )
     await ops_test.model.deploy(
         "tls-certificates-requirer",
         application_name=TLS_REQUIRER_APPLICATION_NAME,
         channel="edge",
+        constraints={"arch": ARCH},
     )
-    await ops_test.model.deploy(
-        "prometheus-k8s",
-        application_name=PROMETHEUS_APPLICATION_NAME,
-        trust=True,
-    )
-    await ops_test.model.deploy(
-        "loki-k8s", application_name=LOKI_APPLICATION_NAME, trust=True, channel="stable"
-    )
-    await ops_test.model.deploy(
-        TRAEFIK_K8S_APPLICATION_NAME,
-        application_name=TRAEFIK_K8S_APPLICATION_NAME,
-        trust=True,
-        channel="stable",
-    )
+    if ARCH == "amd64":
+        await ops_test.model.deploy(
+            "prometheus-k8s",
+            application_name=PROMETHEUS_APPLICATION_NAME,
+            trust=True,
+        )
+        await ops_test.model.deploy(
+            "loki-k8s", application_name=LOKI_APPLICATION_NAME, trust=True, channel="stable"
+        )
+        await ops_test.model.deploy(
+            TRAEFIK_K8S_APPLICATION_NAME,
+            application_name=TRAEFIK_K8S_APPLICATION_NAME,
+            trust=True,
+            channel="stable",
+        )
     await ops_test.model.wait_for_idle(apps=[APP_NAME], status="active", timeout=1000)
 
 
@@ -178,6 +190,8 @@ async def test_given_loki_and_prometheus_related_to_notary_all_charm_statuses_ac
     ops_test: OpsTest,
 ):
     """Deploy loki and prometheus, and make sure all applications are active."""
+    if ARCH != "amd64":
+        pytest.skip(f"Loki and prometheus are not currently supported on {ARCH}")
     assert ops_test.model
 
     await asyncio.gather(
@@ -202,6 +216,8 @@ async def test_given_loki_and_prometheus_related_to_notary_all_charm_statuses_ac
 async def test_given_application_deployed_when_related_to_traefik_k8s_then_all_statuses_active(
     ops_test: OpsTest,
 ):
+    if ARCH != "amd64":
+        pytest.skip(f"Traefik is not currently supported on {ARCH}")
     # TODO (Tracked in TLSENG-475): This is a workaround so Traefik has the same CA as Notary
     # This should be removed and certificate transfer should be used instead
     # Notary k8s implements V1 of the certificate transfer interface,
