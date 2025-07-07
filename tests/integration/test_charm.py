@@ -50,26 +50,27 @@ async def test_build_and_deploy(ops_test: OpsTest, request: pytest.FixtureReques
     await ops_test.model.deploy(
         "self-signed-certificates",
         application_name=TLS_PROVIDER_APPLICATION_NAME,
-        channel="edge",
+        channel="1/stable",
     )
     await ops_test.model.deploy(
         "tls-certificates-requirer",
         application_name=TLS_REQUIRER_APPLICATION_NAME,
-        channel="edge",
+        channel="latest/stable",
     )
     await ops_test.model.deploy(
         "prometheus-k8s",
         application_name=PROMETHEUS_APPLICATION_NAME,
         trust=True,
+        channel="1/stable",
     )
     await ops_test.model.deploy(
-        "loki-k8s", application_name=LOKI_APPLICATION_NAME, trust=True, channel="stable"
+        "loki-k8s", application_name=LOKI_APPLICATION_NAME, trust=True, channel="1/stable"
     )
     await ops_test.model.deploy(
         TRAEFIK_K8S_APPLICATION_NAME,
         application_name=TRAEFIK_K8S_APPLICATION_NAME,
         trust=True,
-        channel="stable",
+        channel="latest/stable",
     )
     await ops_test.model.wait_for_idle(apps=[APP_NAME], status="active", timeout=1000)
 
