@@ -10,8 +10,9 @@ jobs:
         arch:
           - arch: amd64
             runner: [self-hosted, linux, X64, jammy, xlarge]
-          - arch: arm64
-            runner: [self-hosted, linux, ARM64, jammy, medium]
+          # Disabling until Notary and the charm are released
+          # - arch: arm64
+          #   runner: [self-hosted, linux, ARM64, jammy, medium]
 
     runs-on: ${{ matrix.arch.runner }}
     steps:
