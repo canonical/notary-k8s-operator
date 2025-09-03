@@ -17,10 +17,9 @@ links:
   website:
     - https://charmhub.io/notary-k8s
 
-base: ubuntu@24.04
 platforms:
-  amd64:
-  arm64:
+  ubuntu@24.04:amd64:
+  ubuntu@24.04:arm64:
 
 provides:
   certificates:
