@@ -48,3 +48,4 @@ jobs:
       CHARMCRAFT_AUTH: ${{ secrets.CHARMCRAFT_AUTH }}
     with:
       track-name: 0
+      artifact-name: built-charm-amd64
