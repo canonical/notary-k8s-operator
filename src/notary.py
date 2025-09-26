@@ -37,7 +37,7 @@ class StatusResponse:
 class LoginParams:
     """Parameters to login to Notary."""
 
-    username: str
+    email: str
     password: str
 
 
@@ -52,7 +52,7 @@ class LoginResponse:
 class CreateUserParams:
     """Parameters to create a user in Notary."""
 
-    username: str
+    email: str
     password: str
 
 
@@ -186,9 +186,9 @@ class Notary:
         status = self.get_status()
         return status.version if status else None
 
-    def login(self, username: str, password: str) -> LoginResponse | None:
-        """Login to notary by sending the username and password and return a Token."""
-        login_params = LoginParams(username=username, password=password)
+    def login(self, email: str, password: str) -> LoginResponse | None:
+        """Login to notary by sending the email and password and return a Token."""
+        login_params = LoginParams(email=email, password=password)
         response = self._make_request("POST", "/login", data=asdict(login_params))
         if response and response.result:
             return LoginResponse(
@@ -211,9 +211,9 @@ class Notary:
             )
         return None
 
-    def create_first_user(self, username: str, password: str) -> CreateUserResponse | None:
+    def create_first_user(self, email: str, password: str) -> CreateUserResponse | None:
         """Create the first admin user."""
-        create_user_params = CreateUserParams(username=username, password=password)
+        create_user_params = CreateUserParams(email=email, password=password)
         response = self._make_request(
             "POST", f"/api/{self.API_VERSION}/accounts", data=asdict(create_user_params)
         )

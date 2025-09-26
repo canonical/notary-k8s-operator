@@ -64,14 +64,14 @@ SEND_CA_CERT_RELATION_NAME = "send-ca-cert"
 class LoginSecret:
     """The format of the secret for the login details that are required to login to Notary."""
 
-    username: str
+    email: str
     password: str
     token: str | None
 
     def to_dict(self) -> dict[str, str]:
         """Return a dict version of the secret."""
         return {
-            "username": self.username,
+            "email": self.email,
             "password": self.password,
             "token": self.token if self.token else "",
         }
@@ -141,8 +141,10 @@ class NotaryCharm(ops.CharmBase):
                 self.on["notary"].pebble_custom_notice,
                 self.on["certificates"].relation_changed,
                 self.on["certificates"].relation_departed,
+                self.on["certificates"].relation_broken,
                 self.on["access-certificates"].relation_changed,
                 self.on["access-certificates"].relation_departed,
+                self.on["access-certificates"].relation_broken,
                 self.on[SEND_CA_CERT_RELATION_NAME].relation_joined,
                 self.on.config_storage_attached,
                 self.on.database_storage_attached,
@@ -156,9 +158,11 @@ class NotaryCharm(ops.CharmBase):
 
     def configure(self, event: ops.EventBase):
         """Handle configuration events."""
-        if not self.unit.is_leader():
-            return
-        if not self.container.can_connect():
+        if (
+            not self.unit.is_leader()
+            or not self.container.can_connect()
+            or not self._storages_attached()
+        ):
             return
         self._configure_notary_config_file()
         self._configure_access_certificates()
@@ -181,10 +185,10 @@ class NotaryCharm(ops.CharmBase):
             event.add_status(ops.WaitingStatus("certificates not yet pushed to workload"))
             return
         if not self.client.is_api_available():
-            event.add_status(ops.WaitingStatus("Notary server not yet available"))
+            event.add_status(ops.WaitingStatus("server not yet available"))
             return
         if not self.client.is_initialized():
-            event.add_status(ops.BlockedStatus("Please initialize Notary"))
+            event.add_status(ops.BlockedStatus("please initialize Notary"))
             return
         event.add_status(ops.ActiveStatus())
 
@@ -211,6 +215,9 @@ class NotaryCharm(ops.CharmBase):
                                 "output": "stderr",
                             },
                         },
+                        "encryption_backend": {
+                            "type": "none",
+                        },
                     }
                 ),
             )
@@ -219,10 +226,12 @@ class NotaryCharm(ops.CharmBase):
     def _configure_access_certificates(self):
         """Update the config files for notary and replan if required."""
         certificates_changed = False
-        if not self.tls_access._tls_relation_created():
-            if not self._self_signed_certificates_generated():
-                certificates_changed = True
-                self._generate_self_signed_certificates()
+        if (
+            not self._tls_access_relation_active()
+            and not self._self_signed_certificates_generated()
+        ):
+            certificates_changed = True
+            self._generate_self_signed_certificates()
         else:
             certificates_changed = self._store_certificate_from_access_relation_if_available()
         if certificates_changed:
@@ -238,7 +247,7 @@ class NotaryCharm(ops.CharmBase):
         if not login_details:
             return
         if not login_details.token or not self.client.token_is_valid(login_details.token):
-            login_response = self.client.login(login_details.username, login_details.password)
+            login_response = self.client.login(login_details.email, login_details.password)
             if not login_response or not login_response.token:
                 logger.warning(
                     "failed to login with the existing admin credentials."
@@ -348,7 +357,7 @@ class NotaryCharm(ops.CharmBase):
                 "notary": {
                     "override": "replace",
                     "summary": "notary",
-                    "command": f"notary -config {WORKLOAD_CONFIG_PATH}/config/config.yaml",
+                    "command": f"notary start -m -c {WORKLOAD_CONFIG_PATH}/config/config.yaml",
                     "startup": "enabled",
                 }
             },
@@ -413,6 +422,15 @@ class NotaryCharm(ops.CharmBase):
         cert = Certificate.from_string(existing_cert.read())
         return cert.common_name == CERTIFICATE_COMMON_NAME
 
+    def _tls_access_relation_active(self) -> bool:
+        """Check if the tls-access relation is created and active."""
+        relation = self.model.get_relation(TLS_ACCESS_RELATION_NAME)
+        if not relation:
+            return False
+        if not relation.active:
+            return False
+        return True
+
     def _certificates_available(self) -> bool:
         """Check if the workload certificate is available."""
         try:
@@ -430,21 +448,21 @@ class NotaryCharm(ops.CharmBase):
         try:
             secret = self.model.get_secret(label=NOTARY_LOGIN_SECRET_LABEL)
             secret_content = secret.get_content(refresh=True)
-            username = secret_content.get("username", "")
+            email = secret_content.get("email", "")
             password = secret_content.get("password", "")
             token = secret_content.get("token")
-            account = LoginSecret(username, password, token)
+            account = LoginSecret(email, password, token)
         except ops.SecretNotFoundError:
-            username = _generate_username()
+            email = _generate_email()
             password = _generate_password()
-            account = LoginSecret(username, password, None)
+            account = LoginSecret(email, password, None)
             self.app.add_secret(
                 label=NOTARY_LOGIN_SECRET_LABEL,
                 content=account.to_dict(),
             )
             logger.info("admin account details saved to secrets.")
         if self.client.is_api_available() and not self.client.is_initialized():
-            response = self.client.create_first_user(username, password)
+            response = self.client.create_first_user(email, password)
             if not response:
                 return None
         return account
@@ -489,10 +507,10 @@ def _generate_password() -> str:
     return "".join(pw)
 
 
-def _generate_username() -> str:
-    """Generate a username for the Notary Account."""
+def _generate_email() -> str:
+    """Generate a email for the Notary Account."""
     suffix = [random.choice(string.ascii_lowercase) for i in range(4)]
-    return "charm-" + "".join(suffix)
+    return f"{'charm-' + ''.join(suffix)}@notary.com"
 
 
 if __name__ == "__main__":  # pragma: nocover
