@@ -49,11 +49,11 @@ def test_build_and_deploy(juju: jubilant.Juju, request: pytest.FixtureRequest):
 
     juju.model_config({"update-status-relation-interval": "10s"})
     juju.deploy(charm, resources=resources, trust=True)
-    juju.deploy("self-signed-certificates", channel="edge", trust=True)
-    juju.deploy("tls-certificates-requirer", channel="edge", trust=True)
-    juju.deploy("prometheus-k8s", channel="edge", trust=True)
-    juju.deploy("loki-k8s", channel="edge", trust=True)
-    juju.deploy("traefik-k8s", channel="edge", trust=True)
+    juju.deploy(TLS_PROVIDER_APPLICATION_NAME, channel="edge", trust=True)
+    juju.deploy(TLS_REQUIRER_APPLICATION_NAME, channel="edge", trust=True)
+    juju.deploy(PROMETHEUS_APPLICATION_NAME, channel="edge", trust=True)
+    juju.deploy(LOKI_APPLICATION_NAME, channel="edge", trust=True)
+    juju.deploy(TRAEFIK_K8S_APPLICATION_NAME, channel="edge", trust=True)
 
 
 def test_given_tls_access_relation_when_related_and_unrelated_to_notary_then_certificates_replaced_correctly(
