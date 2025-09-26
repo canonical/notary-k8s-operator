@@ -8,7 +8,7 @@ dependencies = [
     "cryptography",
     "ops",
     "opentelemetry-exporter-otlp-proto-http",
-    "rpds-py==0.23.1",
+    "rpds-py==0.27.1",
 ]
 
 [dependency-groups]
@@ -17,7 +17,7 @@ test = [
     "juju",
     "pytest",
     "ops[testing]",
-    "jubilant>=1.0.0",
+    "jubilant>=1.4.0",
 ]
 dev = [
     "codespell",
