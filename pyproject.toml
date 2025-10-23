@@ -8,7 +8,7 @@ dependencies = [
     "cryptography",
     "ops",
     "opentelemetry-exporter-otlp-proto-http",
-    "rpds-py==0.27.1",
+    "rpds-py==0.28.0",
 ]
 
 [dependency-groups]
