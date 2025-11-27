@@ -607,14 +607,14 @@ wheels = [
 
 [[package]]
 name = "jubilant"
-version = "1.5.0"
+version = "1.6.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "pyyaml" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/d1/af/2c7d2a677389eb4de3bb841f399b749ca2fd4c6c1b70313e21249536e6be/jubilant-1.5.0.tar.gz", hash = "sha256:055c65a662586191939a1a3d3e2b6d08b71ecf0c7f403a1c7ba0cde6ecaf3bbd", size = 28433, upload-time = "2025-10-10T01:08:06.58Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/b3/13/c38036a0b2d44bae765216f5f85d4feed8f1a254110b0d1df7158b7a35f0/jubilant-1.6.1.tar.gz", hash = "sha256:bb57dc215b1960d31716ef071ba6be121331991bbbbe3449257471f5e7795d06", size = 31998, upload-time = "2025-11-26T20:58:40.867Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/f6/c9/05e5aa65baa7b71b17c1314b8f25744f36fd9aad60ef9fb46fd84347885a/jubilant-1.5.0-py3-none-any.whl", hash = "sha256:eec58340b9d3d478f31e18e33281638fdf0d9b84608c8935368f7a1bb1972255", size = 28275, upload-time = "2025-10-10T01:08:04.963Z" },
+    { url = "https://files.pythonhosted.org/packages/e2/38/c054fa0b9de01d0b108f91f892c288bf99e68abd6593b55c2a8964de40f2/jubilant-1.6.1-py3-none-any.whl", hash = "sha256:a74ea1184eea43b9e8921dcad22ffeb14a238e91c9024f5d41fe2e210fd05be2", size = 33005, upload-time = "2025-11-26T20:58:39.566Z" },
 ]
 
 [[package]]
@@ -740,7 +740,7 @@ dev = [
 ]
 test = [
     { name = "coverage", extras = ["toml"] },
-    { name = "jubilant", specifier = ">=1.5.0" },
+    { name = "jubilant", specifier = ">=1.6.1" },
     { name = "juju" },
     { name = "ops", extras = ["testing"] },
     { name = "pytest" },
@@ -949,7 +949,7 @@ wheels = [
 
 [[package]]
 name = "pydantic"
-version = "2.12.4"
+version = "2.12.5"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "annotated-types" },
@@ -957,9 +957,9 @@ dependencies = [
     { name = "typing-extensions" },
     { name = "typing-inspection" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/96/ad/a17bc283d7d81837c061c49e3eaa27a45991759a1b7eae1031921c6bd924/pydantic-2.12.4.tar.gz", hash = "sha256:0f8cb9555000a4b5b617f66bfd2566264c4984b27589d3b845685983e8ea85ac", size = 821038, upload-time = "2025-11-05T10:50:08.59Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/69/44/36f1a6e523abc58ae5f928898e4aca2e0ea509b5aa6f6f392a5d882be928/pydantic-2.12.5.tar.gz", hash = "sha256:4d351024c75c0f085a9febbb665ce8c0c6ec5d30e903bdb6394b7ede26aebb49", size = 821591, upload-time = "2025-11-26T15:11:46.471Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/82/2f/e68750da9b04856e2a7ec56fc6f034a5a79775e9b9a81882252789873798/pydantic-2.12.4-py3-none-any.whl", hash = "sha256:92d3d202a745d46f9be6df459ac5a064fdaa3c1c4cd8adcfa332ccf3c05f871e", size = 463400, upload-time = "2025-11-05T10:50:06.732Z" },
+    { url = "https://files.pythonhosted.org/packages/5a/87/b70ad306ebb6f9b585f114d0ac2137d792b48be34d732d60e597c2f8465a/pydantic-2.12.5-py3-none-any.whl", hash = "sha256:e561593fccf61e8a20fc46dfc2dfe075b8be7d0188df33f221ad1f0139180f9d", size = 463580, upload-time = "2025-11-26T15:11:44.605Z" },
 ]
 
 [[package]]
