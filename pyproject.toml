@@ -17,7 +17,7 @@ test = [
     "juju",
     "pytest",
     "ops[testing]",
-    "jubilant>=1.6.1",
+    "jubilant>=1.6.2",
 ]
 dev = [
     "codespell",
