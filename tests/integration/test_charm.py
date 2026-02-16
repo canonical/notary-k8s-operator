@@ -68,8 +68,10 @@ def test_given_tls_access_relation_when_related_and_unrelated_to_notary_then_cer
         app2=f"{TLS_PROVIDER_APPLICATION_NAME}:certificates",
     )
     juju.wait(
-        lambda status: jubilant.all_agents_idle(status, APP_NAME, TLS_PROVIDER_APPLICATION_NAME)
-        and jubilant.all_active(status, APP_NAME, TLS_PROVIDER_APPLICATION_NAME)
+        lambda status: (
+            jubilant.all_agents_idle(status, APP_NAME, TLS_PROVIDER_APPLICATION_NAME)
+            and jubilant.all_active(status, APP_NAME, TLS_PROVIDER_APPLICATION_NAME)
+        )
     )
 
     new_ca = get_file_from_notary(juju, "ca.pem")
@@ -80,8 +82,10 @@ def test_given_tls_access_relation_when_related_and_unrelated_to_notary_then_cer
         app2=f"{TLS_PROVIDER_APPLICATION_NAME}:certificates",
     )
     juju.wait(
-        lambda status: jubilant.all_agents_idle(status, APP_NAME, TLS_PROVIDER_APPLICATION_NAME)
-        and jubilant.all_active(status, APP_NAME, TLS_PROVIDER_APPLICATION_NAME)
+        lambda status: (
+            jubilant.all_agents_idle(status, APP_NAME, TLS_PROVIDER_APPLICATION_NAME)
+            and jubilant.all_active(status, APP_NAME, TLS_PROVIDER_APPLICATION_NAME)
+        )
     )
 
     final_ca = get_file_from_notary(juju, "ca.pem")
@@ -102,8 +106,10 @@ def test_given_notary_when_tls_requirer_related_then_csr_uploaded_to_notary_and_
         app2=f"{TLS_REQUIRER_APPLICATION_NAME}:certificates",
     )
     juju.wait(
-        lambda status: jubilant.all_agents_idle(status, APP_NAME, TLS_REQUIRER_APPLICATION_NAME)
-        and jubilant.all_active(status, APP_NAME, TLS_REQUIRER_APPLICATION_NAME)
+        lambda status: (
+            jubilant.all_agents_idle(status, APP_NAME, TLS_REQUIRER_APPLICATION_NAME)
+            and jubilant.all_active(status, APP_NAME, TLS_REQUIRER_APPLICATION_NAME)
+        )
     )
 
     certificate_requests = client.list_certificate_requests(token)
@@ -125,8 +131,10 @@ def test_given_notary_when_tls_requirer_related_then_csr_uploaded_to_notary_and_
     assert certificate_requests[0].certificate_chain != "rejected"
 
     juju.wait(
-        lambda status: jubilant.all_agents_idle(status, APP_NAME, TLS_REQUIRER_APPLICATION_NAME)
-        and jubilant.all_active(status, APP_NAME, TLS_REQUIRER_APPLICATION_NAME)
+        lambda status: (
+            jubilant.all_agents_idle(status, APP_NAME, TLS_REQUIRER_APPLICATION_NAME)
+            and jubilant.all_active(status, APP_NAME, TLS_REQUIRER_APPLICATION_NAME)
+        )
     )
 
     given_certificate = get_first_certificate_from_requirer(juju)
@@ -142,8 +150,10 @@ def test_given_loki_and_prometheus_related_to_notary_all_charm_statuses_active(
         app1=f"{APP_NAME}:metrics", app2=f"{PROMETHEUS_APPLICATION_NAME}:metrics-endpoint"
     )
     juju.wait(
-        lambda status: jubilant.all_agents_idle(status, APP_NAME, TLS_REQUIRER_APPLICATION_NAME)
-        and jubilant.all_active(status, APP_NAME, TLS_REQUIRER_APPLICATION_NAME)
+        lambda status: (
+            jubilant.all_agents_idle(status, APP_NAME, TLS_REQUIRER_APPLICATION_NAME)
+            and jubilant.all_active(status, APP_NAME, TLS_REQUIRER_APPLICATION_NAME)
+        )
     )
 
 
@@ -165,8 +175,10 @@ def test_given_application_deployed_when_related_to_traefik_k8s_then_all_statuse
     )
     juju.integrate(app1=f"{APP_NAME}:ingress", app2=f"{TRAEFIK_K8S_APPLICATION_NAME}:ingress")
     juju.wait(
-        lambda status: jubilant.all_agents_idle(status, APP_NAME, TRAEFIK_K8S_APPLICATION_NAME)
-        and jubilant.all_active(status, APP_NAME, TRAEFIK_K8S_APPLICATION_NAME)
+        lambda status: (
+            jubilant.all_agents_idle(status, APP_NAME, TRAEFIK_K8S_APPLICATION_NAME)
+            and jubilant.all_active(status, APP_NAME, TRAEFIK_K8S_APPLICATION_NAME)
+        )
     )
     endpoint = get_external_notary_endpoint(juju)
 
