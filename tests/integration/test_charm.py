@@ -92,9 +92,13 @@ def test_given_notary_when_tls_requirer_related_then_csr_uploaded_to_notary_and_
     juju: jubilant.Juju,
 ):
     admin_credentials = get_notary_credentials(juju)
-    token = admin_credentials["token"]
     endpoint = get_notary_endpoint(juju)
-    client = Notary(url=endpoint)
+    client = Notary(url=endpoint, ca_path=False)
+
+    login_response = client.login(admin_credentials["email"], admin_credentials["password"])
+    assert login_response is not None
+    assert login_response.token
+    token = login_response.token
     assert client.token_is_valid(token)
 
     juju.integrate(
