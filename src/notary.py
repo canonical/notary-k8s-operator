@@ -112,6 +112,7 @@ class Notary:
     """Class to interact with Notary."""
 
     API_VERSION = "v1"
+    COOKIE_NAME = "user_token"
 
     def __init__(self, url: str, ca_path: str | bool = False) -> None:
         """Initialize a client for interacting with Notary.
@@ -122,6 +123,7 @@ class Notary:
         """
         self.url = url
         self.ca_path = ca_path
+        self.session = requests.Session()
 
     def _make_request(
         self,
@@ -134,7 +136,7 @@ class Notary:
         headers = {"Authorization": f"Bearer {token}"} if token else {}
         url = f"{self.url}{endpoint}"
         try:
-            req = requests.request(
+            req = self.session.request(
                 method=method,
                 url=url,
                 verify=self.ca_path,
@@ -189,12 +191,39 @@ class Notary:
     def login(self, email: str, password: str) -> LoginResponse | None:
         """Login to notary by sending the email and password and return a Token."""
         login_params = LoginParams(email=email, password=password)
-        response = self._make_request("POST", "/login", data=asdict(login_params))
-        if response and response.result:
-            return LoginResponse(
-                token=response.result.get("token"),
+        url = f"{self.url}/login"
+        try:
+            req = self.session.request(
+                method="POST",
+                url=url,
+                verify=self.ca_path,
+                json=asdict(login_params),
             )
-        return None
+        except requests.RequestException as e:
+            logger.error("HTTP request failed: %s", e)
+            return None
+        except OSError as e:
+            logger.error("couldn't complete HTTP request: %s", e)
+            return None
+
+        try:
+            req.raise_for_status()
+        except requests.HTTPError:
+            logger.error("Login failed: code %s", req.status_code)
+            return None
+
+        # Extract token from cookie
+        token = None
+        for cookie in self.session.cookies:
+            if cookie.name == self.COOKIE_NAME:
+                token = cookie.value
+                break
+
+        if not token:
+            logger.error("Login failed: session cookie not found in response")
+            return None
+
+        return LoginResponse(token=token)
 
     def token_is_valid(self, token: str) -> bool:
         """Return if the token is still valid by attempting to connect to an endpoint."""
