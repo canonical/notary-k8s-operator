@@ -14,15 +14,8 @@ from datetime import timedelta
 
 import ops
 import yaml
-from charms.certificate_transfer_interface.v1.certificate_transfer import (
-    CertificateTransferProvides,
-)
-from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardProvider
-from charms.loki_k8s.v1.loki_push_api import LogForwarder
-from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointProvider
-from charms.tempo_coordinator_k8s.v0.charm_tracing import trace_charm
-from charms.tempo_coordinator_k8s.v0.tracing import TracingEndpointRequirer, charm_tracing_config
-from charms.tls_certificates_interface.v4.tls_certificates import (
+from charmlibs.interfaces.certificate_transfer import CertificateTransferProvides
+from charmlibs.interfaces.tls_certificates import (
     Certificate,
     CertificateRequestAttributes,
     Mode,
@@ -35,6 +28,11 @@ from charms.tls_certificates_interface.v4.tls_certificates import (
     generate_csr,
     generate_private_key,
 )
+from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardProvider
+from charms.loki_k8s.v1.loki_push_api import LogForwarder
+from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointProvider
+from charms.tempo_coordinator_k8s.v0.charm_tracing import trace_charm
+from charms.tempo_coordinator_k8s.v0.tracing import TracingEndpointRequirer, charm_tracing_config
 from charms.traefik_k8s.v2.ingress import IngressPerAppRequirer
 
 from notary import Notary
@@ -90,7 +88,7 @@ class NotaryCharm(ops.CharmBase):
         self.port = 2111
         self.access_csr = CertificateRequestAttributes(
             common_name="Notary",
-            sans_dns=frozenset([socket.getfqdn()]),
+            sans_dns=frozenset([self._get_external_hostname_config()]),
         )
 
         self.unit.set_ports(self.port)
@@ -131,7 +129,7 @@ class NotaryCharm(ops.CharmBase):
         )
 
         self.client = Notary(
-            f"https://{socket.getfqdn()}:{self.port}",
+            f"https://{self._get_external_hostname_config()}:{self.port}",
             f"{CHARM_PATH}/{CONFIG_MOUNT}/0/ca.pem",
         )
         [
@@ -211,6 +209,10 @@ class NotaryCharm(ops.CharmBase):
                         "pebble_notifications": True,
                         "logging": {
                             "system": {
+                                "level": "debug",
+                                "output": "stderr",
+                            },
+                            "audit": {
                                 "level": "debug",
                                 "output": "stderr",
                             },
@@ -400,7 +402,7 @@ class NotaryCharm(ops.CharmBase):
         csr = generate_csr(
             private_key=private_key,
             common_name=CERTIFICATE_COMMON_NAME,
-            sans_dns=frozenset([socket.getfqdn()]),
+            sans_dns=frozenset([self._get_external_hostname_config()]),
         )
         certificate = generate_certificate(
             ca=ca_certificate,
@@ -492,6 +494,12 @@ class NotaryCharm(ops.CharmBase):
                 str(private_key),
                 make_dirs=True,
             )
+
+    def _get_external_hostname_config(self) -> str:
+        """Return the external hostname configuration, or socket fqdn if it was not set."""
+        if hostname := self.config.get("external-hostname", ""):
+            return str(hostname)
+        return socket.getfqdn()
 
 
 def _generate_password() -> str:

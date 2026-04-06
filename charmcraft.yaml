@@ -21,6 +21,17 @@ platforms:
   ubuntu@24.04:amd64:
   ubuntu@24.04:arm64:
 
+config:
+  options:
+    external-hostname:
+      description: |
+        Set the external hostname that Notary expects to be accessed by all parties.
+        This will be used as
+        - the subject in the generated self-signed certificates if none are provided,
+        - the hostname in the CRLDistributionPoint extension in all certificates created by Notary,
+        - the hostname in the OIDC integration used by notary.
+      type: string
+
 provides:
   certificates:
     interface: tls-certificates
