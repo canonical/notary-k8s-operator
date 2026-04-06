@@ -7,6 +7,16 @@ from unittest.mock import MagicMock, Mock, patch
 
 import ops
 import pytest
+from charmlibs.interfaces.tls_certificates import (
+    Certificate,
+    PrivateKey,
+    ProviderCertificate,
+    RequirerCertificateRequest,
+    generate_ca,
+    generate_certificate,
+    generate_csr,
+    generate_private_key,
+)
 from ops.pebble import Layer
 from scenario import Container, Context, Mount, Network, Relation, Secret, State, Storage
 
@@ -17,26 +27,14 @@ from charm import (
     TLS_ACCESS_RELATION_NAME,
     NotaryCharm,
 )
-from lib.charms.tls_certificates_interface.v4.tls_certificates import (
-    Certificate,
-    PrivateKey,
-    ProviderCertificate,
-    RequirerCertificateRequest,
-    generate_ca,
-    generate_certificate,
-    generate_csr,
-    generate_private_key,
-)
 from notary import CertificateRequest as CertificateRequestEntry
 from notary import LoginResponse
 
-TLS_LIB_PATH = "charms.tls_certificates_interface.v4.tls_certificates"
+TLS_LIB_PATH = "charmlibs.interfaces.tls_certificates"
+CERT_TRANSFER_LIB_PATH = "charmlibs.interfaces.certificate_transfer"
 
 CERTIFICATE_COMMON_NAME = "Notary Self Signed Certificate"
 SELF_SIGNED_CA_COMMON_NAME = "Notary Self Signed Root CA"
-
-TLS_LIB_PATH = "charms.tls_certificates_interface.v4.tls_certificates"
-CERT_TRANSFER_LIB_PATH = "charms.certificate_transfer_interface.v1.certificate_transfer"
 
 
 class TestCharm:
