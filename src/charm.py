@@ -132,7 +132,7 @@ class NotaryCharm(ops.CharmBase):
         )
 
         self.client = Notary(
-            f"https://{socket.getfqdn()}:{self.port}",
+            f"https://{self._get_external_hostname_config()}:{self.port}",
             f"{CHARM_PATH}/{CONFIG_MOUNT}/0/ca.pem",
         )
         [
