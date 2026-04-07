@@ -64,7 +64,7 @@ class TestCharm:
 
     # Configure tests
     def test_given_only_config_storage_container_cant_connect_network_not_available_notary_not_running_when_configure_then_no_error_raised(
-        self, context: Context
+        self, context: Context[NotaryCharm]
     ):
         state = State(
             storages={Storage(name="config")},
@@ -103,7 +103,7 @@ class TestCharm:
             context.run(context.on.config_changed(), state)
 
     def test_given_only_database_storage_container_cant_connect_network_not_available_notary_not_running_when_configure_then_no_error_raised(
-        self, context: Context
+        self, context: Context[NotaryCharm]
     ):
         state = State(
             storages={Storage(name="database")},
@@ -142,7 +142,7 @@ class TestCharm:
             context.run(context.on.config_changed(), state)
 
     def test_given_storages_available_container_cant_connect_network_not_available_notary_not_running_when_configure_then_no_error_raised(
-        self, context: Context
+        self, context: Context[NotaryCharm]
     ):
         state = State(
             storages={Storage(name="config"), Storage(name="database")},
@@ -181,7 +181,7 @@ class TestCharm:
             context.run(context.on.config_changed(), state)
 
     def test_given_only_config_storage_container_can_connect_network_not_available_notary_not_running_when_configure_then_no_error_raised(
-        self, context: Context
+        self, context: Context[NotaryCharm]
     ):
         state = State(
             storages={Storage(name="config")},
@@ -220,7 +220,7 @@ class TestCharm:
             context.run(context.on.config_changed(), state)
 
     def test_given_only_database_storage_container_can_connect_network_not_available_notary_not_running_when_configure_then_no_error_raised(
-        self, context: Context
+        self, context: Context[NotaryCharm]
     ):
         state = State(
             storages={Storage(name="database")},
@@ -259,7 +259,7 @@ class TestCharm:
             context.run(context.on.config_changed(), state)
 
     def test_given_storages_available_container_can_connect_network_not_available_notary_not_running_when_configure_then_config_file_generated(
-        self, context: Context
+        self, context: Context[NotaryCharm]
     ):
         state = State(
             storages={Storage(name="config"), Storage(name="database")},
@@ -302,7 +302,7 @@ class TestCharm:
         assert out.get_secret(label="Notary Login Details")
 
     def test_given_only_config_storage_container_cant_connect_network_available_notary_not_running_when_configure_then_no_error_raised(
-        self, context: Context
+        self, context: Context[NotaryCharm]
     ):
         state = State(
             storages={Storage(name="config")},
@@ -341,7 +341,7 @@ class TestCharm:
             context.run(context.on.config_changed(), state)
 
     def test_given_only_database_storage_container_cant_connect_network_available_notary_not_running_when_configure_then_no_error_raised(
-        self, context: Context
+        self, context: Context[NotaryCharm]
     ):
         state = State(
             storages={Storage(name="database")},
@@ -380,7 +380,7 @@ class TestCharm:
             context.run(context.on.config_changed(), state)
 
     def test_given_storages_available_container_cant_connect_network_available_notary_not_running_when_configure_then_no_error_raised(
-        self, context: Context
+        self, context: Context[NotaryCharm]
     ):
         state = State(
             storages={Storage(name="config"), Storage(name="database")},
@@ -419,7 +419,7 @@ class TestCharm:
             context.run(context.on.config_changed(), state)
 
     def test_given_only_config_storage_container_can_connect_network_available_notary_not_running_when_configure_then_no_error_raised(
-        self, context: Context
+        self, context: Context[NotaryCharm]
     ):
         state = State(
             storages={Storage(name="config")},
@@ -458,7 +458,7 @@ class TestCharm:
             context.run(context.on.config_changed(), state)
 
     def test_given_only_database_storage_container_can_connect_network_available_notary_not_running_when_configure_then_no_error_raised(
-        self, context: Context
+        self, context: Context[NotaryCharm]
     ):
         state = State(
             storages={Storage(name="database")},
@@ -497,7 +497,7 @@ class TestCharm:
             context.run(context.on.config_changed(), state)
 
     def test_given_storages_available_container_can_connect_network_available_notary_not_running_when_configure_then_config_and_certificates_generated(
-        self, context: Context
+        self, context: Context[NotaryCharm]
     ):
         state = State(
             storages={Storage(name="config"), Storage(name="database")},
@@ -550,7 +550,7 @@ class TestCharm:
         )
 
     def test_given_only_config_storage_container_cant_connect_network_not_available_notary_running_when_configure_then_no_error_raised(
-        self, context: Context
+        self, context: Context[NotaryCharm]
     ):
         state = State(
             storages={Storage(name="config")},
@@ -589,7 +589,7 @@ class TestCharm:
             context.run(context.on.config_changed(), state)
 
     def test_given_only_database_storage_container_cant_connect_network_not_available_notary_running_when_configure_then_no_error_raised(
-        self, context: Context
+        self, context: Context[NotaryCharm]
     ):
         state = State(
             storages={Storage(name="database")},
@@ -628,7 +628,7 @@ class TestCharm:
             context.run(context.on.config_changed(), state)
 
     def test_given_storages_available_container_cant_connect_network_not_available_notary_running_when_configure_then_no_error_raised(
-        self, context: Context
+        self, context: Context[NotaryCharm]
     ):
         state = State(
             storages={Storage(name="config"), Storage(name="database")},
@@ -667,7 +667,7 @@ class TestCharm:
             context.run(context.on.config_changed(), state)
 
     def test_given_only_config_storage_container_can_connect_network_not_available_notary_running_when_configure_then_no_error_raised(
-        self, context: Context
+        self, context: Context[NotaryCharm]
     ):
         state = State(
             storages={Storage(name="config")},
@@ -706,7 +706,7 @@ class TestCharm:
             context.run(context.on.config_changed(), state)
 
     def test_given_only_database_storage_container_can_connect_network_not_available_notary_running_when_configure_then_no_error_raised(
-        self, context: Context
+        self, context: Context[NotaryCharm]
     ):
         state = State(
             storages={Storage(name="database")},
@@ -745,7 +745,7 @@ class TestCharm:
             context.run(context.on.config_changed(), state)
 
     def test_given_storages_available_container_can_connect_network_not_available_notary_running_when_configure_then_config_file_generated(
-        self, context: Context
+        self, context: Context[NotaryCharm]
     ):
         state = State(
             storages={Storage(name="config"), Storage(name="database")},
@@ -788,7 +788,7 @@ class TestCharm:
         assert out.get_secret(label="Notary Login Details")
 
     def test_given_only_config_storage_container_cant_connect_network_available_notary_running_when_configure_then_no_error_raised(
-        self, context: Context
+        self, context: Context[NotaryCharm]
     ):
         state = State(
             storages={Storage(name="config")},
@@ -827,7 +827,7 @@ class TestCharm:
             context.run(context.on.config_changed(), state)
 
     def test_given_only_database_storage_container_cant_connect_network_available_notary_running_when_configure_then_no_error_raised(
-        self, context: Context
+        self, context: Context[NotaryCharm]
     ):
         state = State(
             storages={Storage(name="database")},
@@ -866,7 +866,7 @@ class TestCharm:
             context.run(context.on.config_changed(), state)
 
     def test_given_storages_available_container_cant_connect_network_available_notary_running_when_configure_then_no_error_raised(
-        self, context: Context
+        self, context: Context[NotaryCharm]
     ):
         state = State(
             storages={Storage(name="config"), Storage(name="database")},
@@ -905,7 +905,7 @@ class TestCharm:
             context.run(context.on.config_changed(), state)
 
     def test_given_only_config_storage_container_can_connect_network_available_notary_running_when_configure_then_no_error_raised(
-        self, context: Context
+        self, context: Context[NotaryCharm]
     ):
         state = State(
             storages={Storage(name="config")},
@@ -944,7 +944,7 @@ class TestCharm:
             context.run(context.on.config_changed(), state)
 
     def test_given_only_database_storage_container_can_connect_network_available_notary_running_when_configure_then_no_error_raised(
-        self, context: Context
+        self, context: Context[NotaryCharm]
     ):
         state = State(
             storages={Storage(name="database")},
@@ -983,7 +983,7 @@ class TestCharm:
             context.run(context.on.config_changed(), state)
 
     def test_given_storages_available_container_can_connect_network_available_notary_running_when_configure_then_status_is_blocked(
-        self, context: Context
+        self, context: Context[NotaryCharm]
     ):
         state = State(
             storages={Storage(name="config"), Storage(name="database")},
@@ -1022,7 +1022,7 @@ class TestCharm:
             context.run(context.on.config_changed(), state)
 
     def test_given_only_config_storage_container_cant_connect_network_not_available_notary_initialized_when_configure_then_no_error_raised(
-        self, context: Context
+        self, context: Context[NotaryCharm]
     ):
         state = State(
             storages={Storage(name="config")},
@@ -1061,7 +1061,7 @@ class TestCharm:
             context.run(context.on.config_changed(), state)
 
     def test_given_only_database_storage_container_cant_connect_network_not_available_notary_initialized_when_configure_then_no_error_raised(
-        self, context: Context
+        self, context: Context[NotaryCharm]
     ):
         state = State(
             storages={Storage(name="database")},
@@ -1100,7 +1100,7 @@ class TestCharm:
             context.run(context.on.config_changed(), state)
 
     def test_given_storages_available_container_cant_connect_network_not_available_notary_initialized_when_configure_then_no_error_raised(
-        self, context: Context
+        self, context: Context[NotaryCharm]
     ):
         state = State(
             storages={Storage(name="config"), Storage(name="database")},
@@ -1139,7 +1139,7 @@ class TestCharm:
             context.run(context.on.config_changed(), state)
 
     def test_given_only_config_storage_container_can_connect_network_not_available_notary_initialized_when_configure_then_no_error_raised(
-        self, context: Context
+        self, context: Context[NotaryCharm]
     ):
         state = State(
             storages={Storage(name="config")},
@@ -1178,7 +1178,7 @@ class TestCharm:
             context.run(context.on.config_changed(), state)
 
     def test_given_only_database_storage_container_can_connect_network_not_available_notary_initialized_when_configure_then_no_error_raised(
-        self, context: Context
+        self, context: Context[NotaryCharm]
     ):
         state = State(
             storages={Storage(name="database")},
@@ -1217,7 +1217,7 @@ class TestCharm:
             context.run(context.on.config_changed(), state)
 
     def test_given_storages_available_container_can_connect_network_not_available_notary_initialized_when_configure_then_config_file_generated(
-        self, context: Context
+        self, context: Context[NotaryCharm]
     ):
         state = State(
             storages={Storage(name="config"), Storage(name="database")},
@@ -1261,7 +1261,7 @@ class TestCharm:
         assert out.get_secret(label="Notary Login Details")
 
     def test_given_only_config_storage_container_cant_connect_network_available_notary_initialized_when_configure_then_no_error_raised(
-        self, context: Context
+        self, context: Context[NotaryCharm]
     ):
         state = State(
             storages={Storage(name="config")},
@@ -1300,7 +1300,7 @@ class TestCharm:
             context.run(context.on.config_changed(), state)
 
     def test_given_only_database_storage_container_cant_connect_network_available_notary_initialized_when_configure_then_no_error_raised(
-        self, context: Context
+        self, context: Context[NotaryCharm]
     ):
         state = State(
             storages={Storage(name="database")},
@@ -1339,7 +1339,7 @@ class TestCharm:
             context.run(context.on.config_changed(), state)
 
     def test_given_storages_available_container_cant_connect_network_available_notary_initialized_when_configure_then_no_error_raised(
-        self, context: Context
+        self, context: Context[NotaryCharm]
     ):
         state = State(
             storages={Storage(name="config"), Storage(name="database")},
@@ -1378,7 +1378,7 @@ class TestCharm:
             context.run(context.on.config_changed(), state)
 
     def test_given_only_config_storage_container_can_connect_network_available_notary_initialized_when_configure_then_no_error_raised(
-        self, context: Context
+        self, context: Context[NotaryCharm]
     ):
         state = State(
             storages={Storage(name="config")},
@@ -1417,7 +1417,7 @@ class TestCharm:
             context.run(context.on.config_changed(), state)
 
     def test_given_only_database_storage_container_can_connect_network_available_notary_initialized_when_configure_then_no_error_raised(
-        self, context: Context
+        self, context: Context[NotaryCharm]
     ):
         state = State(
             storages={Storage(name="database")},
@@ -1456,7 +1456,7 @@ class TestCharm:
             context.run(context.on.config_changed(), state)
 
     def test_given_storages_available_container_can_connect_network_available_notary_initialized_when_configure_then_status_is_active(
-        self, context: Context
+        self, context: Context[NotaryCharm]
     ):
         state = State(
             storages={Storage(name="config"), Storage(name="database")},
@@ -1496,7 +1496,7 @@ class TestCharm:
 
     # Unit Status Tests
     def test_given_only_config_storage_container_cant_connect_network_not_available_notary_not_running_when_collect_status_then_status_is_waiting(
-        self, context: Context
+        self, context: Context[NotaryCharm]
     ):
         state = State(
             storages={Storage(name="config")},
@@ -1537,7 +1537,7 @@ class TestCharm:
         assert out.unit_status == ops.WaitingStatus("container not yet connectable")
 
     def test_given_only_database_storage_container_cant_connect_network_not_available_notary_not_running_when_collect_status_then_status_is_waiting(
-        self, context: Context
+        self, context: Context[NotaryCharm]
     ):
         state = State(
             storages={Storage(name="database")},
@@ -1577,7 +1577,7 @@ class TestCharm:
         assert out.unit_status == ops.WaitingStatus("container not yet connectable")
 
     def test_given_storages_available_container_cant_connect_network_not_available_notary_not_running_when_collect_status_then_status_is_waiting(
-        self, context: Context
+        self, context: Context[NotaryCharm]
     ):
         state = State(
             storages={Storage(name="config"), Storage(name="database")},
@@ -1618,7 +1618,7 @@ class TestCharm:
         assert out.unit_status == ops.WaitingStatus("container not yet connectable")
 
     def test_given_only_config_storage_container_can_connect_network_not_available_notary_not_running_when_collect_status_then_status_is_waiting(
-        self, context: Context
+        self, context: Context[NotaryCharm]
     ):
         state = State(
             storages={Storage(name="config")},
@@ -1658,7 +1658,7 @@ class TestCharm:
         assert out.unit_status == ops.WaitingStatus("storages not yet available")
 
     def test_given_only_database_storage_container_can_connect_network_not_available_notary_not_running_when_collect_status_then_status_is_waiting(
-        self, context: Context
+        self, context: Context[NotaryCharm]
     ):
         state = State(
             storages={Storage(name="database")},
@@ -1698,7 +1698,7 @@ class TestCharm:
         assert out.unit_status == ops.WaitingStatus("storages not yet available")
 
     def test_given_storages_available_container_can_connect_network_not_available_notary_not_running_when_collect_status_then_status_is_waiting(
-        self, context: Context
+        self, context: Context[NotaryCharm]
     ):
         state = State(
             storages={Storage(name="config"), Storage(name="database")},
@@ -1738,7 +1738,7 @@ class TestCharm:
         assert out.unit_status == ops.WaitingStatus("certificates not yet pushed to workload")
 
     def test_given_only_config_storage_container_cant_connect_network_available_notary_not_running_when_collect_status_then_status_is_waiting(
-        self, context: Context
+        self, context: Context[NotaryCharm]
     ):
         state = State(
             storages={Storage(name="config")},
@@ -1778,7 +1778,7 @@ class TestCharm:
         assert out.unit_status == ops.WaitingStatus("container not yet connectable")
 
     def test_given_only_database_storage_container_cant_connect_network_available_notary_not_running_when_collect_status_then_status_is_waiting(
-        self, context: Context
+        self, context: Context[NotaryCharm]
     ):
         state = State(
             storages={Storage(name="database")},
@@ -1818,7 +1818,7 @@ class TestCharm:
         assert out.unit_status == ops.WaitingStatus("container not yet connectable")
 
     def test_given_storages_available_container_cant_connect_network_available_notary_not_running_when_collect_status_then_status_is_waiting(
-        self, context: Context
+        self, context: Context[NotaryCharm]
     ):
         state = State(
             storages={Storage(name="config"), Storage(name="database")},
@@ -1858,7 +1858,7 @@ class TestCharm:
         assert out.unit_status == ops.WaitingStatus("container not yet connectable")
 
     def test_given_only_config_storage_container_can_connect_network_available_notary_not_running_when_collect_status_then_status_is_waiting(
-        self, context: Context
+        self, context: Context[NotaryCharm]
     ):
         state = State(
             storages={Storage(name="config")},
@@ -1898,7 +1898,7 @@ class TestCharm:
         assert out.unit_status == ops.WaitingStatus("storages not yet available")
 
     def test_given_only_database_storage_container_can_connect_network_available_notary_not_running_when_collect_status_then_status_is_waiting(
-        self, context: Context
+        self, context: Context[NotaryCharm]
     ):
         state = State(
             storages={Storage(name="database")},
@@ -1938,7 +1938,7 @@ class TestCharm:
         assert out.unit_status == ops.WaitingStatus("storages not yet available")
 
     def test_given_storages_available_container_can_connect_network_available_notary_not_running_when_collect_status_then_status_is_waiting(
-        self, context: Context
+        self, context: Context[NotaryCharm]
     ):
         state = State(
             storages={Storage(name="config"), Storage(name="database")},
@@ -1978,7 +1978,7 @@ class TestCharm:
         assert out.unit_status == ops.WaitingStatus("certificates not yet pushed to workload")
 
     def test_given_only_config_storage_container_cant_connect_network_not_available_notary_running_when_collect_status_then_status_is_waiting(
-        self, context: Context
+        self, context: Context[NotaryCharm]
     ):
         state = State(
             storages={Storage(name="config")},
@@ -2018,7 +2018,7 @@ class TestCharm:
         assert out.unit_status == ops.WaitingStatus("container not yet connectable")
 
     def test_given_only_database_storage_container_cant_connect_network_not_available_notary_running_when_collect_status_then_status_is_waiting(
-        self, context: Context
+        self, context: Context[NotaryCharm]
     ):
         state = State(
             storages={Storage(name="database")},
@@ -2058,7 +2058,7 @@ class TestCharm:
         assert out.unit_status == ops.WaitingStatus("container not yet connectable")
 
     def test_given_storages_available_container_cant_connect_network_not_available_notary_running_when_collect_status_then_status_is_waiting(
-        self, context: Context
+        self, context: Context[NotaryCharm]
     ):
         state = State(
             storages={Storage(name="config"), Storage(name="database")},
@@ -2098,7 +2098,7 @@ class TestCharm:
         assert out.unit_status == ops.WaitingStatus("container not yet connectable")
 
     def test_given_only_config_storage_container_can_connect_network_not_available_notary_running_when_collect_status_then_status_is_waiting(
-        self, context: Context
+        self, context: Context[NotaryCharm]
     ):
         state = State(
             storages={Storage(name="config")},
@@ -2138,7 +2138,7 @@ class TestCharm:
         assert out.unit_status == ops.WaitingStatus("storages not yet available")
 
     def test_given_only_database_storage_container_can_connect_network_not_available_notary_running_when_collect_status_then_status_is_waiting(
-        self, context: Context
+        self, context: Context[NotaryCharm]
     ):
         state = State(
             storages={Storage(name="database")},
@@ -2178,7 +2178,7 @@ class TestCharm:
         assert out.unit_status == ops.WaitingStatus("storages not yet available")
 
     def test_given_storages_available_container_can_connect_network_not_available_notary_running_when_collect_status_then_status_is_waiting(
-        self, context: Context
+        self, context: Context[NotaryCharm]
     ):
         state = State(
             storages={Storage(name="config"), Storage(name="database")},
@@ -2218,7 +2218,7 @@ class TestCharm:
         assert out.unit_status == ops.WaitingStatus("certificates not yet pushed to workload")
 
     def test_given_only_config_storage_container_cant_connect_network_available_notary_running_when_collect_status_then_status_is_waiting(
-        self, context: Context
+        self, context: Context[NotaryCharm]
     ):
         state = State(
             storages={Storage(name="config")},
@@ -2258,7 +2258,7 @@ class TestCharm:
         assert out.unit_status == ops.WaitingStatus("container not yet connectable")
 
     def test_given_only_database_storage_container_cant_connect_network_available_notary_running_when_collect_status_then_status_is_waiting(
-        self, context: Context
+        self, context: Context[NotaryCharm]
     ):
         state = State(
             storages={Storage(name="database")},
@@ -2298,7 +2298,7 @@ class TestCharm:
         assert out.unit_status == ops.WaitingStatus("container not yet connectable")
 
     def test_given_storages_available_container_cant_connect_network_available_notary_running_when_collect_status_then_status_is_waiting(
-        self, context: Context
+        self, context: Context[NotaryCharm]
     ):
         state = State(
             storages={Storage(name="config"), Storage(name="database")},
@@ -2338,7 +2338,7 @@ class TestCharm:
         assert out.unit_status == ops.WaitingStatus("container not yet connectable")
 
     def test_given_only_config_storage_container_can_connect_network_available_notary_running_when_collect_status_then_status_is_waiting(
-        self, context: Context
+        self, context: Context[NotaryCharm]
     ):
         state = State(
             storages={Storage(name="config")},
@@ -2378,7 +2378,7 @@ class TestCharm:
         assert out.unit_status == ops.WaitingStatus("storages not yet available")
 
     def test_given_only_database_storage_container_can_connect_network_available_notary_running_when_collect_status_then_status_is_waiting(
-        self, context: Context
+        self, context: Context[NotaryCharm]
     ):
         state = State(
             storages={Storage(name="database")},
@@ -2418,7 +2418,7 @@ class TestCharm:
         assert out.unit_status == ops.WaitingStatus("storages not yet available")
 
     def test_given_storages_available_container_can_connect_network_available_notary_running_when_collect_status_then_status_is_waiting(
-        self, context: Context
+        self, context: Context[NotaryCharm]
     ):
         state = State(
             storages={Storage(name="config"), Storage(name="database")},
@@ -2458,7 +2458,7 @@ class TestCharm:
         assert out.unit_status == ops.WaitingStatus("certificates not yet pushed to workload")
 
     def test_given_only_config_storage_container_cant_connect_network_not_available_notary_initialized_when_collect_status_then_status_is_waiting(
-        self, context: Context
+        self, context: Context[NotaryCharm]
     ):
         state = State(
             storages={Storage(name="config")},
@@ -2498,7 +2498,7 @@ class TestCharm:
         assert out.unit_status == ops.WaitingStatus("container not yet connectable")
 
     def test_given_only_database_storage_container_cant_connect_network_not_available_notary_initialized_when_collect_status_then_status_is_waiting(
-        self, context: Context
+        self, context: Context[NotaryCharm]
     ):
         state = State(
             storages={Storage(name="database")},
@@ -2538,7 +2538,7 @@ class TestCharm:
         assert out.unit_status == ops.WaitingStatus("container not yet connectable")
 
     def test_given_storages_available_container_cant_connect_network_not_available_notary_initialized_when_collect_status_then_status_is_waiting(
-        self, context: Context
+        self, context: Context[NotaryCharm]
     ):
         state = State(
             storages={Storage(name="config"), Storage(name="database")},
@@ -2578,7 +2578,7 @@ class TestCharm:
         assert out.unit_status == ops.WaitingStatus("container not yet connectable")
 
     def test_given_only_config_storage_container_can_connect_network_not_available_notary_initialized_when_collect_status_then_status_is_waiting(
-        self, context: Context
+        self, context: Context[NotaryCharm]
     ):
         state = State(
             storages={Storage(name="config")},
@@ -2618,7 +2618,7 @@ class TestCharm:
         assert out.unit_status == ops.WaitingStatus("storages not yet available")
 
     def test_given_only_database_storage_container_can_connect_network_not_available_notary_initialized_when_collect_status_then_status_is_waiting(
-        self, context: Context
+        self, context: Context[NotaryCharm]
     ):
         state = State(
             storages={Storage(name="database")},
@@ -2658,7 +2658,7 @@ class TestCharm:
         assert out.unit_status == ops.WaitingStatus("storages not yet available")
 
     def test_given_storages_available_container_can_connect_network_not_available_notary_initialized_when_collect_status_then_status_is_waiting(
-        self, context: Context
+        self, context: Context[NotaryCharm]
     ):
         state = State(
             storages={Storage(name="config"), Storage(name="database")},
@@ -2698,7 +2698,7 @@ class TestCharm:
         assert out.unit_status == ops.WaitingStatus("certificates not yet pushed to workload")
 
     def test_given_only_config_storage_container_cant_connect_network_available_notary_initialized_when_collect_status_then_status_is_waiting(
-        self, context: Context
+        self, context: Context[NotaryCharm]
     ):
         state = State(
             storages={Storage(name="config")},
@@ -2738,7 +2738,7 @@ class TestCharm:
         assert out.unit_status == ops.WaitingStatus("container not yet connectable")
 
     def test_given_only_database_storage_container_cant_connect_network_available_notary_initialized_when_collect_status_then_status_is_waiting(
-        self, context: Context
+        self, context: Context[NotaryCharm]
     ):
         state = State(
             storages={Storage(name="database")},
@@ -2778,7 +2778,7 @@ class TestCharm:
         assert out.unit_status == ops.WaitingStatus("container not yet connectable")
 
     def test_given_storages_available_container_cant_connect_network_available_notary_initialized_when_collect_status_then_status_is_waiting(
-        self, context: Context
+        self, context: Context[NotaryCharm]
     ):
         state = State(
             storages={Storage(name="config"), Storage(name="database")},
@@ -2818,7 +2818,7 @@ class TestCharm:
         assert out.unit_status == ops.WaitingStatus("container not yet connectable")
 
     def test_given_only_config_storage_container_can_connect_network_available_notary_initialized_when_collect_status_then_status_is_waiting(
-        self, context: Context
+        self, context: Context[NotaryCharm]
     ):
         state = State(
             storages={Storage(name="config")},
@@ -2858,7 +2858,7 @@ class TestCharm:
         assert out.unit_status == ops.WaitingStatus("storages not yet available")
 
     def test_given_only_database_storage_container_can_connect_network_available_notary_initialized_when_collect_status_then_status_is_waiting(
-        self, context: Context
+        self, context: Context[NotaryCharm]
     ):
         state = State(
             storages={Storage(name="database")},
@@ -2898,7 +2898,7 @@ class TestCharm:
         assert out.unit_status == ops.WaitingStatus("storages not yet available")
 
     def test_given_storages_available_container_can_connect_network_available_notary_initialized_when_collect_status_then_status_is_waiting(
-        self, context: Context
+        self, context: Context[NotaryCharm]
     ):
         state = State(
             storages={Storage(name="config"), Storage(name="database")},
@@ -2938,7 +2938,7 @@ class TestCharm:
         assert out.unit_status == ops.WaitingStatus("certificates not yet pushed to workload")
 
     def test_given_notary_available_and_initialized_when_collect_status_then_status_is_active(
-        self, context: Context, tmp_path: Path
+        self, context: Context[NotaryCharm], tmp_path: Path
     ):
         config_mount = Mount(location="/etc/notary/config", source=tmp_path)
         state = State(
@@ -2963,7 +2963,7 @@ class TestCharm:
         assert out.unit_status == ops.ActiveStatus()
 
     def test_given_notary_available_when_configure_then_workload_version_is_set(
-        self, context: Context, tmp_path: Path
+        self, context: Context[NotaryCharm], tmp_path: Path
     ):
         config_mount = Mount(location="/etc/notary/config", source=tmp_path)
         state = State(
@@ -3008,7 +3008,7 @@ class TestCharm:
         assert out.workload_version == "1.2.3"
 
     def test_given_notary_available_and_not_initialized_when_configure_then_admin_user_created(
-        self, context: Context, tmp_path: Path
+        self, context: Context[NotaryCharm], tmp_path: Path
     ):
         config_mount = Mount(location="/etc/notary/config", source=tmp_path)
         state = State(
@@ -3058,7 +3058,7 @@ class TestCharm:
         assert secret.latest_content.get("token") == "example-token"
 
     def test_given_tls_requirer_available_when_notary_unreachable_then_no_error_raised(
-        self, context: Context
+        self, context: Context[NotaryCharm]
     ):
         state = State(
             storages={Storage(name="config"), Storage(name="database")},
@@ -3104,7 +3104,7 @@ class TestCharm:
 
     @patch(f"{TLS_LIB_PATH}.TLSCertificatesProvidesV4.get_certificate_requests")
     def test_given_tls_requirer_available_when_configure_then_csrs_posted_to_notary(
-        self, mock_get_certificate_requests: MagicMock, context: Context
+        self, mock_get_certificate_requests: MagicMock, context: Context[NotaryCharm]
     ):
         state = State(
             storages={Storage(name="config"), Storage(name="database")},
@@ -3170,7 +3170,7 @@ class TestCharm:
 
     @patch(f"{TLS_LIB_PATH}.TLSCertificatesProvidesV4.get_certificate_requests")
     def test_given_tls_requirers_available_when_csrs_already_posted_then_duplicate_csr_not_posted(
-        self, mock_get_certificate_requests: MagicMock, context: Context
+        self, mock_get_certificate_requests: MagicMock, context: Context[NotaryCharm]
     ):
         state = State(
             storages={Storage(name="config"), Storage(name="database")},
@@ -3244,7 +3244,7 @@ class TestCharm:
         self,
         mock_get_certificate_requests: MagicMock,
         mock_set_relation_certificate: MagicMock,
-        context: Context,
+        context: Context[NotaryCharm],
     ):
         state = State(
             storages={Storage(name="config"), Storage(name="database")},
@@ -3323,7 +3323,7 @@ class TestCharm:
         mock_get_certificate_requests: MagicMock,
         mock_set_relation_certificate: MagicMock,
         mock_get_issued_certificates: MagicMock,
-        context: Context,
+        context: Context[NotaryCharm],
     ):
         state = State(
             storages={Storage(name="config"), Storage(name="database")},
@@ -3412,7 +3412,7 @@ class TestCharm:
         mock_get_certificate_requests: MagicMock,
         mock_set_relation_certificate: MagicMock,
         mock_get_issued_certificates: MagicMock,
-        context: Context,
+        context: Context[NotaryCharm],
     ):
         state = State(
             storages={Storage(name="config"), Storage(name="database")},
@@ -3491,7 +3491,7 @@ class TestCharm:
 
     @patch(f"{TLS_LIB_PATH}.TLSCertificatesRequiresV4.get_assigned_certificate")
     def test_given_access_relation_created_when_configure_then_certificate_not_replaced(
-        self, mock_assigned_certificates: MagicMock, context: Context, tmp_path: Path
+        self, mock_assigned_certificates: MagicMock, context: Context[NotaryCharm], tmp_path: Path
     ):
         config_mount = Mount(location="/etc/notary/config", source=tmp_path)
         state = State(
@@ -3548,7 +3548,7 @@ class TestCharm:
 
     @patch(f"{TLS_LIB_PATH}.TLSCertificatesRequiresV4.get_assigned_certificate")
     def test_given_new_certificate_available_when_configure_then_certificate_replaced(
-        self, mock_assigned_certificates: MagicMock, context: Context, tmp_path: Path
+        self, mock_assigned_certificates: MagicMock, context: Context[NotaryCharm], tmp_path: Path
     ):
         config_mount = Mount(location="/etc/notary/config", source=tmp_path)
         state = State(
@@ -3605,7 +3605,7 @@ class TestCharm:
 
     @patch(f"{TLS_LIB_PATH}.TLSCertificatesRequiresV4.get_assigned_certificate")
     def test_given_new_certificate_available_and_new_cert_already_saved_when_configure_then_certificate_not_replaced(
-        self, mock_assigned_certificates: MagicMock, context: Context, tmp_path: Path
+        self, mock_assigned_certificates: MagicMock, context: Context[NotaryCharm], tmp_path: Path
     ):
         config_mount = Mount(location="/etc/notary/config", source=tmp_path)
         state = State(
@@ -3663,7 +3663,10 @@ class TestCharm:
 
     @patch(f"{CERT_TRANSFER_LIB_PATH}.CertificateTransferProvides.add_certificates")
     def test_given_send_ca_requirer_when_configure_then_ca_cert_sent(
-        self, mock_add_certificates: MagicMock, context: Context, tmp_path: Path
+        self,
+        mock_add_certificates: MagicMock,
+        context: Context[NotaryCharm],
+        tmp_path: Path,
     ):
         config_mount = Mount(location="/etc/notary/config", source=tmp_path)
         state = State(
