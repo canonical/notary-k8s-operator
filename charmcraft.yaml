@@ -82,7 +82,7 @@ resources:
   notary-image:
     type: oci-image
     description: OCI image for the Notary application
-    upstream-source: ghcr.io/canonical/notary:0.0.3
+    upstream-source: ghcr.io/canonical/notary:1.0.0
 
 parts:
   charm:
