@@ -97,12 +97,11 @@ class NotaryCharm(ops.CharmBase):
         self.tls = TLSCertificatesProvidesV4(
             self, relationship_name=CERTIFICATE_PROVIDER_RELATION_NAME
         )
+
+        # Observability
         self.tracing = TracingEndpointRequirer(self, protocols=["otlp_http"])
         self._tracing_endpoint, self._tracing_server_cert = charm_tracing_config(
             self.tracing, cert_path=None
-        )
-        self.certificate_transfer = CertificateTransferProvides(
-            self, SEND_ACCESS_CA_CERT_RELATION_NAME
         )
         self.dashboard = GrafanaDashboardProvider(self, relation_name=GRAFANA_RELATION_NAME)
         self.logs = LogForwarder(charm=self, relation_name=LOGGING_RELATION_NAME)
@@ -110,6 +109,7 @@ class NotaryCharm(ops.CharmBase):
             charm=self,
             port=self.port,
             strip_prefix=True,
+            redirect_https=True,
             scheme=lambda: "https",
         )
         self.metrics = MetricsEndpointProvider(
@@ -130,7 +130,9 @@ class NotaryCharm(ops.CharmBase):
             relationship_name=TLS_ACCESS_RELATION_NAME,
             certificate_requests=[self.access_csr],
         )
-
+        self.certificate_transfer = CertificateTransferProvides(
+            self, SEND_ACCESS_CA_CERT_RELATION_NAME
+        )
         self.client = Notary(
             f"https://{self._get_external_hostname_config()}:{self.port}",
             f"{CHARM_PATH}/{CONFIG_MOUNT}/0/ca.pem",
