@@ -54,17 +54,18 @@ requires:
       Notary uses this relation to acquire a certificate for the workload server.
     limit: 1
     optional: true
-  ingress:
-    interface: ingress
-    limit: 1
-    optional: true
-  logging:
-    interface: loki_push_api
-    optional: true
   tracing:
     interface: tracing
     limit: 1
     optional: true
+  ingress:
+    interface: ingress
+    limit: 1
+    optional: true
+  traefik-route:
+    interface: traefik_route
+    limit: 1
+    optional: false
 
 containers:
   notary:
