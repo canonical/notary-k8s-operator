@@ -1,7 +1,9 @@
+"""Utility functions for various charm features."""
+
 import re
 
 
-def is_valid_hostname(hostname: str) -> bool:
+def is_valid_hostname(hostname: str):
     """Validate a hostname according to RFC 3936."""
     if len(hostname) == 0:
         return False

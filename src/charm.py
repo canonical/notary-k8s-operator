@@ -11,8 +11,6 @@ import string
 from contextlib import suppress
 from dataclasses import dataclass
 from datetime import timedelta
-from this import s
-from urllib.parse import urlparse
 
 import ops
 import yaml
