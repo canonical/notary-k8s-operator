@@ -503,7 +503,7 @@ class NotaryCharm(ops.CharmBase):
         hostname = str(self.config.get("external-hostname", ""))
         if not is_valid_hostname(hostname):
             logger.warning(
-                "The provided external hostname '%s' is not valid. Value discarded.",
+                "The provided external hostname '%s' is not valid. Ignoring.",
                 hostname,
             )
             return None

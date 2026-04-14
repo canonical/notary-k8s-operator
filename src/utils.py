@@ -3,7 +3,7 @@
 import re
 
 
-def is_valid_hostname(hostname: str):
+def is_valid_hostname(hostname: str) -> bool:
     """Validate a hostname according to RFC 3936."""
     if len(hostname) == 0:
         return False
