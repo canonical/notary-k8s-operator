@@ -42,12 +42,17 @@ class TestCharm:
     def context(self):
         yield Context(NotaryCharm)
 
-    def example_certs_and_key(self) -> tuple[Certificate, Certificate, PrivateKey]:
+    def example_certs_and_key(
+        self, hostname: str | None = None
+    ) -> tuple[Certificate, Certificate, PrivateKey]:
         private_key = generate_private_key()
-        csr = generate_csr(
-            private_key=private_key,
-            common_name=CERTIFICATE_COMMON_NAME,
-        )
+        csr_kwargs: dict = {
+            "private_key": private_key,
+            "common_name": CERTIFICATE_COMMON_NAME,
+        }
+        if hostname:
+            csr_kwargs["sans_dns"] = frozenset([hostname])
+        csr = generate_csr(**csr_kwargs)
         ca_private_key = generate_private_key()
         ca_certificate = generate_ca(
             private_key=ca_private_key,
@@ -3668,6 +3673,7 @@ class TestCharm:
         context: Context[NotaryCharm],
         tmp_path: Path,
     ):
+        hostname = "notary.example.com"
         config_mount = Mount(location="/etc/notary/config", source=tmp_path)
         state = State(
             storages={Storage(name="config"), Storage(name="database")},
@@ -3697,9 +3703,10 @@ class TestCharm:
             relations=[
                 Relation(id=1, endpoint=SEND_ACCESS_CA_CERT_RELATION_NAME),
             ],
+            config={"external-hostname": hostname},
             leader=True,
         )
-        certificate, ca, pk = self.example_certs_and_key()
+        certificate, ca, pk = self.example_certs_and_key(hostname=hostname)
         with open(tmp_path / "certificate.pem", "w") as f:
             f.write(str(certificate))
         with open(tmp_path / "ca.pem", "w") as f:
@@ -3718,3 +3725,159 @@ class TestCharm:
         ):
             context.run(context.on.update_status(), state)
         mock_add_certificates.assert_called_once_with(certificates={str(ca)}, relation_id=1)
+
+    def test_given_self_signed_certs_exist_when_hostname_changes_then_certificates_regenerated(
+        self, context: Context[NotaryCharm], tmp_path: Path
+    ):
+        config_mount = Mount(location="/etc/notary/config", source=tmp_path)
+        # Generate self-signed certs with OLD hostname SAN
+        ca_private_key = generate_private_key()
+        ca_certificate = generate_ca(
+            private_key=ca_private_key,
+            common_name=SELF_SIGNED_CA_COMMON_NAME,
+            validity=timedelta(days=365),
+        )
+        private_key = generate_private_key()
+        csr = generate_csr(
+            private_key=private_key,
+            common_name=CERTIFICATE_COMMON_NAME,
+            sans_dns=frozenset(["old-hostname.example.com"]),
+        )
+        old_certificate = generate_certificate(
+            csr=csr,
+            ca=ca_certificate,
+            ca_private_key=ca_private_key,
+            validity=timedelta(days=365),
+        )
+        # Write old cert files to the mount
+        with open(tmp_path / "certificate.pem", "w") as f:
+            f.write(str(old_certificate))
+        with open(tmp_path / "ca.pem", "w") as f:
+            f.write(str(ca_certificate))
+        with open(tmp_path / "private_key.pem", "w") as f:
+            f.write(str(private_key))
+
+        state = State(
+            storages={Storage(name="config"), Storage(name="database")},
+            containers=[
+                Container(
+                    name="notary",
+                    can_connect=True,
+                    mounts={"config": config_mount},
+                    layers={
+                        "notary": Layer(
+                            {
+                                "summary": "notary layer",
+                                "description": "pebble config layer for notary",
+                                "services": {
+                                    "notary": {
+                                        "override": "replace",
+                                        "summary": "notary",
+                                        "command": "notary -config /etc/notary/config/config.yaml",
+                                        "startup": "enabled",
+                                    }
+                                },
+                            }
+                        )
+                    },
+                )
+            ],
+            config={"external-hostname": "new-hostname.example.com"},
+            leader=True,
+        )
+
+        with patch(
+            "notary.Notary.__new__",
+            return_value=Mock(
+                **{
+                    "is_api_available.return_value": False,
+                    "is_initialized.return_value": False,
+                    "login.return_value": None,
+                },
+            ),
+        ):
+            out = context.run(context.on.config_changed(), state)
+
+        with open(tmp_path / "certificate.pem") as f:
+            new_cert_pem = f.read()
+        new_cert = Certificate.from_string(new_cert_pem)
+        assert new_cert.common_name == CERTIFICATE_COMMON_NAME
+        assert new_cert.sans_dns is not None
+        assert "new-hostname.example.com" in new_cert.sans_dns
+        assert str(old_certificate) != new_cert_pem
+
+    def test_given_self_signed_certs_exist_when_hostname_unchanged_then_certificates_not_regenerated(
+        self, context: Context[NotaryCharm], tmp_path: Path
+    ):
+        config_mount = Mount(location="/etc/notary/config", source=tmp_path)
+        hostname = "my-hostname.example.com"
+        # Generate self-signed certs with CURRENT hostname SAN
+        ca_private_key = generate_private_key()
+        ca_certificate = generate_ca(
+            private_key=ca_private_key,
+            common_name=SELF_SIGNED_CA_COMMON_NAME,
+            validity=timedelta(days=365),
+        )
+        private_key = generate_private_key()
+        csr = generate_csr(
+            private_key=private_key,
+            common_name=CERTIFICATE_COMMON_NAME,
+            sans_dns=frozenset([hostname]),
+        )
+        existing_certificate = generate_certificate(
+            csr=csr,
+            ca=ca_certificate,
+            ca_private_key=ca_private_key,
+            validity=timedelta(days=365),
+        )
+        with open(tmp_path / "certificate.pem", "w") as f:
+            f.write(str(existing_certificate))
+        with open(tmp_path / "ca.pem", "w") as f:
+            f.write(str(ca_certificate))
+        with open(tmp_path / "private_key.pem", "w") as f:
+            f.write(str(private_key))
+
+        state = State(
+            storages={Storage(name="config"), Storage(name="database")},
+            containers=[
+                Container(
+                    name="notary",
+                    can_connect=True,
+                    mounts={"config": config_mount},
+                    layers={
+                        "notary": Layer(
+                            {
+                                "summary": "notary layer",
+                                "description": "pebble config layer for notary",
+                                "services": {
+                                    "notary": {
+                                        "override": "replace",
+                                        "summary": "notary",
+                                        "command": "notary -config /etc/notary/config/config.yaml",
+                                        "startup": "enabled",
+                                    }
+                                },
+                            }
+                        )
+                    },
+                )
+            ],
+            config={"external-hostname": hostname},
+            leader=True,
+        )
+
+        with patch(
+            "notary.Notary.__new__",
+            return_value=Mock(
+                **{
+                    "is_api_available.return_value": False,
+                    "is_initialized.return_value": False,
+                    "login.return_value": None,
+                },
+            ),
+        ):
+            out = context.run(context.on.config_changed(), state)
+
+        with open(tmp_path / "certificate.pem") as f:
+            saved_cert = f.read()
+        assert saved_cert == str(existing_certificate)

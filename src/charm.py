@@ -199,38 +199,44 @@ class NotaryCharm(ops.CharmBase):
 
     ## Configure Dependencies ##
     def _configure_notary_config_file(self):
-        """Push the config file."""
+        """Push the config file if it has changed or doesn't exist."""
+        desired_config = yaml.dump(
+            data={
+                "key_path": f"{WORKLOAD_CONFIG_PATH}/config/private_key.pem",
+                "cert_path": f"{WORKLOAD_CONFIG_PATH}/config/certificate.pem",
+                "db_path": f"{WORKLOAD_DB_PATH}/notary/database/certs.db",
+                "port": self.port,
+                "pebble_notifications": True,
+                "logging": {
+                    "system": {
+                        "level": "debug",
+                        "output": "stderr",
+                    },
+                    "audit": {
+                        "level": "debug",
+                        "output": "stderr",
+                    },
+                },
+                "encryption_backend": {
+                    "type": "none",
+                },
+            }
+        )
         try:
-            self.container.pull(f"{WORKLOAD_CONFIG_PATH}/config/config.yaml")
-            logger.info("Config file already created.")
+            existing_config = self.container.pull(
+                f"{WORKLOAD_CONFIG_PATH}/config/config.yaml"
+            ).read()
+            if existing_config == desired_config:
+                logger.info("Config file already up to date.")
+                return
         except ops.pebble.PathError:
-            self.container.make_dir(path=f"{WORKLOAD_CONFIG_PATH}/config", make_parents=True)
-            self.container.push(
-                path=f"{WORKLOAD_CONFIG_PATH}/config/config.yaml",
-                source=yaml.dump(
-                    data={
-                        "key_path": f"{WORKLOAD_CONFIG_PATH}/config/private_key.pem",
-                        "cert_path": f"{WORKLOAD_CONFIG_PATH}/config/certificate.pem",
-                        "db_path": f"{WORKLOAD_DB_PATH}/notary/database/certs.db",
-                        "port": self.port,
-                        "pebble_notifications": True,
-                        "logging": {
-                            "system": {
-                                "level": "debug",
-                                "output": "stderr",
-                            },
-                            "audit": {
-                                "level": "debug",
-                                "output": "stderr",
-                            },
-                        },
-                        "encryption_backend": {
-                            "type": "none",
-                        },
-                    }
-                ),
-            )
-            logger.info("Config file created.")
+            pass
+        self.container.make_dir(path=f"{WORKLOAD_CONFIG_PATH}/config", make_parents=True)
+        self.container.push(
+            path=f"{WORKLOAD_CONFIG_PATH}/config/config.yaml",
+            source=desired_config,
+        )
+        logger.info("Config file updated.")
 
     def _configure_access_certificates(self):
         """Update the config files for notary and replan if required."""
@@ -253,27 +259,31 @@ class NotaryCharm(ops.CharmBase):
     def _configure_ingress_routes(self):
         if not self.model.get_relation(TRAEFIK_ROUTE_RELATION_NAME):
             return
-        if self.ingress.is_ready():
-            address = f"{self._get_external_hostname()}:{self.port}"
-            self.ingress.submit_to_traefik(
-                config={
-                    "tcp": {
-                        "routers": {
-                            f"juju-{self.model.name}-{self.app.name}-router": {
-                                "entryPoints": ["websecure"],
-                                "rule": f"HostSNI(`{self._get_external_hostname()}`)",
-                                "service": f"juju-{self.model.name}-{self.app.name}-service",
-                                "tls": {"passthrough": True},
-                            }
-                        },
-                        "services": {
-                            f"juju-{self.model.name}-{self.app.name}-service": {
-                                "loadBalancer": {"servers": [{"address": f"{address}"}]}
-                            }
-                        },
-                    }
-                }
+        if not self.ingress.is_ready():
+            logger.warning(
+                "Ingress relation exists but is not ready. Ingress routes may be stale."
             )
+            return
+        address = f"{self._get_external_hostname()}:{self.port}"
+        self.ingress.submit_to_traefik(
+            config={
+                "tcp": {
+                    "routers": {
+                        f"juju-{self.model.name}-{self.app.name}-router": {
+                            "entryPoints": ["websecure"],
+                            "rule": f"HostSNI(`{self._get_external_hostname()}`)",
+                            "service": f"juju-{self.model.name}-{self.app.name}-service",
+                            "tls": {"passthrough": True},
+                        }
+                    },
+                    "services": {
+                        f"juju-{self.model.name}-{self.app.name}-service": {
+                            "loadBalancer": {"servers": [{"address": f"{address}"}]}
+                        }
+                    },
+                }
+            }
+        )
 
     def _configure_charm_authorization(self):
         """Create an admin user to manage Notary if needed, and acquire a token by logging in if needed."""
@@ -446,7 +456,7 @@ class NotaryCharm(ops.CharmBase):
         logger.info("Created self signed certificates.")
 
     def _self_signed_certificates_generated(self) -> bool:
-        """Check if the workload certificate was generated and was self signed."""
+        """Check if the workload certificate was generated, was self signed, and matches the current hostname."""
         try:
             existing_cert = self.container.pull(
                 f"{WORKLOAD_CONFIG_PATH}/{CONFIG_MOUNT}/certificate.pem"
@@ -454,7 +464,12 @@ class NotaryCharm(ops.CharmBase):
         except ops.pebble.PathError:
             return False
         cert = Certificate.from_string(existing_cert.read())
-        return cert.common_name == CERTIFICATE_COMMON_NAME
+        current_hostname = self._get_external_hostname()
+        return (
+            cert.common_name == CERTIFICATE_COMMON_NAME
+            and cert.sans_dns is not None
+            and current_hostname in cert.sans_dns
+        )
 
     def _tls_access_relation_active(self) -> bool:
         """Check if the tls-access relation is created and active."""
