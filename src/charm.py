@@ -11,6 +11,8 @@ import string
 from contextlib import suppress
 from dataclasses import dataclass
 from datetime import timedelta
+from this import s
+from urllib.parse import urlparse
 
 import ops
 import yaml
@@ -36,6 +38,7 @@ from charms.tempo_coordinator_k8s.v0.tracing import TracingEndpointRequirer, cha
 from charms.traefik_k8s.v2.ingress import IngressPerAppRequirer
 
 from notary import Notary
+from utils import is_valid_hostname
 
 logger = logging.getLogger(__name__)
 
@@ -497,9 +500,16 @@ class NotaryCharm(ops.CharmBase):
 
     def _get_external_hostname_config(self) -> str:
         """Return the external hostname configuration, or socket fqdn if it was not set."""
-        if hostname := self.config.get("external-hostname", ""):
-            return str(hostname)
-        return socket.getfqdn()
+        hostname = str(self.config.get("external-hostname", ""))
+        if not hostname:
+            return socket.getfqdn()
+        if not is_valid_hostname(hostname):
+            logger.warning(
+                "The provided external hostname '%s' is not valid. Falling back to socket FQDN.",
+                hostname,
+            )
+            return socket.getfqdn()
+        return str(hostname)
 
 
 def _generate_password() -> str:
