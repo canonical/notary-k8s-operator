@@ -23,7 +23,7 @@ from scenario import Container, Context, Mount, Network, Relation, Secret, State
 from charm import (
     CERTIFICATE_PROVIDER_RELATION_NAME,
     NOTARY_LOGIN_SECRET_LABEL,
-    SEND_CA_CERT_RELATION_NAME,
+    SEND_ACCESS_CA_CERT_RELATION_NAME,
     TLS_ACCESS_RELATION_NAME,
     NotaryCharm,
 )
@@ -3695,7 +3695,7 @@ class TestCharm:
                 )
             ],
             relations=[
-                Relation(id=1, endpoint=SEND_CA_CERT_RELATION_NAME),
+                Relation(id=1, endpoint=SEND_ACCESS_CA_CERT_RELATION_NAME),
             ],
             leader=True,
         )

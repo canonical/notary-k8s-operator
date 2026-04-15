@@ -56,7 +56,7 @@ WORKLOAD_DB_PATH = "/var/lib"
 CERTIFICATE_COMMON_NAME = "Notary Self Signed Certificate"
 SELF_SIGNED_CA_COMMON_NAME = "Notary Self Signed Root CA"
 NOTARY_LOGIN_SECRET_LABEL = "Notary Login Details"
-SEND_CA_CERT_RELATION_NAME = "send-ca-cert"
+SEND_ACCESS_CA_CERT_RELATION_NAME = "send-access-ca-certificate"
 
 
 @dataclass
@@ -101,7 +101,9 @@ class NotaryCharm(ops.CharmBase):
         self._tracing_endpoint, self._tracing_server_cert = charm_tracing_config(
             self.tracing, cert_path=None
         )
-        self.certificate_transfer = CertificateTransferProvides(self, SEND_CA_CERT_RELATION_NAME)
+        self.certificate_transfer = CertificateTransferProvides(
+            self, SEND_ACCESS_CA_CERT_RELATION_NAME
+        )
         self.dashboard = GrafanaDashboardProvider(self, relation_name=GRAFANA_RELATION_NAME)
         self.logs = LogForwarder(charm=self, relation_name=LOGGING_RELATION_NAME)
         self.ingress = IngressPerAppRequirer(
@@ -130,7 +132,7 @@ class NotaryCharm(ops.CharmBase):
         )
 
         self.client = Notary(
-            f"https://{self._get_external_hostname_config()}:{self.port}",
+            f"https://{socket.getfqdn()}:{self.port}",
             f"{CHARM_PATH}/{CONFIG_MOUNT}/0/ca.pem",
         )
         [
@@ -144,7 +146,7 @@ class NotaryCharm(ops.CharmBase):
                 self.on["access-certificates"].relation_changed,
                 self.on["access-certificates"].relation_departed,
                 self.on["access-certificates"].relation_broken,
-                self.on[SEND_CA_CERT_RELATION_NAME].relation_joined,
+                self.on[SEND_ACCESS_CA_CERT_RELATION_NAME].relation_joined,
                 self.on.config_storage_attached,
                 self.on.database_storage_attached,
                 self.on.config_changed,
@@ -334,7 +336,7 @@ class NotaryCharm(ops.CharmBase):
             f"{WORKLOAD_CONFIG_PATH}/{CONFIG_MOUNT}/ca.pem",
         ) as ca_cert_file:
             if ca_cert := ca_cert_file.read().strip():
-                for relation in self.model.relations.get(SEND_CA_CERT_RELATION_NAME, []):
+                for relation in self.model.relations.get(SEND_ACCESS_CA_CERT_RELATION_NAME, []):
                     self.certificate_transfer.add_certificates(
                         certificates={ca_cert}, relation_id=relation.id
                     )
