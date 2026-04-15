@@ -89,7 +89,7 @@ class NotaryCharm(ops.CharmBase):
         self.port = 2111
         self.access_csr = CertificateRequestAttributes(
             common_name="Notary",
-            sans_dns=frozenset([self._get_external_hostname_config()]),
+            sans_dns=self._generate_csr_sans_dns(),
         )
 
         self.unit.set_ports(self.port)
@@ -403,7 +403,7 @@ class NotaryCharm(ops.CharmBase):
         csr = generate_csr(
             private_key=private_key,
             common_name=CERTIFICATE_COMMON_NAME,
-            sans_dns=frozenset([self._get_external_hostname_config()]),
+            sans_dns=self._generate_csr_sans_dns(),
         )
         certificate = generate_certificate(
             ca=ca_certificate,
@@ -496,18 +496,24 @@ class NotaryCharm(ops.CharmBase):
                 make_dirs=True,
             )
 
-    def _get_external_hostname_config(self) -> str:
+    def _get_external_hostname_config(self) -> str | None:
         """Return the external hostname configuration, or socket fqdn if it was not set."""
         hostname = str(self.config.get("external-hostname", ""))
-        if not hostname:
-            return socket.getfqdn()
         if not is_valid_hostname(hostname):
             logger.warning(
-                "The provided external hostname '%s' is not valid. Falling back to socket FQDN.",
+                "The provided external hostname '%s' is not valid. Value discarded.",
                 hostname,
             )
-            return socket.getfqdn()
+            return None
         return str(hostname)
+
+    def _generate_csr_sans_dns(self) -> frozenset[str]:
+        dns: list[str] = []
+        if external_hostname := self._get_external_hostname_config():
+            dns.append(external_hostname)
+        if fqdn := socket.getfqdn():
+            dns.append(fqdn)
+        return frozenset(dns)
 
 
 def _generate_password() -> str:
