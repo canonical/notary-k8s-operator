@@ -21,29 +21,45 @@ platforms:
   ubuntu@24.04:amd64:
   ubuntu@24.04:arm64:
 
+config:
+  options:
+    external-hostname:
+      description: |
+        Set the external hostname that Notary expects to be accessed by all parties.
+        This will be used as
+        - the subject in the generated self-signed certificates if none are provided,
+        - the hostname in the CRLDistributionPoint extension in all certificates created by Notary,
+        - the hostname in the OIDC integration used by notary.
+      type: string
+
 provides:
   certificates:
     interface: tls-certificates
+    description: |
+      Forwards CSR's from requirers to Notary, and returns the signed certificate back to the requirer.
+  send-access-ca-certificate:
+    interface: certificate_transfer
+    description: |
+      Send our CA certificate so any client can trust the Notary workload's TLS certificate.
+
   metrics:
     interface: prometheus_scrape
   grafana-dashboard:
     interface: grafana_dashboard
-  send-ca-cert:
-    interface: certificate_transfer
-    description: |
-      Send our CA certificate so clients can trust the CA by means of forming a relation.
 
 requires:
   access-certificates:
-    limit: 1
     interface: tls-certificates
-    optional: true
-  logging:
-    interface: loki_push_api
+    description: |
+      Notary uses this relation to acquire a certificate for the workload server.
+    limit: 1
     optional: true
   ingress:
     interface: ingress
     limit: 1
+    optional: true
+  logging:
+    interface: loki_push_api
     optional: true
   tracing:
     interface: tracing
@@ -71,7 +87,7 @@ resources:
   notary-image:
     type: oci-image
     description: OCI image for the Notary application
-    upstream-source: ghcr.io/canonical/notary:0.0.3
+    upstream-source: ghcr.io/canonical/notary:1.0.0
 
 parts:
   charm:

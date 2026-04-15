@@ -11,7 +11,7 @@ from pathlib import Path
 import jubilant
 import pytest
 import yaml
-from charms.tls_certificates_interface.v4.tls_certificates import (
+from charmlibs.interfaces.tls_certificates import (
     CertificateSigningRequest,
     generate_ca,
     generate_certificate,

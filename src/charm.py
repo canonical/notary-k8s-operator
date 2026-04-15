@@ -14,15 +14,8 @@ from datetime import timedelta
 
 import ops
 import yaml
-from charms.certificate_transfer_interface.v1.certificate_transfer import (
-    CertificateTransferProvides,
-)
-from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardProvider
-from charms.loki_k8s.v1.loki_push_api import LogForwarder
-from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointProvider
-from charms.tempo_coordinator_k8s.v0.charm_tracing import trace_charm
-from charms.tempo_coordinator_k8s.v0.tracing import TracingEndpointRequirer, charm_tracing_config
-from charms.tls_certificates_interface.v4.tls_certificates import (
+from charmlibs.interfaces.certificate_transfer import CertificateTransferProvides
+from charmlibs.interfaces.tls_certificates import (
     Certificate,
     CertificateRequestAttributes,
     Mode,
@@ -35,9 +28,15 @@ from charms.tls_certificates_interface.v4.tls_certificates import (
     generate_csr,
     generate_private_key,
 )
+from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardProvider
+from charms.loki_k8s.v1.loki_push_api import LogForwarder
+from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointProvider
+from charms.tempo_coordinator_k8s.v0.charm_tracing import trace_charm
+from charms.tempo_coordinator_k8s.v0.tracing import TracingEndpointRequirer, charm_tracing_config
 from charms.traefik_k8s.v2.ingress import IngressPerAppRequirer
 
 from notary import Notary
+from utils import is_valid_hostname
 
 logger = logging.getLogger(__name__)
 
@@ -57,7 +56,7 @@ WORKLOAD_DB_PATH = "/var/lib"
 CERTIFICATE_COMMON_NAME = "Notary Self Signed Certificate"
 SELF_SIGNED_CA_COMMON_NAME = "Notary Self Signed Root CA"
 NOTARY_LOGIN_SECRET_LABEL = "Notary Login Details"
-SEND_CA_CERT_RELATION_NAME = "send-ca-cert"
+SEND_ACCESS_CA_CERT_RELATION_NAME = "send-access-ca-certificate"
 
 
 @dataclass
@@ -90,7 +89,7 @@ class NotaryCharm(ops.CharmBase):
         self.port = 2111
         self.access_csr = CertificateRequestAttributes(
             common_name="Notary",
-            sans_dns=frozenset([socket.getfqdn()]),
+            sans_dns=self._generate_csr_sans_dns(),
         )
 
         self.unit.set_ports(self.port)
@@ -102,7 +101,9 @@ class NotaryCharm(ops.CharmBase):
         self._tracing_endpoint, self._tracing_server_cert = charm_tracing_config(
             self.tracing, cert_path=None
         )
-        self.certificate_transfer = CertificateTransferProvides(self, SEND_CA_CERT_RELATION_NAME)
+        self.certificate_transfer = CertificateTransferProvides(
+            self, SEND_ACCESS_CA_CERT_RELATION_NAME
+        )
         self.dashboard = GrafanaDashboardProvider(self, relation_name=GRAFANA_RELATION_NAME)
         self.logs = LogForwarder(charm=self, relation_name=LOGGING_RELATION_NAME)
         self.ingress = IngressPerAppRequirer(
@@ -145,7 +146,7 @@ class NotaryCharm(ops.CharmBase):
                 self.on["access-certificates"].relation_changed,
                 self.on["access-certificates"].relation_departed,
                 self.on["access-certificates"].relation_broken,
-                self.on[SEND_CA_CERT_RELATION_NAME].relation_joined,
+                self.on[SEND_ACCESS_CA_CERT_RELATION_NAME].relation_joined,
                 self.on.config_storage_attached,
                 self.on.database_storage_attached,
                 self.on.config_changed,
@@ -211,6 +212,10 @@ class NotaryCharm(ops.CharmBase):
                         "pebble_notifications": True,
                         "logging": {
                             "system": {
+                                "level": "debug",
+                                "output": "stderr",
+                            },
+                            "audit": {
                                 "level": "debug",
                                 "output": "stderr",
                             },
@@ -331,7 +336,7 @@ class NotaryCharm(ops.CharmBase):
             f"{WORKLOAD_CONFIG_PATH}/{CONFIG_MOUNT}/ca.pem",
         ) as ca_cert_file:
             if ca_cert := ca_cert_file.read().strip():
-                for relation in self.model.relations.get(SEND_CA_CERT_RELATION_NAME, []):
+                for relation in self.model.relations.get(SEND_ACCESS_CA_CERT_RELATION_NAME, []):
                     self.certificate_transfer.add_certificates(
                         certificates={ca_cert}, relation_id=relation.id
                     )
@@ -400,7 +405,7 @@ class NotaryCharm(ops.CharmBase):
         csr = generate_csr(
             private_key=private_key,
             common_name=CERTIFICATE_COMMON_NAME,
-            sans_dns=frozenset([socket.getfqdn()]),
+            sans_dns=self._generate_csr_sans_dns(),
         )
         certificate = generate_certificate(
             ca=ca_certificate,
@@ -492,6 +497,25 @@ class NotaryCharm(ops.CharmBase):
                 str(private_key),
                 make_dirs=True,
             )
+
+    def _get_external_hostname_config(self) -> str | None:
+        """Return the external hostname configuration, or socket fqdn if it was not set."""
+        hostname = str(self.config.get("external-hostname", ""))
+        if not is_valid_hostname(hostname):
+            logger.warning(
+                "The provided external hostname '%s' is not valid. Value discarded.",
+                hostname,
+            )
+            return None
+        return str(hostname)
+
+    def _generate_csr_sans_dns(self) -> frozenset[str]:
+        dns: list[str] = []
+        if external_hostname := self._get_external_hostname_config():
+            dns.append(external_hostname)
+        if fqdn := socket.getfqdn():
+            dns.append(fqdn)
+        return frozenset(dns)
 
 
 def _generate_password() -> str:
