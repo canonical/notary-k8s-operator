@@ -68,10 +68,6 @@ requires:
     interface: ingress
     limit: 1
     optional: true
-  traefik-route:
-    interface: traefik_route
-    limit: 1
-    optional: false
 
 containers:
   notary:
