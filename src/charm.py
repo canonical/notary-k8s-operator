@@ -33,7 +33,8 @@ from charms.loki_k8s.v1.loki_push_api import LogForwarder
 from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointProvider
 from charms.tempo_coordinator_k8s.v0.charm_tracing import trace_charm
 from charms.tempo_coordinator_k8s.v0.tracing import TracingEndpointRequirer, charm_tracing_config
-from charms.traefik_k8s.v0.traefik_route import TraefikRouteRequirer
+
+# from charms.traefik_k8s.v0.traefik_route import TraefikRouteRequirer
 from charms.traefik_k8s.v2.ingress import IngressPerAppRequirer
 
 from notary import Notary
@@ -107,12 +108,18 @@ class NotaryCharm(ops.CharmBase):
         )
         self.dashboard = GrafanaDashboardProvider(self, relation_name=GRAFANA_RELATION_NAME)
         self.logs = LogForwarder(charm=self, relation_name=LOGGING_RELATION_NAME)
-        self.ingress = TraefikRouteRequirer(
+        self.ingress = IngressPerAppRequirer(
             charm=self,
-            relation=self.model.get_relation(TRAEFIK_ROUTE_RELATION_NAME),
-            relation_name=TRAEFIK_ROUTE_RELATION_NAME,
-            raw=True,
+            port=self.port,
+            strip_prefix=True,
+            scheme=lambda: "https",
         )
+        # TraefikRouteRequirer(
+        #     charm=self,
+        #     relation=self.model.get_relation(TRAEFIK_ROUTE_RELATION_NAME),
+        #     relation_name=TRAEFIK_ROUTE_RELATION_NAME,
+        #     raw=True,
+        # )
         self.metrics = MetricsEndpointProvider(
             charm=self,
             relation_name=METRICS_RELATION_NAME,
@@ -170,7 +177,7 @@ class NotaryCharm(ops.CharmBase):
             return
         self._configure_notary_config_file()
         self._configure_access_certificates()
-        self._configure_ingress_routes()
+        # self._configure_ingress_routes()
         self._configure_charm_authorization()
         self._configure_certificate_requirers()
         self._send_ca_cert()
@@ -256,34 +263,34 @@ class NotaryCharm(ops.CharmBase):
         with suppress(ops.pebble.ChangeError):
             self.container.replan()
 
-    def _configure_ingress_routes(self):
-        if not self.model.get_relation(TRAEFIK_ROUTE_RELATION_NAME):
-            return
-        if not self.ingress.is_ready():
-            logger.warning(
-                "Ingress relation exists but is not ready. Ingress routes may be stale."
-            )
-            return
-        address = f"{self._get_external_hostname()}:{self.port}"
-        self.ingress.submit_to_traefik(
-            config={
-                "tcp": {
-                    "routers": {
-                        f"juju-{self.model.name}-{self.app.name}-router": {
-                            "entryPoints": ["websecure"],
-                            "rule": f"HostSNI(`{self._get_external_hostname()}`)",
-                            "service": f"juju-{self.model.name}-{self.app.name}-service",
-                            "tls": {"passthrough": True},
-                        }
-                    },
-                    "services": {
-                        f"juju-{self.model.name}-{self.app.name}-service": {
-                            "loadBalancer": {"servers": [{"address": f"{address}"}]}
-                        }
-                    },
-                }
-            }
-        )
+    # def _configure_ingress_routes(self):
+    #     if not self.model.get_relation(TRAEFIK_ROUTE_RELATION_NAME):
+    #         return
+    #     if not self.ingress.is_ready():
+    #         logger.warning(
+    #             "Ingress relation exists but is not ready. Ingress routes may be stale."
+    #         )
+    #         return
+    #     address = f"{self._get_external_hostname_config()}:{self.port}"
+    #     self.ingress.submit_to_traefik(
+    #         config={
+    #             "tcp": {
+    #                 "routers": {
+    #                     f"juju-{self.model.name}-{self.app.name}-router": {
+    #                         "entryPoints": ["websecure"],
+    #                         "rule": f"HostSNI(`{self._get_external_hostname()}`)",
+    #                         "service": f"juju-{self.model.name}-{self.app.name}-service",
+    #                         "tls": {"passthrough": True},
+    #                     }
+    #                 },
+    #                 "services": {
+    #                     f"juju-{self.model.name}-{self.app.name}-service": {
+    #                         "loadBalancer": {"servers": [{"address": f"{address}"}]}
+    #                     }
+    #                 },
+    #             }
+    #         }
+    #     )
 
     def _configure_charm_authorization(self):
         """Create an admin user to manage Notary if needed, and acquire a token by logging in if needed."""

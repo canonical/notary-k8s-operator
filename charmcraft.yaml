@@ -41,7 +41,8 @@ provides:
     interface: certificate_transfer
     description: |
       Send our CA certificate so any client can trust the Notary workload's TLS certificate.
-
+  logging:
+    interface: loki_push_api
   metrics:
     interface: prometheus_scrape
   grafana-dashboard:
