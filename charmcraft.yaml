@@ -37,14 +37,18 @@ provides:
     interface: tls-certificates
     description: |
       Forwards CSR's from requirers to Notary, and returns the signed certificate back to the requirer.
+    optional: true
   send-access-ca-certificate:
     interface: certificate_transfer
     description: |
       Send our CA certificate so any client can trust the Notary workload's TLS certificate.
+    optional: true
   metrics:
     interface: prometheus_scrape
+    optional: true
   grafana-dashboard:
     interface: grafana_dashboard
+    optional: true
 
 requires:
   access-certificates:
@@ -55,6 +59,7 @@ requires:
     optional: true
   logging:
     interface: loki_push_api
+    optional: true
   tracing:
     interface: tracing
     limit: 1
