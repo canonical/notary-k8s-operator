@@ -3796,7 +3796,7 @@ class TestCharm:
                 },
             ),
         ):
-            out = context.run(context.on.config_changed(), state)
+            context.run(context.on.config_changed(), state)
 
         with open(tmp_path / "certificate.pem") as f:
             new_cert_pem = f.read()
@@ -3876,7 +3876,7 @@ class TestCharm:
                 },
             ),
         ):
-            out = context.run(context.on.config_changed(), state)
+            context.run(context.on.config_changed(), state)
 
         with open(tmp_path / "certificate.pem") as f:
             saved_cert = f.read()
