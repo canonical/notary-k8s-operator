@@ -9,7 +9,7 @@ jobs:
       matrix:
         arch:
           - arch: amd64
-            runner: [self-hosted, linux, X64, jammy, 2xlarge]
+            runner: [self-hosted, linux, X64, jammy, xlarge]
           # Disabling until Notary and the charm are released
           # - arch: arm64
           #   runner: [self-hosted, linux, ARM64, jammy, medium]
