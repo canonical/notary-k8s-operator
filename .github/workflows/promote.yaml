@@ -20,7 +20,7 @@ env:
 jobs:
   scan:
     name: Secscan
-    uses: canonical/identity-credentials-workflows/.github/workflows/secscan-charm.yaml@v0
+    uses: canonical/identity-credentials-workflows/.github/workflows/secscan-charm.yaml@v1.3.0
     with:
       charm: manual-tls-certificates
       # We have to compute the channel here again because we can't pass env variables to a reusable workflow
