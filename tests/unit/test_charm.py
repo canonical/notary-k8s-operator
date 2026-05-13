@@ -3058,7 +3058,7 @@ class TestCharm:
             ),
         ):
             out = context.run(context.on.update_status(), state)
-        assert len(list(out.secrets)) == 1
+        assert len(list(out.secrets)) == 2
         secret = out.get_secret(label="Notary Login Details")
         assert secret.latest_content
         assert secret.latest_content.get("token") == "example-token"
@@ -3980,9 +3980,9 @@ class TestCharm:
             ],
             secrets={
                 Secret(
+                    {"ca-id": "1"},
                     label=NOTARY_SIGNING_CA_SECRET_LABEL,
                     owner="app",
-                    content={"ca-id": "1"},
                 )
             },
             leader=True,
@@ -4038,9 +4038,9 @@ class TestCharm:
             ],
             secrets={
                 Secret(
+                    {"ca-id": "1"},
                     label=NOTARY_SIGNING_CA_SECRET_LABEL,
                     owner="app",
-                    content={"ca-id": "1"},
                 )
             },
             leader=True,
