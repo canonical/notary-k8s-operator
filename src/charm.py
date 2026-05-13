@@ -35,7 +35,11 @@ from charms.tempo_coordinator_k8s.v0.charm_tracing import trace_charm
 from charms.tempo_coordinator_k8s.v0.tracing import TracingEndpointRequirer, charm_tracing_config
 from charms.traefik_k8s.v2.ingress import IngressPerAppRequirer
 
-from notary import Notary
+from notary import (
+    CreateAutoSignPolicyParams,
+    CreateCertificateAuthorityParams,
+    Notary,
+)
 from utils import is_valid_hostname
 
 logger = logging.getLogger(__name__)
@@ -56,6 +60,7 @@ WORKLOAD_DB_PATH = "/var/lib"
 CERTIFICATE_COMMON_NAME = "Notary Self Signed Certificate"
 SELF_SIGNED_CA_COMMON_NAME = "Notary Self Signed Root CA"
 NOTARY_LOGIN_SECRET_LABEL = "Notary Login Details"
+NOTARY_SIGNING_CA_SECRET_LABEL = "Notary Signing CA ID"
 SEND_ACCESS_CA_CERT_RELATION_NAME = "send-access-ca-certificate"
 
 
@@ -274,6 +279,64 @@ class NotaryCharm(ops.CharmBase):
             login_details.token = login_response.token
             login_details_secret = self.model.get_secret(label=NOTARY_LOGIN_SECRET_LABEL)
             login_details_secret.set_content(login_details.to_dict())
+        self._ensure_signing_ca(login_details.token)
+
+    def _ensure_signing_ca(self, token: str) -> None:
+        """Create a self-signed CA and auto-sign policy if none exists.
+
+        This method is idempotent. If a CA was already created by the charm,
+        it reads the CA ID from a Juju secret and verifies the policy exists.
+        """
+        ca_id = self._get_signing_ca_id()
+        if ca_id is not None:
+            policy = self.client.get_auto_sign_policy(ca_id, token)
+            if policy:
+                return
+            logger.info("Auto-sign policy missing for CA %s, recreating", ca_id)
+        else:
+            ca_params = CreateCertificateAuthorityParams(
+                common_name=str(self.config.get("ca-common-name", "Notary Self-Signed CA")),
+            )
+            ca_response = self.client.create_certificate_authority(ca_params, token)
+            if not ca_response:
+                logger.error("Failed to create signing CA")
+                return
+            ca_id = ca_response.id
+            self._store_signing_ca_id(ca_id)
+            logger.info("Created self-signed CA with ID %s", ca_id)
+
+        policy_params = CreateAutoSignPolicyParams(
+            enabled=True,
+            certificate_validity_days=int(self.config.get("certificate-validity", 90)),
+            certificate_limit=int(self.config.get("certificate-limit", 0)),
+        )
+        policy_response = self.client.create_auto_sign_policy(ca_id, policy_params, token)
+        if policy_response:
+            logger.info("Created auto-sign policy for CA %s", ca_id)
+        else:
+            logger.error("Failed to create auto-sign policy for CA %s", ca_id)
+
+    def _get_signing_ca_id(self) -> int | None:
+        """Get the signing CA ID from the Juju secret."""
+        try:
+            secret = self.model.get_secret(label=NOTARY_SIGNING_CA_SECRET_LABEL)
+            content = secret.get_content(refresh=True)
+            ca_id_str = content.get("ca-id", "0")
+            ca_id = int(ca_id_str)
+            return ca_id if ca_id > 0 else None
+        except ops.SecretNotFoundError:
+            return None
+
+    def _store_signing_ca_id(self, ca_id: int) -> None:
+        """Store the signing CA ID in a Juju secret."""
+        try:
+            secret = self.model.get_secret(label=NOTARY_SIGNING_CA_SECRET_LABEL)
+            secret.set_content({"ca-id": str(ca_id)})
+        except ops.SecretNotFoundError:
+            self.app.add_secret(
+                label=NOTARY_SIGNING_CA_SECRET_LABEL,
+                content={"ca-id": str(ca_id)},
+            )
 
     def _configure_certificate_requirers(self):
         """Get all CSR's and certs from databags and Notary, compare differences and update requirers if needed."""
