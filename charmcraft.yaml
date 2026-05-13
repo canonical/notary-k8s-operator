@@ -31,6 +31,23 @@ config:
         - the hostname in the CRLDistributionPoint extension in all certificates created by Notary,
         - the hostname in the OIDC integration used by notary.
       type: string
+    ca-common-name:
+      description: |
+        Common name for the auto-created self-signed CA used for auto-signing.
+        When set, the charm will create a self-signed CA with this name on first
+        deployment and enable auto-signing for all certificate requests.
+      type: string
+      default: "Notary Self-Signed CA"
+    certificate-validity:
+      description: |
+        Validity period in days for certificates issued by the auto-sign CA.
+      type: int
+      default: 90
+    certificate-limit:
+      description: |
+        Maximum number of certificates to auto-issue. Set to 0 for unlimited.
+      type: int
+      default: 0
 
 provides:
   certificates:

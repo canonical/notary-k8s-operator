@@ -98,6 +98,44 @@ class CreateCertificateResponse:
     id: int
 
 
+@dataclass
+class CreateCertificateAuthorityParams:
+    """Parameters to create a certificate authority in Notary."""
+
+    common_name: str
+    self_signed: bool = True
+    sans_dns: str = ""
+    country_name: str = ""
+    state_or_province_name: str = ""
+    locality_name: str = ""
+    organization_name: str = ""
+    organizational_unit_name: str = ""
+
+
+@dataclass
+class CreateCertificateAuthorityResponse:
+    """Response from Notary when creating a certificate authority."""
+
+    id: int
+
+
+@dataclass
+class CreateAutoSignPolicyParams:
+    """Parameters to create an auto-sign policy."""
+
+    enabled: bool = True
+    certificate_validity_days: int = 90
+    certificate_limit: int = 0
+
+
+@dataclass
+class CreateAutoSignPolicyResponse:
+    """Response from Notary when creating an auto-sign policy."""
+
+    policy_id: int
+    certificate_authority_id: int
+
+
 @dataclass(frozen=True)
 class CertificateRequest:
     """The certificate request that's stored in Notary."""
@@ -309,6 +347,59 @@ class Notary:
             return CreateCertificateResponse(
                 id=response.result.get("id"),
             )
+        return None
+
+    def list_certificate_authorities(self, token: str) -> list[dict]:
+        """List all certificate authorities in Notary."""
+        response = self._make_request(
+            "GET", f"/api/{self.API_VERSION}/certificate_authorities", token=token
+        )
+        if response and response.result:
+            return response.result
+        return []
+
+    def create_certificate_authority(
+        self, params: CreateCertificateAuthorityParams, token: str
+    ) -> CreateCertificateAuthorityResponse | None:
+        """Create a certificate authority in Notary."""
+        response = self._make_request(
+            "POST",
+            f"/api/{self.API_VERSION}/certificate_authorities",
+            token=token,
+            data=asdict(params),
+        )
+        if response and response.result:
+            return CreateCertificateAuthorityResponse(
+                id=response.result.get("id"),
+            )
+        return None
+
+    def create_auto_sign_policy(
+        self, ca_id: int, params: CreateAutoSignPolicyParams, token: str
+    ) -> CreateAutoSignPolicyResponse | None:
+        """Create an auto-sign policy for a certificate authority."""
+        response = self._make_request(
+            "POST",
+            f"/api/{self.API_VERSION}/certificate_authorities/{ca_id}/auto_sign",
+            token=token,
+            data=asdict(params),
+        )
+        if response and response.result:
+            return CreateAutoSignPolicyResponse(
+                policy_id=response.result.get("policy_id"),
+                certificate_authority_id=response.result.get("certificate_authority_id"),
+            )
+        return None
+
+    def get_auto_sign_policy(self, ca_id: int, token: str) -> dict | None:
+        """Get the auto-sign policy for a certificate authority."""
+        response = self._make_request(
+            "GET",
+            f"/api/{self.API_VERSION}/certificate_authorities/{ca_id}/auto_sign",
+            token=token,
+        )
+        if response and response.result:
+            return response.result
         return None
 
 

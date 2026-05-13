@@ -23,6 +23,7 @@ from scenario import Container, Context, Mount, Network, Relation, Secret, State
 from charm import (
     CERTIFICATE_PROVIDER_RELATION_NAME,
     NOTARY_LOGIN_SECRET_LABEL,
+    NOTARY_SIGNING_CA_SECRET_LABEL,
     SEND_ACCESS_CA_CERT_RELATION_NAME,
     TLS_ACCESS_RELATION_NAME,
     NotaryCharm,
@@ -3881,3 +3882,232 @@ class TestCharm:
         with open(tmp_path / "certificate.pem") as f:
             saved_cert = f.read()
         assert saved_cert == str(existing_certificate)
+
+    # Auto-sign bootstrap tests
+    def test_given_notary_initialized_when_configure_then_signing_ca_and_policy_created(
+        self, context: Context[NotaryCharm], tmp_path: Path
+    ):
+        config_mount = Mount(location="/etc/notary/config", source=tmp_path)
+        notary_mock = Mock(
+            **{
+                "is_api_available.return_value": True,
+                "is_initialized.return_value": True,
+                "login.return_value": LoginResponse(token="example-token"),
+                "token_is_valid.return_value": True,
+                "get_auto_sign_policy.return_value": None,
+                "create_certificate_authority.return_value": Mock(id=1),
+                "create_auto_sign_policy.return_value": Mock(
+                    policy_id=1, certificate_authority_id=1
+                ),
+                "get_version.return_value": None,
+            },
+        )
+        state = State(
+            storages={Storage(name="config"), Storage(name="database")},
+            containers=[
+                Container(
+                    name="notary",
+                    can_connect=True,
+                    mounts={"config": config_mount},
+                    layers={
+                        "notary": Layer(
+                            {
+                                "summary": "notary layer",
+                                "description": "pebble config layer for notary",
+                                "services": {
+                                    "notary": {
+                                        "override": "replace",
+                                        "summary": "notary",
+                                        "command": "notary -config /etc/notary/config/config.yaml",
+                                        "startup": "enabled",
+                                    }
+                                },
+                            }
+                        )
+                    },
+                )
+            ],
+            leader=True,
+        )
+
+        with patch("notary.Notary.__new__", return_value=notary_mock):
+            out = context.run(context.on.update_status(), state)
+
+        notary_mock.create_certificate_authority.assert_called_once()
+        notary_mock.create_auto_sign_policy.assert_called_once()
+        secret = out.get_secret(label=NOTARY_SIGNING_CA_SECRET_LABEL)
+        assert secret.latest_content
+        assert secret.latest_content.get("ca-id") == "1"
+
+    def test_given_signing_ca_exists_when_configure_then_ca_not_recreated(
+        self, context: Context[NotaryCharm], tmp_path: Path
+    ):
+        config_mount = Mount(location="/etc/notary/config", source=tmp_path)
+        notary_mock = Mock(
+            **{
+                "is_api_available.return_value": True,
+                "is_initialized.return_value": True,
+                "login.return_value": LoginResponse(token="example-token"),
+                "token_is_valid.return_value": True,
+                "get_auto_sign_policy.return_value": {"policy_id": 1, "enabled": True},
+                "get_version.return_value": None,
+            },
+        )
+        state = State(
+            storages={Storage(name="config"), Storage(name="database")},
+            containers=[
+                Container(
+                    name="notary",
+                    can_connect=True,
+                    mounts={"config": config_mount},
+                    layers={
+                        "notary": Layer(
+                            {
+                                "summary": "notary layer",
+                                "description": "pebble config layer for notary",
+                                "services": {
+                                    "notary": {
+                                        "override": "replace",
+                                        "summary": "notary",
+                                        "command": "notary -config /etc/notary/config/config.yaml",
+                                        "startup": "enabled",
+                                    }
+                                },
+                            }
+                        )
+                    },
+                )
+            ],
+            secrets={
+                Secret(
+                    label=NOTARY_SIGNING_CA_SECRET_LABEL,
+                    owner="app",
+                    content={"ca-id": "1"},
+                )
+            },
+            leader=True,
+        )
+
+        with patch("notary.Notary.__new__", return_value=notary_mock):
+            context.run(context.on.update_status(), state)
+
+        notary_mock.create_certificate_authority.assert_not_called()
+        notary_mock.create_auto_sign_policy.assert_not_called()
+
+    def test_given_signing_ca_exists_but_policy_missing_when_configure_then_policy_recreated(
+        self, context: Context[NotaryCharm], tmp_path: Path
+    ):
+        config_mount = Mount(location="/etc/notary/config", source=tmp_path)
+        notary_mock = Mock(
+            **{
+                "is_api_available.return_value": True,
+                "is_initialized.return_value": True,
+                "login.return_value": LoginResponse(token="example-token"),
+                "token_is_valid.return_value": True,
+                "get_auto_sign_policy.return_value": None,
+                "create_auto_sign_policy.return_value": Mock(
+                    policy_id=1, certificate_authority_id=1
+                ),
+                "get_version.return_value": None,
+            },
+        )
+        state = State(
+            storages={Storage(name="config"), Storage(name="database")},
+            containers=[
+                Container(
+                    name="notary",
+                    can_connect=True,
+                    mounts={"config": config_mount},
+                    layers={
+                        "notary": Layer(
+                            {
+                                "summary": "notary layer",
+                                "description": "pebble config layer for notary",
+                                "services": {
+                                    "notary": {
+                                        "override": "replace",
+                                        "summary": "notary",
+                                        "command": "notary -config /etc/notary/config/config.yaml",
+                                        "startup": "enabled",
+                                    }
+                                },
+                            }
+                        )
+                    },
+                )
+            ],
+            secrets={
+                Secret(
+                    label=NOTARY_SIGNING_CA_SECRET_LABEL,
+                    owner="app",
+                    content={"ca-id": "1"},
+                )
+            },
+            leader=True,
+        )
+
+        with patch("notary.Notary.__new__", return_value=notary_mock):
+            context.run(context.on.update_status(), state)
+
+        notary_mock.create_certificate_authority.assert_not_called()
+        notary_mock.create_auto_sign_policy.assert_called_once()
+
+    def test_given_custom_config_when_configure_then_correct_values_passed_to_api(
+        self, context: Context[NotaryCharm], tmp_path: Path
+    ):
+        config_mount = Mount(location="/etc/notary/config", source=tmp_path)
+        notary_mock = Mock(
+            **{
+                "is_api_available.return_value": True,
+                "is_initialized.return_value": True,
+                "login.return_value": LoginResponse(token="example-token"),
+                "token_is_valid.return_value": True,
+                "get_auto_sign_policy.return_value": None,
+                "create_certificate_authority.return_value": Mock(id=1),
+                "create_auto_sign_policy.return_value": Mock(
+                    policy_id=1, certificate_authority_id=1
+                ),
+                "get_version.return_value": None,
+            },
+        )
+        state = State(
+            storages={Storage(name="config"), Storage(name="database")},
+            containers=[
+                Container(
+                    name="notary",
+                    can_connect=True,
+                    mounts={"config": config_mount},
+                    layers={
+                        "notary": Layer(
+                            {
+                                "summary": "notary layer",
+                                "description": "pebble config layer for notary",
+                                "services": {
+                                    "notary": {
+                                        "override": "replace",
+                                        "summary": "notary",
+                                        "command": "notary -config /etc/notary/config/config.yaml",
+                                        "startup": "enabled",
+                                    }
+                                },
+                            }
+                        )
+                    },
+                )
+            ],
+            config={
+                "ca-common-name": "My Test CA",
+                "certificate-validity": 30,
+                "certificate-limit": 100,
+            },
+            leader=True,
+        )
+
+        with patch("notary.Notary.__new__", return_value=notary_mock):
+            context.run(context.on.update_status(), state)
+
+        ca_call = notary_mock.create_certificate_authority.call_args
+        assert ca_call[0][0].common_name == "My Test CA"
+        policy_call = notary_mock.create_auto_sign_policy.call_args
+        assert policy_call[0][1].certificate_validity_days == 30
+        assert policy_call[0][1].certificate_limit == 100
