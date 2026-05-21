@@ -14,23 +14,23 @@ concurrency:
 
 jobs:
   lint-report:
-    uses: canonical/identity-credentials-workflows/.github/workflows/lint-report.yaml@v0
+    uses: canonical/identity-credentials-workflows/.github/workflows/lint-report.yaml@v1.3.0
   lint-grafana:
-    uses: canonical/identity-credentials-workflows/.github/workflows/grafana-dashboard-lint-report.yaml@v0
+    uses: canonical/identity-credentials-workflows/.github/workflows/grafana-dashboard-lint-report.yaml@v1.3.0
 
   static-analysis:
     name: Static analysis
-    uses: canonical/identity-credentials-workflows/.github/workflows/static-analysis.yaml@v0
+    uses: canonical/identity-credentials-workflows/.github/workflows/static-analysis.yaml@v1.3.0
 
   unit-tests-with-coverage:
-    uses: canonical/identity-credentials-workflows/.github/workflows/unit-test.yaml@v0
+    uses: canonical/identity-credentials-workflows/.github/workflows/unit-test.yaml@v1.3.0
 
   build:
     needs:
       - lint-report
       - static-analysis
       - unit-tests-with-coverage
-    uses: canonical/identity-credentials-workflows/.github/workflows/build-charm.yaml@v0
+    uses: canonical/identity-credentials-workflows/.github/workflows/build-charm.yaml@v1.3.0
 
   integration-test:
     needs:
@@ -45,7 +45,7 @@ jobs:
     if: ${{ github.ref_name == 'main' || startsWith(github.ref_name, 'release-') }}
     permissions:
       contents: write
-    uses: canonical/identity-credentials-workflows/.github/workflows/publish-charm.yaml@v0
+    uses: canonical/identity-credentials-workflows/.github/workflows/publish-charm.yaml@v1.3.0
     secrets:
       CHARMCRAFT_AUTH: ${{ secrets.CHARMCRAFT_AUTH }}
     with:
