@@ -2,6 +2,15 @@ name: Integration tests
 
 on:
   workflow_call:
+    inputs:
+      artifacts-key:
+        description: Key used to download the charm artifacts
+        required: true
+        type: string
+      charm-paths:
+        description: Comma-separated list of built charm file names
+        required: true
+        type: string
 
 jobs:
   integration-test:
@@ -22,7 +31,7 @@ jobs:
       - name: Fetch Charm Under Test
         uses: actions/download-artifact@v8
         with:
-          name: built-charm-${{ matrix.arch.arch }}
+          name: ${{ inputs.artifacts-key }}
           path: built/
 
       - name: Get Charm Under Test Path
