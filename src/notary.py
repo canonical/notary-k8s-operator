@@ -134,6 +134,10 @@ class Notary:
     ) -> Response | None:
         """Make an HTTP request and handle common error patterns."""
         headers = {"Authorization": f"Bearer {token}"} if token else {}
+        if token:
+            # Notary 1.0 authenticates API requests through the session cookie,
+            # not the Authorization header.
+            self.session.cookies.set(self.COOKIE_NAME, token)
         url = f"{self.url}{endpoint}"
         try:
             req = self.session.request(
@@ -169,8 +173,8 @@ class Notary:
         except json.JSONDecodeError:
             return None
         return Response(
-            result=response.get("result"),
-            error=response.get("error"),
+            result=response.get("data"),
+            error=response.get("message"),
         )
 
     def is_initialized(self) -> bool:

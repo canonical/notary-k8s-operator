@@ -436,12 +436,12 @@ class NotaryCharm(ops.CharmBase):
         except ops.pebble.PathError:
             return False
         cert = Certificate.from_string(existing_cert.read())
+        if cert.common_name != CERTIFICATE_COMMON_NAME:
+            return False
         current_hostname = self._get_external_hostname_config()
-        return (
-            cert.common_name == CERTIFICATE_COMMON_NAME
-            and cert.sans_dns is not None
-            and current_hostname in cert.sans_dns
-        )
+        if current_hostname is None:
+            return True
+        return cert.sans_dns is not None and current_hostname in cert.sans_dns
 
     def _tls_access_relation_active(self) -> bool:
         """Check if the tls-access relation is created and active."""
