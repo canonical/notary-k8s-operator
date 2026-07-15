@@ -6,6 +6,9 @@ __pycache__/
 # C extensions
 *.so
 
+# Charmcraft - lib files are fetched with `charmcraft fetch-libs`
+lib/
+
 # Distribution / packaging
 .Python
 build/

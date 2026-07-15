@@ -12,42 +12,59 @@ concurrency:
   group: ${{ github.ref == 'refs/heads/main' && format('ignore-main-{0}', github.run_id) || format('{0}-{1}', github.workflow, github.ref_name) }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+
 jobs:
-  lint-report:
-    uses: canonical/identity-credentials-workflows/.github/workflows/lint-report.yaml@v0
+  quality:
+    name: Quality
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: canonical/identity-credentials-workflows/.github/actions/prepare@v3.1.2
+
+      - name: Install charmcraft
+        run: sudo snap install charmcraft --classic
+
+      - name: Fetch charmcraft libs
+        run: charmcraft fetch-libs
+
+      - uses: canonical/identity-credentials-workflows/.github/actions/code-quality@v3.1.2
+        with:
+          python-enabled: "true"
+
+      - uses: canonical/identity-credentials-workflows/.github/actions/unit-test@v3.1.2
+        with:
+          python-enabled: "true"
   lint-grafana:
-    uses: canonical/identity-credentials-workflows/.github/workflows/grafana-dashboard-lint-report.yaml@v0
-
-  static-analysis:
-    name: Static analysis
-    uses: canonical/identity-credentials-workflows/.github/workflows/static-analysis.yaml@v0
-
-  unit-tests-with-coverage:
-    uses: canonical/identity-credentials-workflows/.github/workflows/unit-test.yaml@v0
+    uses: canonical/identity-credentials-workflows/.github/workflows/grafana-dashboard-lint-report.yaml@v3.1.2
 
   build:
     needs:
-      - lint-report
-      - static-analysis
-      - unit-tests-with-coverage
-    uses: canonical/identity-credentials-workflows/.github/workflows/build-charm.yaml@v0
+      - quality
+    uses: canonical/identity-credentials-workflows/.github/workflows/charm-build.yaml@v3.1.2
+    with:
+      path: ""
+      fetch-libs: true
 
   integration-test:
     needs:
       - build
     uses: ./.github/workflows/integration-test.yaml
+    with:
+      artifacts-key: ${{ needs.build.outputs.artifacts-key }}
+      charm-paths: ${{ needs.build.outputs.charm-paths }}
   publish-charm:
     needs:
-      - lint-report
-      - static-analysis
-      - unit-tests-with-coverage
+      - quality
       - integration-test
+      - build
     if: ${{ github.ref_name == 'main' || startsWith(github.ref_name, 'release-') }}
     permissions:
       contents: write
-    uses: canonical/identity-credentials-workflows/.github/workflows/publish-charm.yaml@v0
+    uses: canonical/identity-credentials-workflows/.github/workflows/charm-publish.yaml@v3.1.2
     secrets:
       CHARMCRAFT_AUTH: ${{ secrets.CHARMCRAFT_AUTH }}
     with:
-      track-name: 0
-      artifact-name: built-charm-amd64
+      destination_channel: 0/edge
+      artifacts-key: ${{ needs.build.outputs.artifacts-key }}
+      charm-paths: ${{ needs.build.outputs.charm-paths }}
