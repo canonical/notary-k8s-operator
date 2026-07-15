@@ -9,7 +9,7 @@ dependencies = [
     "ops",
     "opentelemetry-exporter-otlp-proto-http",
     "rpds-py==0.30.0",
-    "charmlibs-interfaces-tls-certificates>=1.8.1",
+    "charmlibs-interfaces-tls-certificates>=1.10.0",
     "charmlibs-interfaces-certificate-transfer>=1.0.0",
 ]
 
@@ -19,7 +19,7 @@ test = [
     "juju",
     "pytest",
     "ops[testing]",
-    "jubilant>=1.8.0",
+    "jubilant>=1.11.0",
 ]
 dev = [
     "codespell",
