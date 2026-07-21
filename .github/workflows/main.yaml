@@ -20,7 +20,7 @@ jobs:
     name: Quality
     runs-on: ubuntu-24.04
     steps:
-      - uses: canonical/identity-credentials-workflows/.github/actions/prepare@v3.1.2
+      - uses: canonical/identity-credentials-workflows/.github/actions/prepare@v3.1.3
 
       - name: Install charmcraft
         run: sudo snap install charmcraft --classic
@@ -28,20 +28,20 @@ jobs:
       - name: Fetch charmcraft libs
         run: charmcraft fetch-libs
 
-      - uses: canonical/identity-credentials-workflows/.github/actions/code-quality@v3.1.2
+      - uses: canonical/identity-credentials-workflows/.github/actions/code-quality@v3.1.3
         with:
           python-enabled: "true"
 
-      - uses: canonical/identity-credentials-workflows/.github/actions/unit-test@v3.1.2
+      - uses: canonical/identity-credentials-workflows/.github/actions/unit-test@v3.1.3
         with:
           python-enabled: "true"
   lint-grafana:
-    uses: canonical/identity-credentials-workflows/.github/workflows/grafana-dashboard-lint-report.yaml@v3.1.2
+    uses: canonical/identity-credentials-workflows/.github/workflows/grafana-dashboard-lint-report.yaml@v3.1.3
 
   build:
     needs:
       - quality
-    uses: canonical/identity-credentials-workflows/.github/workflows/charm-build.yaml@v3.1.2
+    uses: canonical/identity-credentials-workflows/.github/workflows/charm-build.yaml@v3.1.3
     with:
       path: ""
       fetch-libs: true
@@ -61,7 +61,7 @@ jobs:
     if: ${{ github.ref_name == 'main' || startsWith(github.ref_name, 'release-') }}
     permissions:
       contents: write
-    uses: canonical/identity-credentials-workflows/.github/workflows/charm-publish.yaml@v3.1.2
+    uses: canonical/identity-credentials-workflows/.github/workflows/charm-publish.yaml@v3.1.3
     secrets:
       CHARMCRAFT_AUTH: ${{ secrets.CHARMCRAFT_AUTH }}
     with:
