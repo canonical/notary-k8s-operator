@@ -230,16 +230,16 @@ wheels = [
 
 [[package]]
 name = "charmlibs-interfaces-tls-certificates"
-version = "1.8.1"
+version = "1.10.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "cryptography" },
     { name = "ops" },
     { name = "pydantic" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/78/7e/166af1e71f2bf96482845a1806dc345cbc5507134a99ccbbae297f174e4b/charmlibs_interfaces_tls_certificates-1.8.1.tar.gz", hash = "sha256:f2bfabf3a3b4c18034941771733177b30e4742c06d7742d4bb30da6ead953f43", size = 148059, upload-time = "2026-02-27T13:46:50.086Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/94/67/8096439329b20c516d92e518e358f79afe50c7f67cd1e86382c3dd6666dc/charmlibs_interfaces_tls_certificates-1.10.1.tar.gz", hash = "sha256:df6aebd28586366d721971459f25eb896ea854edded9cd21311d998bc83abc08", size = 131859, upload-time = "2026-08-25T07:35:33.85Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/95/17/1d1b0083800f4cc20f42e5d2763521d93975376499565c62da5276a80629/charmlibs_interfaces_tls_certificates-1.8.1-py3-none-any.whl", hash = "sha256:8e8fe047e02515d76f57a1d019056d72ce8c859c2ffb39a1e379cfc11fc048e6", size = 28208, upload-time = "2026-02-27T13:46:48.959Z" },
+    { url = "https://files.pythonhosted.org/packages/fc/82/afd2d0edb01b5dd70b1021236d86dd914306fc91722c7f035ecf553ca61b/charmlibs_interfaces_tls_certificates-1.10.1-py3-none-any.whl", hash = "sha256:3cf970aaccdbc052e991c517621cc093c07e753640f58e4cc8b3ab9ef9480605", size = 33166, upload-time = "2026-08-25T07:35:32.458Z" },
 ]
 
 [[package]]
@@ -564,7 +564,7 @@ name = "exceptiongroup"
 version = "1.3.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "typing-extensions", marker = "python_full_version < '3.13'" },
+    { name = "typing-extensions" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/50/79/66800aadf48771f6b62f7eb014e352e5d06856655206165d775e675a02c9/exceptiongroup-1.3.1.tar.gz", hash = "sha256:8b412432c6055b0b7d14c310000ae93352ed6754f70fa8f7c34141f91c4e3219", size = 30371, upload-time = "2025-11-21T23:01:54.787Z" }
 wheels = [
@@ -649,14 +649,14 @@ wheels = [
 
 [[package]]
 name = "jubilant"
-version = "1.8.0"
+version = "1.12.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "pyyaml" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/11/1b/32b5ab87c138066c80e34c8cd0f7d34760ce9d203d89ec88f979039e015d/jubilant-1.8.0.tar.gz", hash = "sha256:a7cea68299dca94fac3e121a8c8ed92021d20aa2f4461e16822abbcd134d0b8b", size = 33036, upload-time = "2026-03-30T07:42:23.939Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/27/c3/13eb3579d021346c95d0622ebbcce7d3326ed6412d0b51d4d3df2461443d/jubilant-1.12.0.tar.gz", hash = "sha256:7d796d5c19f0b74a041f50aa68919731c7c83da4fb8a8258c8861524532b6997", size = 35291, upload-time = "2026-07-30T03:45:32.974Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/87/6b/71ceb8de590d02eccf18cca60cb687838b12db0926a6a870c2d17a0d26b3/jubilant-1.8.0-py3-none-any.whl", hash = "sha256:e0495ee645de5f2df81d044a3b6e2827b5a6277de02c6d30935b9632bd868a98", size = 33929, upload-time = "2026-03-30T07:42:22.419Z" },
+    { url = "https://files.pythonhosted.org/packages/4e/17/0569153f6aca13716e019243d01895f26061233bae7e21a459cc128e7120/jubilant-1.12.0-py3-none-any.whl", hash = "sha256:fa64922156d861149666c8ce08cb93b1fd787172fdd12175a4d0563955a67544", size = 37077, upload-time = "2026-07-30T03:45:31.764Z" },
 ]
 
 [[package]]
@@ -770,7 +770,7 @@ test = [
 [package.metadata]
 requires-dist = [
     { name = "charmlibs-interfaces-certificate-transfer", specifier = ">=1.0.0" },
-    { name = "charmlibs-interfaces-tls-certificates", specifier = ">=1.8.1" },
+    { name = "charmlibs-interfaces-tls-certificates", specifier = ">=1.10.1" },
     { name = "cosl" },
     { name = "cryptography" },
     { name = "opentelemetry-exporter-otlp-proto-http" },
@@ -786,7 +786,7 @@ dev = [
 ]
 test = [
     { name = "coverage", extras = ["toml"] },
-    { name = "jubilant", specifier = ">=1.8.0" },
+    { name = "jubilant", specifier = ">=1.12.0" },
     { name = "juju" },
     { name = "ops", extras = ["testing"] },
     { name = "pytest" },
