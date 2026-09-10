@@ -373,7 +373,7 @@ class NotaryCharm(ops.CharmBase):
                 "notary": {
                     "override": "replace",
                     "summary": "notary",
-                    "command": f"notary start -m -c {WORKLOAD_CONFIG_PATH}/config/config.yaml",
+                    "command": f"notary start -c {WORKLOAD_CONFIG_PATH}/config/config.yaml",
                     "startup": "enabled",
                 }
             },
