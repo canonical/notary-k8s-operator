@@ -46,6 +46,7 @@ LOGGING_RELATION_NAME = "logging"
 METRICS_RELATION_NAME = "metrics"
 GRAFANA_RELATION_NAME = "grafana-dashboard"
 TLS_ACCESS_RELATION_NAME = "access-certificates"
+PEER_RELATION_NAME = "notary-peers"
 
 DB_MOUNT = "database"
 CONFIG_MOUNT = "config"
@@ -57,6 +58,8 @@ CERTIFICATE_COMMON_NAME = "Notary Self Signed Certificate"
 SELF_SIGNED_CA_COMMON_NAME = "Notary Self Signed Root CA"
 NOTARY_LOGIN_SECRET_LABEL = "Notary Login Details"
 SEND_ACCESS_CA_CERT_RELATION_NAME = "send-access-ca-certificate"
+CLUSTER_JOIN_SECRET_LABEL = "Notary Cluster Join Tokens"
+DQLITE_PORT = 9000
 
 
 @dataclass
@@ -92,7 +95,7 @@ class NotaryCharm(ops.CharmBase):
             sans_dns=self._generate_csr_sans_dns(),
         )
 
-        self.unit.set_ports(self.port)
+        self.unit.set_ports(self.port, DQLITE_PORT)
         self.container = self.unit.get_container("notary")
         self.tls = TLSCertificatesProvidesV4(
             self, relationship_name=CERTIFICATE_PROVIDER_RELATION_NAME
@@ -153,36 +156,68 @@ class NotaryCharm(ops.CharmBase):
                 self.on.config_changed,
                 self.on.update_status,
                 self.on.start,
+                self.on[PEER_RELATION_NAME].relation_joined,
+                self.on[PEER_RELATION_NAME].relation_changed,
             ]
         ]
+        framework.observe(
+            self.on[PEER_RELATION_NAME].relation_departed, self._on_peer_relation_departed
+        )
         framework.observe(self.on.collect_app_status, self._on_collect_status)
         framework.observe(self.on.collect_unit_status, self._on_collect_status)
 
+    def _on_peer_relation_departed(self, event: ops.RelationDepartedEvent):
+        """Handle a unit leaving the peer relation.
+
+        The departing unit removes itself from the dqlite cluster so it does
+        not keep serving the cluster as a client after eviction. Remaining
+        units run the normal configure pipeline (the leader prunes the member
+        list via _remove_departed_cluster_members).
+        """
+        if event.departing_unit == self.unit:
+            self._remove_self_from_cluster()
+        self.configure(event)
+
+    def _remove_self_from_cluster(self) -> None:
+        """Remove this unit from the dqlite cluster before departing."""
+        login_details = self._get_or_create_admin_account()
+        if not login_details or not login_details.token:
+            return
+        members = self.client.list_cluster_members(login_details.token)
+        if len(members) <= 1:
+            return
+        if any(m.name == self._cluster_member_name for m in members):
+            logger.info("Removing self (%s) from cluster", self._cluster_member_name)
+            self.client.delete_cluster_member(self._cluster_member_name, login_details.token)
+
     def configure(self, event: ops.EventBase):
         """Handle configuration events."""
-        if (
-            not self.unit.is_leader()
-            or not self.container.can_connect()
-            or not self._storages_attached()
-        ):
+        if not self.container.can_connect() or not self._storages_attached():
+            return
+        self._set_peer_relation_cluster_address()
+        if not self._cluster_prerequisites_met():
             return
         self._configure_pebble_plan()
         self._configure_notary_config_file()
         self._configure_access_certificates()
+        if not self.unit.is_leader():
+            return
         self._configure_charm_authorization()
+        self._mint_join_tokens_for_new_units()
+        self._remove_departed_cluster_members()
         self._configure_certificate_requirers()
         self._send_ca_cert()
         self._configure_juju_workload_version()
 
     def _on_collect_status(self, event: ops.CollectStatusEvent):
-        if not self.unit.is_leader():
-            event.add_status(ops.WaitingStatus("multiple units not supported"))
-            return
         if not self.container.can_connect():
             event.add_status(ops.WaitingStatus("container not yet connectable"))
             return
         if not self._storages_attached():
             event.add_status(ops.WaitingStatus("storages not yet available"))
+            return
+        if not self._cluster_prerequisites_met():
+            event.add_status(ops.WaitingStatus("waiting for cluster join token"))
             return
         if not self._certificates_available():
             event.add_status(ops.WaitingStatus("certificates not yet pushed to workload"))
@@ -208,9 +243,11 @@ class NotaryCharm(ops.CharmBase):
             data={
                 "key_path": f"{WORKLOAD_CONFIG_PATH}/config/private_key.pem",
                 "cert_path": f"{WORKLOAD_CONFIG_PATH}/config/certificate.pem",
-                "db_path": f"{WORKLOAD_DB_PATH}/notary/database/certs.db",
+                "db_path": f"{WORKLOAD_DB_PATH}/notary/database/dqlite",
+                "external_hostname": self._get_external_hostname_config() or socket.getfqdn(),
                 "port": self.port,
                 "pebble_notifications": True,
+                "cluster": self._cluster_config,
                 "logging": {
                     "system": {
                         "level": "debug",
@@ -241,6 +278,43 @@ class NotaryCharm(ops.CharmBase):
             source=desired_config,
         )
         logger.info("Config file updated.")
+
+    @property
+    def _cluster_config(self) -> dict[str, str]:
+        """Return the dqlite cluster configuration block for this unit.
+
+        The join token is only rendered on first start (empty data directory);
+        once dqlite state exists, Notary resumes cluster membership from disk.
+        """
+        config = {
+            "name": self._cluster_member_name,
+            "address": f"{self._cluster_bind_address}:{DQLITE_PORT}",
+        }
+        if not self._cluster_has_state():
+            if join_token := self._get_join_token():
+                config["join_token"] = join_token
+        return config
+
+    @property
+    def _cluster_member_name(self) -> str:
+        """Return the dqlite member name for this unit (LXD-style, no slashes)."""
+        return self.unit.name.replace("/", "-")
+
+    @property
+    def _cluster_bind_address(self) -> str:
+        """Return the address this unit's dqlite node binds to and advertises."""
+        binding = self.model.get_binding(PEER_RELATION_NAME)
+        if binding and binding.network.bind_address:
+            return str(binding.network.bind_address)
+        return socket.getfqdn()
+
+    def _cluster_has_state(self) -> bool:
+        """Return whether this unit's dqlite data directory already holds cluster state."""
+        try:
+            self.container.pull(f"{WORKLOAD_DB_PATH}/notary/database/dqlite/info.yaml")
+            return True
+        except ops.pebble.PathError:
+            return False
 
     def _configure_access_certificates(self):
         """Update the config files for notary and replan if required."""
@@ -385,6 +459,112 @@ class NotaryCharm(ops.CharmBase):
         return bool(self.model.storages.get("config")) and bool(
             self.model.storages.get("database")
         )
+
+    ## Cluster Coordination ##
+    def _set_peer_relation_cluster_address(self) -> None:
+        """Publish this unit's dqlite address to the peer relation unit databag."""
+        relation = self.model.get_relation(PEER_RELATION_NAME)
+        if not relation:
+            return
+        relation.data[self.unit]["cluster_address"] = f"{self._cluster_bind_address}:{DQLITE_PORT}"
+
+    def _cluster_prerequisites_met(self) -> bool:
+        """Return whether this unit may start its Notary service.
+
+        The first unit (leader, no existing cluster state) bootstraps a new
+        cluster. Any other unit must wait until the leader has minted it a
+        join token, otherwise it would bootstrap a separate cluster.
+        """
+        if self._cluster_has_state():
+            return True
+        if self.unit.is_leader():
+            return True
+        return self._get_join_token() is not None
+
+    def _get_join_token(self) -> str | None:
+        """Return this unit's one-time cluster join token from the peer app secret."""
+        try:
+            secret = self.model.get_secret(label=CLUSTER_JOIN_SECRET_LABEL)
+            tokens = secret.get_content(refresh=True).get("tokens", "")
+        except ops.SecretNotFoundError:
+            return None
+        for entry in tokens.splitlines():
+            name, _, token = entry.partition("=")
+            if name == self._cluster_member_name and token:
+                return token
+        return None
+
+    def _mint_join_tokens_for_new_units(self) -> None:
+        """Mint join tokens for peer units that don't have cluster state yet (leader only)."""
+        if not self.unit.is_leader():
+            return
+        login_details = self._get_or_create_admin_account()
+        if not login_details or not login_details.token:
+            return
+        relation = self.model.get_relation(PEER_RELATION_NAME)
+        if not relation:
+            return
+        existing_members = {
+            member.name for member in self.client.list_cluster_members(login_details.token)
+        }
+        tokens = self._read_join_tokens()
+        changed = False
+        for unit in relation.units:
+            member_name = unit.name.replace("/", "-")
+            if member_name in existing_members or member_name in tokens:
+                continue
+            response = self.client.create_cluster_join_token(member_name, login_details.token)
+            if response and response.join_token:
+                tokens[member_name] = response.join_token
+                changed = True
+                logger.info("Minted cluster join token for %s", member_name)
+        if changed:
+            self._write_join_tokens(tokens)
+
+    def _read_join_tokens(self) -> dict[str, str]:
+        """Return the map of member name to join token from the peer app secret."""
+        try:
+            secret = self.model.get_secret(label=CLUSTER_JOIN_SECRET_LABEL)
+            content = secret.get_content(refresh=True).get("tokens", "")
+        except ops.SecretNotFoundError:
+            return {}
+        tokens = {}
+        for entry in content.splitlines():
+            name, _, token = entry.partition("=")
+            if name and token:
+                tokens[name] = token
+        return tokens
+
+    def _write_join_tokens(self, tokens: dict[str, str]) -> None:
+        """Persist the join token map to the peer app secret."""
+        content = "\n".join(f"{name}={token}" for name, token in sorted(tokens.items()))
+        try:
+            secret = self.model.get_secret(label=CLUSTER_JOIN_SECRET_LABEL)
+            secret.set_content({"tokens": content})
+        except ops.SecretNotFoundError:
+            self.app.add_secret(
+                label=CLUSTER_JOIN_SECRET_LABEL,
+                content={"tokens": content},
+            )
+
+    def _remove_departed_cluster_members(self) -> None:
+        """Remove cluster members whose units have left the peer relation (leader only)."""
+        if not self.unit.is_leader():
+            return
+        login_details = self._get_or_create_admin_account()
+        if not login_details or not login_details.token:
+            return
+        relation = self.model.get_relation(PEER_RELATION_NAME)
+        expected = {self._cluster_member_name}
+        if relation:
+            expected.update(unit.name.replace("/", "-") for unit in relation.units)
+        members = self.client.list_cluster_members(login_details.token)
+        if len(members) <= 1:
+            return
+        for member in members:
+            if member.name and member.name not in expected:
+                logger.info("Removing departed cluster member %s", member.name)
+                self.client.delete_cluster_member(member.name, login_details.token)
 
     ## Helpers ##
     def _store_certificate_from_access_relation_if_available(self) -> bool:
