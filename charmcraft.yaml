@@ -50,6 +50,13 @@ provides:
     interface: grafana_dashboard
     optional: true
 
+peers:
+  notary-peers:
+    interface: notary_peers
+    description: |
+      Peer relation used to coordinate dqlite clustering between Notary units
+      (exchange of member addresses and one-time join tokens).
+
 requires:
   access-certificates:
     interface: tls-certificates
