@@ -11,6 +11,31 @@ The Notary operator for Kubernetes automates the lifecycle operations of Notary.
 Notary K8s Operator uses the following OCI image:
 - [ghcr.io/canonical/notary](https://github.com/canonical/notary)
 
+## High Availability
+
+Notary K8s Operator supports scaling out to multiple units. Units form a
+dqlite cluster over the `notary-peers` peer relation: the leader unit
+bootstraps the cluster and mints one-time join tokens for joining units, and
+each departing unit removes itself from the cluster (the leader prunes any
+member left behind).
+
+```shell
+juju deploy notary-k8s --trust -n 3
+```
+
+- Deploy at least 3 units for quorum; dqlite is a Raft-based store.
+- Units replicate the database over the dqlite port (`9000`) using mutual TLS
+  with a cluster certificate managed by Notary. This traffic goes directly
+  between pods; only the HTTPS API port (`2111`) is exposed through the Juju
+  service.
+- Without the `access-certificates` integration, all units sign their
+  certificates with one shared self-signed CA, so clients can trust every
+  member with a single CA certificate.
+- A unit that loses its database storage cannot rejoin on its own. Remove and
+  re-add it: `juju remove-unit notary-k8s/1 && juju add-unit notary-k8s`.
+- A leader unit without cluster state will refuse to bootstrap while other
+  members report cluster state, to avoid split-brain. Recover it the same way.
+
 ## Project & Community
 
 Notary K8s Operator is an open source project that warmly welcomes community contributions, suggestions, fixes, and constructive feedback.

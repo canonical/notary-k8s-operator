@@ -342,24 +342,31 @@ class Notary:
             )
         return None
 
-    def list_cluster_members(self, token: str) -> List[ClusterMember]:
-        """Get all cluster members from Notary."""
+    def list_cluster_members(self, token: str) -> Optional[List[ClusterMember]]:
+        """Get all cluster members from Notary.
+
+        Returns:
+            The list of cluster members, or None if the request failed. Callers must
+            treat None as "unknown" and avoid destructive actions such as pruning members.
+        """
         response = self._make_request(
             "GET", f"/api/{self.API_VERSION}/cluster/members", token=token
         )
-        if response and response.result:
-            return [
-                ClusterMember(
-                    name=member.get("name"),
-                    id=member.get("id"),
-                    address=member.get("address"),
-                    api_address=member.get("api_address"),
-                    role=member.get("role"),
-                    leader=member.get("leader"),
-                )
-                for member in response.result
-            ]
-        return []
+        if response is None:
+            return None
+        if not response.result:
+            return []
+        return [
+            ClusterMember(
+                name=member.get("name"),
+                id=member.get("id"),
+                address=member.get("address"),
+                api_address=member.get("api_address"),
+                role=member.get("role"),
+                leader=member.get("leader"),
+            )
+            for member in response.result
+        ]
 
     def create_cluster_join_token(
         self, server_name: str, token: str

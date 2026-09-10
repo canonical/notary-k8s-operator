@@ -292,6 +292,48 @@ def assert_notary_reachable_through_ingress(juju: jubilant.Juju, ca_path: str) -
     raise AssertionError("Notary was not reachable through the Traefik ingress endpoint")
 
 
+def test_given_notary_when_scaled_out_then_dqlite_cluster_forms_and_scales_back(
+    juju: jubilant.Juju,
+):
+    """Scale Notary to three units, check the dqlite cluster forms, then scale back."""
+    admin_credentials = get_notary_credentials(juju)
+    client = Notary(url=get_notary_endpoint(juju), ca_path=False)
+    login_response = client.login(admin_credentials["email"], admin_credentials["password"])
+    assert login_response and login_response.token
+    token = login_response.token
+
+    juju.add_unit(APP_NAME, num_units=2)
+    juju.wait(
+        lambda status: (
+            jubilant.all_agents_idle(status, APP_NAME)
+            and jubilant.all_active(status, APP_NAME)
+            and len(status.apps[APP_NAME].units) == 3
+        )
+    )
+    _wait_for_cluster_members(client, token, 3)
+
+    juju.remove_unit(f"{APP_NAME}/2")
+    juju.wait(
+        lambda status: (
+            jubilant.all_agents_idle(status, APP_NAME) and len(status.apps[APP_NAME].units) == 2
+        )
+    )
+    _wait_for_cluster_members(client, token, 2)
+
+
+def _wait_for_cluster_members(client: Notary, token: str, count: int, timeout: int = 300) -> None:
+    """Wait until the dqlite cluster reports exactly count named members."""
+    deadline = time.monotonic() + timeout
+    members = None
+    while time.monotonic() < deadline:
+        members = client.list_cluster_members(token)
+        if members is not None and len(members) == count and all(m.name for m in members):
+            return
+        time.sleep(10)
+    names = [m.name for m in members] if members else members
+    raise AssertionError(f"expected {count} named cluster members, got {names}")
+
+
 def get_notary_endpoint(juju: jubilant.Juju) -> str:
     notary_ip = juju.status().apps[APP_NAME].units[f"{APP_NAME}/0"].address
     return f"https://{notary_ip}:2111"
