@@ -208,7 +208,7 @@ class NotaryCharm(ops.CharmBase):
             data={
                 "key_path": f"{WORKLOAD_CONFIG_PATH}/config/private_key.pem",
                 "cert_path": f"{WORKLOAD_CONFIG_PATH}/config/certificate.pem",
-                "db_path": f"{WORKLOAD_DB_PATH}/notary/database/certs.db",
+                "db_path": f"{WORKLOAD_DB_PATH}/notary/database/dqlite",
                 "port": self.port,
                 "pebble_notifications": True,
                 "logging": {
@@ -373,7 +373,7 @@ class NotaryCharm(ops.CharmBase):
                 "notary": {
                     "override": "replace",
                     "summary": "notary",
-                    "command": f"notary start -m -c {WORKLOAD_CONFIG_PATH}/config/config.yaml",
+                    "command": f"notary start -c {WORKLOAD_CONFIG_PATH}/config/config.yaml",
                     "startup": "enabled",
                 }
             },
