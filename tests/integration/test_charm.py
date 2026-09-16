@@ -30,6 +30,7 @@ LOKI_APPLICATION_NAME = "loki-k8s"
 PROMETHEUS_APPLICATION_NAME = "prometheus-k8s"
 TRAEFIK_K8S_APPLICATION_NAME = "traefik-k8s"
 TLS_PROVIDER_APPLICATION_NAME = "self-signed-certificates"
+TRAEFIK_TLS_PROVIDER_APPLICATION_NAME = "traefik-certificates"
 TLS_REQUIRER_APPLICATION_NAME = "tls-certificates-requirer"
 
 
@@ -51,6 +52,12 @@ def test_build_and_deploy(juju: jubilant.Juju, request: pytest.FixtureRequest):
     juju.model_config({"update-status-hook-interval": "10s"})
     juju.deploy(charm, resources=resources, trust=True)
     juju.deploy(TLS_PROVIDER_APPLICATION_NAME, channel="stable", trust=True)
+    juju.deploy(
+        TLS_PROVIDER_APPLICATION_NAME,
+        app=TRAEFIK_TLS_PROVIDER_APPLICATION_NAME,
+        channel="1/stable",
+        trust=True,
+    )
     juju.deploy(TLS_REQUIRER_APPLICATION_NAME, channel="stable", trust=True)
     juju.deploy(PROMETHEUS_APPLICATION_NAME, channel="stable", trust=True)
     juju.deploy(LOKI_APPLICATION_NAME, channel="stable", trust=True)
@@ -165,13 +172,8 @@ def test_given_loki_and_prometheus_related_to_notary_all_charm_statuses_active(
 def test_given_application_deployed_when_related_to_traefik_k8s_then_all_statuses_active(
     juju: jubilant.Juju,
 ):
-    # TODO (Tracked in TLSENG-475): This is a workaround so Traefik has the same CA as Notary
-    # This should be removed and certificate transfer should be used instead
-    # Notary k8s implements V1 of the certificate transfer interface,
-    # And the following PR is needed to get Traefik to use it too:
-    # https://github.com/canonical/traefik-k8s-operator/issues/407
     juju.integrate(
-        app1=f"{TLS_PROVIDER_APPLICATION_NAME}:certificates",
+        app1=f"{TRAEFIK_TLS_PROVIDER_APPLICATION_NAME}:certificates",
         app2=f"{TRAEFIK_K8S_APPLICATION_NAME}",
     )
     juju.integrate(
@@ -183,14 +185,18 @@ def test_given_application_deployed_when_related_to_traefik_k8s_then_all_statuse
         lambda status: (
             jubilant.all_agents_idle(status, APP_NAME, TRAEFIK_K8S_APPLICATION_NAME)
             and jubilant.all_active(status, APP_NAME, TRAEFIK_K8S_APPLICATION_NAME)
+            and status.apps[TRAEFIK_K8S_APPLICATION_NAME].app_status.message
+            != "Certificate not available yet"
         )
     )
     endpoint = get_external_notary_endpoint(juju)
 
     with tempfile.NamedTemporaryFile("w+") as f:
-        cert = get_file_from_notary(juju, "certificate.pem")
-        ca = get_file_from_notary(juju, "ca.pem")
-        f.write(cert + "\n" + ca)
+        result = juju.run(
+            unit=f"{TRAEFIK_TLS_PROVIDER_APPLICATION_NAME}/0",
+            action="get-ca-certificate",
+        )
+        f.write(result.results["ca-certificate"])
         f.flush()
 
         client = Notary(url=endpoint, ca_path=f.name)
