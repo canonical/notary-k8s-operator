@@ -11,4 +11,4 @@ jobs:
       security-events: write
       actions: read
       contents: read
-    uses: canonical/identity-credentials-workflows/.github/workflows/uv-scan.yaml@v3.1.4
+    uses: canonical/identity-credentials-workflows/.github/workflows/uv-scan.yaml@v3.1.5
