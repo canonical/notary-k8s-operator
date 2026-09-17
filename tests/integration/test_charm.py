@@ -5,6 +5,9 @@
 import json
 import logging
 import tempfile
+import time
+from collections.abc import Iterator
+from contextlib import contextmanager
 from datetime import timedelta
 from pathlib import Path
 
@@ -26,19 +29,60 @@ logger = logging.getLogger(__name__)
 CHARMCRAFT = yaml.safe_load(Path("./charmcraft.yaml").read_text())
 APP_NAME = CHARMCRAFT["name"]
 
+# Revisions (amd64) from the last known-good run, so upstream channel moves cannot break CI.
+# Loki/Prometheus stay on the 2 track: newer tracks ship on ubuntu@26.04, whose Python
+# rejects the MicroK8s API CA ("CA cert does not include key usage extension").
 LOKI_APPLICATION_NAME = "loki-k8s"
+LOKI_CHANNEL = "2/stable"
+LOKI_REVISION = 217
 PROMETHEUS_APPLICATION_NAME = "prometheus-k8s"
+PROMETHEUS_CHANNEL = "2/stable"
+PROMETHEUS_REVISION = 301
 TRAEFIK_K8S_APPLICATION_NAME = "traefik-k8s"
+TRAEFIK_K8S_CHANNEL = "latest/stable"
+TRAEFIK_K8S_REVISION = 377
 TLS_PROVIDER_APPLICATION_NAME = "self-signed-certificates"
-TRAEFIK_TLS_PROVIDER_APPLICATION_NAME = "traefik-certificates"
+TLS_PROVIDER_CHANNEL = "1/stable"
+TLS_PROVIDER_REVISION = 586
 TLS_REQUIRER_APPLICATION_NAME = "tls-certificates-requirer"
+TLS_REQUIRER_CHANNEL = "latest/stable"
+TLS_REQUIRER_REVISION = 143
+
+JUJU_FAST_INTERVAL = "10s"
+JUJU_DEFAULT_INTERVAL = "5m"
+INGRESS_READY_TIMEOUT = 5 * 60
 
 
 @pytest.fixture(scope="module")
-def juju():
+def juju(request: pytest.FixtureRequest):
     with jubilant.temp_model() as juju:
         juju.wait_timeout = 10 * 60
         yield juju
+        if request.session.testsfailed:
+            # Collected here because the model is destroyed before the CI archive step runs.
+            Path("juju-debug.log").write_text(juju.debug_log())
+            # The provider unit is included so Traefik's certificate request is visible.
+            Path("juju-units.yaml").write_text(
+                juju.cli(
+                    "show-unit",
+                    f"{APP_NAME}/0",
+                    f"{TRAEFIK_K8S_APPLICATION_NAME}/0",
+                    f"{TLS_PROVIDER_APPLICATION_NAME}/0",
+                )
+            )
+            logger.info("Wrote juju-debug.log and juju-units.yaml")
+
+
+@contextmanager
+def fast_forward(juju: jubilant.Juju, interval: str) -> Iterator[None]:
+    """Temporarily shorten the model's update-status interval."""
+    config = juju.model_config() or {}
+    previous = config.get("update-status-hook-interval", JUJU_DEFAULT_INTERVAL)
+    juju.model_config({"update-status-hook-interval": interval})
+    try:
+        yield
+    finally:
+        juju.model_config({"update-status-hook-interval": previous})
 
 
 def test_build_and_deploy(juju: jubilant.Juju, request: pytest.FixtureRequest):
@@ -49,25 +93,41 @@ def test_build_and_deploy(juju: jubilant.Juju, request: pytest.FixtureRequest):
     charm = Path(request.config.getoption("--charm_path")).resolve()  # type: ignore
     resources = {"notary-image": CHARMCRAFT["resources"]["notary-image"]["upstream-source"]}
 
-    juju.model_config({"update-status-hook-interval": "10s"})
     juju.deploy(charm, resources=resources, trust=True)
-    juju.deploy(TLS_PROVIDER_APPLICATION_NAME, channel="stable", trust=True)
     juju.deploy(
         TLS_PROVIDER_APPLICATION_NAME,
-        app=TRAEFIK_TLS_PROVIDER_APPLICATION_NAME,
-        channel="1/stable",
+        channel=TLS_PROVIDER_CHANNEL,
+        revision=TLS_PROVIDER_REVISION,
         trust=True,
     )
-    juju.deploy(TLS_REQUIRER_APPLICATION_NAME, channel="stable", trust=True)
-    juju.deploy(PROMETHEUS_APPLICATION_NAME, channel="stable", trust=True)
-    juju.deploy(LOKI_APPLICATION_NAME, channel="stable", trust=True)
-    juju.deploy(TRAEFIK_K8S_APPLICATION_NAME, channel="stable", trust=True)
+    juju.deploy(
+        TLS_REQUIRER_APPLICATION_NAME,
+        channel=TLS_REQUIRER_CHANNEL,
+        revision=TLS_REQUIRER_REVISION,
+        trust=True,
+    )
+    juju.deploy(
+        PROMETHEUS_APPLICATION_NAME,
+        channel=PROMETHEUS_CHANNEL,
+        revision=PROMETHEUS_REVISION,
+        trust=True,
+    )
+    juju.deploy(LOKI_APPLICATION_NAME, channel=LOKI_CHANNEL, revision=LOKI_REVISION, trust=True)
+    juju.deploy(
+        TRAEFIK_K8S_APPLICATION_NAME,
+        channel=TRAEFIK_K8S_CHANNEL,
+        revision=TRAEFIK_K8S_REVISION,
+        trust=True,
+    )
 
 
 def test_given_tls_access_relation_when_related_and_unrelated_to_notary_then_certificates_replaced_correctly(
     juju: jubilant.Juju,
 ):
-    juju.wait(lambda status: jubilant.all_active(status, APP_NAME, TLS_PROVIDER_APPLICATION_NAME))
+    juju.wait(
+        lambda status: jubilant.all_active(status, APP_NAME, TLS_PROVIDER_APPLICATION_NAME),
+        error=lambda status: jubilant.any_error(status, APP_NAME),
+    )
     first_ca = get_file_from_notary(juju, "ca.pem")
     assert first_ca.startswith("-----BEGIN CERTIFICATE-----")
 
@@ -79,7 +139,9 @@ def test_given_tls_access_relation_when_related_and_unrelated_to_notary_then_cer
         lambda status: (
             jubilant.all_agents_idle(status, APP_NAME, TLS_PROVIDER_APPLICATION_NAME)
             and jubilant.all_active(status, APP_NAME, TLS_PROVIDER_APPLICATION_NAME)
-        )
+            and get_file_from_notary(juju, "ca.pem") != first_ca
+        ),
+        error=lambda status: jubilant.any_error(status, APP_NAME),
     )
 
     new_ca = get_file_from_notary(juju, "ca.pem")
@@ -93,7 +155,9 @@ def test_given_tls_access_relation_when_related_and_unrelated_to_notary_then_cer
         lambda status: (
             jubilant.all_agents_idle(status, APP_NAME, TLS_PROVIDER_APPLICATION_NAME)
             and jubilant.all_active(status, APP_NAME, TLS_PROVIDER_APPLICATION_NAME)
-        )
+            and get_file_from_notary(juju, "ca.pem") != new_ca
+        ),
+        error=lambda status: jubilant.any_error(status, APP_NAME),
     )
 
     final_ca = get_file_from_notary(juju, "ca.pem")
@@ -121,7 +185,8 @@ def test_given_notary_when_tls_requirer_related_then_csr_uploaded_to_notary_and_
         lambda status: (
             jubilant.all_agents_idle(status, APP_NAME, TLS_REQUIRER_APPLICATION_NAME)
             and jubilant.all_active(status, APP_NAME, TLS_REQUIRER_APPLICATION_NAME)
-        )
+        ),
+        error=lambda status: jubilant.any_error(status, APP_NAME),
     )
 
     certificate_requests = client.list_certificate_requests(token)
@@ -146,7 +211,8 @@ def test_given_notary_when_tls_requirer_related_then_csr_uploaded_to_notary_and_
         lambda status: (
             jubilant.all_agents_idle(status, APP_NAME, TLS_REQUIRER_APPLICATION_NAME)
             and jubilant.all_active(status, APP_NAME, TLS_REQUIRER_APPLICATION_NAME)
-        )
+        ),
+        error=lambda status: jubilant.any_error(status, APP_NAME),
     )
 
     given_certificate = get_first_certificate_from_requirer(juju)
@@ -172,8 +238,20 @@ def test_given_loki_and_prometheus_related_to_notary_all_charm_statuses_active(
 def test_given_application_deployed_when_related_to_traefik_k8s_then_all_statuses_active(
     juju: jubilant.Juju,
 ):
+    juju.wait(
+        lambda status: (
+            jubilant.all_agents_idle(status, TRAEFIK_K8S_APPLICATION_NAME)
+            and jubilant.all_active(status, TRAEFIK_K8S_APPLICATION_NAME)
+        ),
+        error=lambda status: jubilant.any_error(status, APP_NAME),
+    )
+    # TODO (Tracked in TLSENG-475): This is a workaround so Traefik has the same CA as Notary
+    # This should be removed and certificate transfer should be used instead
+    # Notary k8s implements V1 of the certificate transfer interface,
+    # And the following PR is needed to get Traefik to use it too:
+    # https://github.com/canonical/traefik-k8s-operator/issues/407
     juju.integrate(
-        app1=f"{TRAEFIK_TLS_PROVIDER_APPLICATION_NAME}:certificates",
+        app1=f"{TLS_PROVIDER_APPLICATION_NAME}:certificates",
         app2=f"{TRAEFIK_K8S_APPLICATION_NAME}",
     )
     juju.integrate(
@@ -181,26 +259,37 @@ def test_given_application_deployed_when_related_to_traefik_k8s_then_all_statuse
         app2=f"{APP_NAME}:access-certificates",
     )
     juju.integrate(app1=f"{APP_NAME}:ingress", app2=f"{TRAEFIK_K8S_APPLICATION_NAME}:ingress")
-    juju.wait(
-        lambda status: (
-            jubilant.all_agents_idle(status, APP_NAME, TRAEFIK_K8S_APPLICATION_NAME)
-            and jubilant.all_active(status, APP_NAME, TRAEFIK_K8S_APPLICATION_NAME)
-            and status.apps[TRAEFIK_K8S_APPLICATION_NAME].app_status.message
-            != "Certificate not available yet"
+    with fast_forward(juju, JUJU_FAST_INTERVAL):
+        juju.wait(
+            lambda status: (
+                jubilant.all_agents_idle(status, APP_NAME, TRAEFIK_K8S_APPLICATION_NAME)
+                and jubilant.all_active(status, APP_NAME, TRAEFIK_K8S_APPLICATION_NAME)
+            ),
+            error=lambda status: jubilant.any_error(status, APP_NAME),
         )
-    )
-    endpoint = get_external_notary_endpoint(juju)
 
-    with tempfile.NamedTemporaryFile("w+") as f:
-        result = juju.run(
-            unit=f"{TRAEFIK_TLS_PROVIDER_APPLICATION_NAME}/0",
-            action="get-ca-certificate",
-        )
-        f.write(result.results["ca-certificate"])
-        f.flush()
+        with tempfile.NamedTemporaryFile("w+") as f:
+            cert = get_file_from_notary(juju, "certificate.pem")
+            ca = get_file_from_notary(juju, "ca.pem")
+            f.write(cert + "\n" + ca)
+            f.flush()
 
-        client = Notary(url=endpoint, ca_path=f.name)
-        assert client.is_api_available()
+            assert_notary_reachable_through_ingress(juju, ca_path=f.name)
+
+
+def assert_notary_reachable_through_ingress(juju: jubilant.Juju, ca_path: str) -> None:
+    """Poll the ingress endpoint until Traefik serves the CA-issued certificate.
+
+    Traefik serves a temporary self-signed certificate until its own request is
+    fulfilled, so TLS verification fails until then.
+    """
+    deadline = time.time() + INGRESS_READY_TIMEOUT
+    while time.time() < deadline:
+        endpoint = get_external_notary_endpoint(juju)
+        if endpoint and Notary(url=endpoint, ca_path=ca_path).is_api_available():
+            return
+        time.sleep(5)
+    raise AssertionError("Notary was not reachable through the Traefik ingress endpoint")
 
 
 def get_notary_endpoint(juju: jubilant.Juju) -> str:

@@ -97,14 +97,14 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v7
         with:
-          name: charmcraft-logs
+          name: charmcraft-logs-${{ strategy.job-index }}
           path: /home/runner/.local/state/charmcraft/log/*.log
 
       - name: Archive juju crashdump
         if: failure()
         uses: actions/upload-artifact@v7
         with:
-          name: juju-crashdump
+          name: juju-crashdump-${{ strategy.job-index }}
           path: juju-crashdump-*.tar.xz
 
       - name: Archive juju debug log
@@ -112,5 +112,7 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: juju-debug-log-${{ strategy.job-index }}
-          path: juju-debug.log
+          path: |
+            juju-debug.log
+            juju-units.yaml
           if-no-files-found: ignore
