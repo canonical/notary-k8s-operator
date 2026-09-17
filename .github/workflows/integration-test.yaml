@@ -16,13 +16,14 @@ jobs:
   integration-test:
     strategy:
       matrix:
+        juju-version: ["3.6/stable", "4.0/stable"]
         arch:
           - arch: amd64
-            runner: [self-hosted, linux, X64, jammy, large]
-          # Disabling until Notary and the charm are released
-          # - arch: arm64
-          #   runner: [self-hosted, linux, ARM64, jammy, medium]
+            runner: ubuntu-24.04
+            base: "24.04"
 
+    # TODO: remove once juju 4.0/stable integration tests are stable
+    continue-on-error: ${{ matrix.juju-version == '4.0/stable' }}
     runs-on: ${{ matrix.arch.runner }}
     steps:
       - name: Checkout
@@ -36,24 +37,56 @@ jobs:
 
       - name: Get Charm Under Test Path
         id: charm-path
-        run: echo "charm_path=$(find built/ -name '*.charm' -type f -print)" >> $GITHUB_OUTPUT
+        env:
+          CHARM_PATHS: ${{ inputs.charm-paths }}
+          BASE: ${{ matrix.arch.base }}
+          ARCH: ${{ matrix.arch.arch }}
+        run: |
+          IFS=',' read -ra paths <<< "$CHARM_PATHS"
+          for charm in "${paths[@]}"; do
+            if [[ "$charm" == *"ubuntu@${BASE}-${ARCH}.charm" ]]; then
+              echo "charm_path=built/${charm}" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+          done
+          echo "Unable to find a charm artifact for ubuntu@${BASE}-${ARCH}" >&2
+          exit 1
 
-      - name: Setup operator environment
-        uses: charmed-kubernetes/actions-operator@main
-        with:
-          provider: microk8s
-          channel: 1.35-strict/stable
-          juju-channel: 3.6/stable
-          lxd-channel: 5.21/stable
+      # Configuring manually instead of using the charmed-kubernetes/actions-operator@main
+      # to avoid setup failures and keep CI behavior aligned with self-signed-certificates.
+      - name: Install charmcraft
+        run: sudo snap install charmcraft --classic
+
+      - name: Install Juju
+        run: |
+          sudo snap install juju --channel=${{ matrix.juju-version }}
+
+      - name: Install and setup Microk8s
+        run: |
+          sudo snap install microk8s --channel=1.32/stable --classic
+          sudo microk8s enable dns storage rbac
+
+      - name: Wait for Microk8s to be ready
+        run: |
+          sudo microk8s status --wait-ready
+
+      - name: Enable Metallb
+        run: |
+          sudo microk8s enable metallb:10.0.0.2-10.0.0.10
+
+      - name: Add Microk8s to Juju
+        run: |
+          sudo microk8s config | juju add-k8s my-k8s --client
+
+      - name: Bootstrap Juju controller
+        run: |
+          juju bootstrap my-k8s github-pr-${{ github.run_id }}-microk8s
 
       - name: Install UV and Tox
         run: |
-          pipx uninstall tox
-          sudo snap install --classic astral-uv
+          pipx uninstall tox || true
+          sudo snap install astral-uv --classic
           uv tool install tox --with tox-uv --force
-
-      - name: Enable Metallb
-        run: /usr/bin/sg snap_microk8s -c "sudo microk8s enable metallb:10.0.0.2-10.0.0.10"
 
       - name: Run integration tests
         run: |
@@ -64,12 +97,22 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v7
         with:
-          name: charmcraft-logs
+          name: charmcraft-logs-${{ strategy.job-index }}
           path: /home/runner/.local/state/charmcraft/log/*.log
 
       - name: Archive juju crashdump
         if: failure()
         uses: actions/upload-artifact@v7
         with:
-          name: juju-crashdump
+          name: juju-crashdump-${{ strategy.job-index }}
           path: juju-crashdump-*.tar.xz
+
+      - name: Archive juju debug log
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: juju-debug-log-${{ strategy.job-index }}
+          path: |
+            juju-debug.log
+            juju-units.yaml
+          if-no-files-found: ignore
