@@ -1,13 +1,19 @@
 # Copyright 2024 Canonical Ltd.
 # See LICENSE file for licensing details.
 
+import importlib.util
 import json
+from dataclasses import replace
 from datetime import datetime, timedelta, timezone
+from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
+from threading import Thread
+from types import ModuleType
 from unittest.mock import MagicMock, Mock, patch
 
 import ops
 import pytest
+import requests
 import yaml
 from charmlibs.interfaces.tls_certificates import (
     Certificate,
@@ -48,6 +54,7 @@ from notary import (
     ClusterMember,
     CreateClusterMemberResponse,
     LoginResponse,
+    Notary,
 )
 
 TLS_LIB_PATH = "charmlibs.interfaces.tls_certificates"
@@ -60,7 +67,9 @@ SELF_SIGNED_CA_COMMON_NAME = "Notary Self Signed Root CA"
 class TestCharm:
     @pytest.fixture(scope="function")
     def context(self):
-        yield Context(NotaryCharm)
+        """Exercise application behavior independently of cluster admission."""
+        with patch.object(NotaryCharm, "_cluster_prerequisites_met", return_value=True):
+            yield Context(NotaryCharm)
 
     def example_certs_and_key(
         self, hostname: str | None = None
@@ -4028,6 +4037,54 @@ def _member(name: str, address: str) -> ClusterMember:
 class TestCharmCluster:
     """Tests for dqlite cluster coordination over the peer relation."""
 
+    def test_follower_publishes_its_own_access_certificate_request(self, tmp_path: Path):
+        context = Context(NotaryCharm, unit_id=1)
+        relation = Relation(endpoint=TLS_ACCESS_RELATION_NAME, interface="tls-certificates")
+        state = self._base_state(tmp_path, leader=False)
+        state = replace(state, relations={relation})
+        with patch("notary.Notary.__new__", return_value=self._cluster_mock()):
+            out = context.run(context.on.relation_created(relation), state)
+        relation_out = out.get_relation(relation.id)
+        assert json.loads(relation_out.local_unit_data["certificate_signing_requests"])
+        assert "certificate_signing_requests" not in relation_out.local_app_data
+
+    @pytest.mark.parametrize("leader", [False, True])
+    def test_first_access_certificate_is_installed(
+        self, context: Context[NotaryCharm], tmp_path: Path, leader: bool
+    ):
+        relation = Relation(endpoint=TLS_ACCESS_RELATION_NAME, interface="tls-certificates")
+        state = self._base_state(tmp_path, leader=leader, with_db_state=True)
+        state = replace(state, relations={relation})
+        certificate, ca, _, private_key = TestCharm().example_certs_and_key()
+        assigned = Mock(certificate=certificate, ca=ca)
+        with (
+            patch("notary.Notary.__new__", return_value=self._cluster_mock()),
+            patch(
+                f"{TLS_LIB_PATH}.TLSCertificatesRequiresV4.get_assigned_certificate",
+                return_value=(assigned, private_key),
+            ),
+        ):
+            context.run(context.on.relation_changed(relation), state)
+        assert (tmp_path / "config/certificate.pem").read_text() == str(certificate)
+        assert (tmp_path / "config/private_key.pem").read_text() == str(private_key)
+        assert (tmp_path / "config/ca.pem").read_text() == str(ca)
+
+    def test_incomplete_access_certificate_does_not_fail_relation_hook(
+        self, context: Context[NotaryCharm], tmp_path: Path
+    ):
+        relation = Relation(endpoint=TLS_ACCESS_RELATION_NAME, interface="tls-certificates")
+        state = replace(
+            self._base_state(tmp_path, leader=True, with_db_state=True), relations={relation}
+        )
+        with (
+            patch("notary.Notary.__new__", return_value=self._cluster_mock()),
+            patch(
+                f"{TLS_LIB_PATH}.TLSCertificatesRequiresV4.get_assigned_certificate",
+                side_effect=KeyError("certificate"),
+            ),
+        ):
+            context.run(context.on.relation_changed(relation), state)
+
     @pytest.fixture(scope="function")
     def context(self):
         yield Context(NotaryCharm)
@@ -4115,6 +4172,93 @@ class TestCharmCluster:
         assert "notary" not in out.get_container("notary").plan.services
         assert out.unit_status == ops.WaitingStatus("waiting for cluster join token")
 
+    @pytest.mark.parametrize(
+        "app_data",
+        [
+            {"bootstrap_unit": "notary-k8s/1"},
+            {"bootstrap_unit": "notary-k8s/0", "cluster_established": "true"},
+        ],
+    )
+    def test_leadership_does_not_reset_bootstrap_authorization(
+        self, context: Context[NotaryCharm], tmp_path: Path, app_data: dict[str, str]
+    ):
+        peer = PeerRelation(
+            endpoint=PEER_RELATION_NAME, interface="notary_peers", local_app_data=app_data
+        )
+        state = self._base_state(tmp_path, leader=True, peer_relation=peer)
+        with patch("notary.Notary.__new__", return_value=self._cluster_mock()):
+            out = context.run(context.on.leader_elected(), state)
+        assert "notary" not in out.get_container("notary").plan.services
+        assert app_data.items() <= out.get_relation(peer.id).local_app_data.items()
+
+    def test_bootstrap_decision_precedes_service_start(
+        self, context: Context[NotaryCharm], tmp_path: Path
+    ):
+        peer = PeerRelation(endpoint=PEER_RELATION_NAME, interface="notary_peers")
+        state = self._base_state(tmp_path, leader=True, peer_relation=peer)
+        with (
+            patch("notary.Notary.__new__", return_value=self._cluster_mock()),
+            patch.object(NotaryCharm, "_configure_pebble_plan") as start,
+        ):
+            with context(context.on.start(), state) as manager:
+                start.side_effect = lambda: self._assert_bootstrap_owner(manager.charm)
+                manager.run()
+        start.assert_called_once()
+
+    def test_fresh_leader_gets_admission_from_peer(
+        self, context: Context[NotaryCharm], tmp_path: Path
+    ):
+        peer_url = "https://notary-k8s-1.notary-k8s-endpoints.model.svc:2111"
+        peer = PeerRelation(
+            endpoint=PEER_RELATION_NAME,
+            interface="notary_peers",
+            local_app_data={"bootstrap_unit": "notary-k8s/1", "cluster_established": "true"},
+            peers_data={1: {"api_address": peer_url, "has_cluster_state": "true"}},
+        )
+        state = self._base_state(
+            tmp_path, leader=True, peer_relation=peer, secrets={self._login_secret()}
+        )
+        local = self._cluster_mock(**{"is_api_available.return_value": False})
+        remote = self._cluster_mock(
+            **{"list_cluster_members.return_value": [_member(PEER_MEMBER_NAME, "peer:9000")]}
+        )
+        with patch("charm.Notary", side_effect=[local, remote, remote]) as clients:
+            out = context.run(context.on.leader_elected(), state)
+        remote.create_cluster_join_token.assert_called_with(SELF_MEMBER_NAME, "test-token")
+        local.create_cluster_join_token.assert_not_called()
+        assert clients.call_args_list[1].args == (
+            peer_url,
+            "/var/lib/juju/storage/config/0/ca.pem",
+        )
+        config = yaml.safe_load((tmp_path / "config/config.yaml").read_text())
+        assert config["cluster"]["join_token"] == "join-token-1"
+        assert "notary" in out.get_container("notary").plan.services
+
+    def test_unreachable_peer_does_not_authorize_bootstrap(
+        self, context: Context[NotaryCharm], tmp_path: Path
+    ):
+        peer = PeerRelation(
+            endpoint=PEER_RELATION_NAME,
+            interface="notary_peers",
+            local_app_data={"bootstrap_unit": "notary-k8s/1"},
+            peers_data={1: {"api_address": "https://peer:2111"}},
+        )
+        state = self._base_state(
+            tmp_path, leader=True, peer_relation=peer, secrets={self._login_secret()}
+        )
+        unavailable = self._cluster_mock(**{"list_cluster_members.return_value": None})
+        with patch("charm.Notary", return_value=unavailable):
+            out = context.run(context.on.leader_elected(), state)
+        unavailable.create_cluster_join_token.assert_not_called()
+        assert "notary" not in out.get_container("notary").plan.services
+        assert out.get_relation(peer.id).local_app_data["bootstrap_unit"] == "notary-k8s/1"
+
+    @staticmethod
+    def _assert_bootstrap_owner(charm: NotaryCharm):
+        relation = charm.model.get_relation(PEER_RELATION_NAME)
+        assert relation is not None
+        assert relation.data[charm.app]["bootstrap_unit"] == charm.unit.name
+
     def test_given_non_leader_with_join_token_when_configure_then_join_token_in_config(
         self, context: Context[NotaryCharm], tmp_path: Path
     ):
@@ -4126,17 +4270,22 @@ class TestCharmCluster:
             secrets={self._tokens_secret({SELF_MEMBER_NAME: "join-token-0"})},
         )
 
-        with patch(
-            "notary.Notary.__new__",
-            return_value=self._cluster_mock(),
+        with (
+            patch(
+                "notary.Notary.__new__",
+                return_value=self._cluster_mock(),
+            ),
+            patch("charm.socket.getfqdn", return_value="notary-0.notary-endpoints.model.svc"),
         ):
             out = context.run(context.on.update_status(), state)
 
         root = out.get_container("notary").get_filesystem(context)
         config = yaml.safe_load((root / "etc/notary/config/config.yaml").open())
         assert config["cluster"]["name"] == SELF_MEMBER_NAME
+        assert config["cluster"]["address"] == "notary-0.notary-endpoints.model.svc:9000"
         assert config["cluster"]["join_token"] == "join-token-0"
-        assert "notary" in out.get_container("notary").plan.services
+        assert "notary" not in out.get_container("notary").plan.services
+        assert out.unit_status == ops.WaitingStatus("certificates not yet pushed to workload")
 
     def test_given_cluster_state_exists_when_configure_then_no_join_token_in_config(
         self, context: Context[NotaryCharm], tmp_path: Path
@@ -4190,6 +4339,41 @@ class TestCharmCluster:
         tokens = json.loads(secret.latest_content["tokens"])
         assert tokens[PEER_MEMBER_NAME]["token"] == "join-token-1"
         assert out.get_relation(peer.id).local_app_data[CLUSTER_DATA_VERSION_KEY]
+
+    def test_pending_join_keeps_its_token(self, context: Context[NotaryCharm], tmp_path: Path):
+        peer = PeerRelation(endpoint=PEER_RELATION_NAME, interface="notary_peers")
+        state = self._base_state(
+            tmp_path,
+            leader=False,
+            peer_relation=peer,
+            with_db_state=True,
+            secrets={self._tokens_secret({SELF_MEMBER_NAME: "pending-token"})},
+        )
+        (tmp_path / "db/dqlite/join").touch()
+        with patch("notary.Notary.__new__", return_value=self._cluster_mock()):
+            context.run(context.on.update_status(), state)
+        config = yaml.safe_load((tmp_path / "config/config.yaml").read_text())
+        assert config["cluster"]["join_token"] == "pending-token"
+
+    def test_spent_token_cleanup_does_not_require_restart(
+        self, context: Context[NotaryCharm], tmp_path: Path
+    ):
+        state = self._base_state(tmp_path, leader=True, with_db_state=True)
+        with (
+            patch("notary.Notary.__new__", return_value=self._cluster_mock()),
+            context(context.on.update_status(), state) as manager,
+        ):
+            charm = manager.charm
+            assert charm._configure_notary_config_file()
+            config_path = tmp_path / "config/config.yaml"
+            config = yaml.safe_load(config_path.read_text())
+            config["cluster"]["join_token"] = "spent-token"
+            config_path.write_text(yaml.safe_dump(config))
+            assert not charm._configure_notary_config_file()
+            assert "join_token" not in yaml.safe_load(config_path.read_text())["cluster"]
+            config["port"] = 1234
+            config_path.write_text(yaml.safe_dump(config))
+            assert charm._configure_notary_config_file()
 
     def test_given_stale_token_and_member_not_joined_when_configure_then_token_reminted(
         self, context: Context[NotaryCharm], tmp_path: Path
@@ -4286,13 +4470,14 @@ class TestCharmCluster:
         tokens = json.loads(secret.latest_content["tokens"])
         assert tokens == {}
 
-    def test_given_departed_member_when_peer_relation_departed_then_member_removed(
-        self, context: Context[NotaryCharm], tmp_path: Path
+    @pytest.mark.parametrize("leader", [False, True])
+    def test_removing_unit_leaves_cluster_before_stopping(
+        self, context: Context[NotaryCharm], tmp_path: Path, leader: bool
     ):
         peer = PeerRelation(endpoint=PEER_RELATION_NAME, interface="notary_peers")
         state = self._base_state(
             tmp_path,
-            leader=True,
+            leader=leader,
             peer_relation=peer,
             with_db_state=True,
             secrets={self._login_secret()},
@@ -4306,12 +4491,53 @@ class TestCharmCluster:
             }
         )
 
-        with patch("notary.Notary.__new__", return_value=mock):
-            context.run(context.on.relation_departed(peer, remote_unit=5), state)
+        with (
+            patch("notary.Notary.__new__", return_value=mock),
+            patch.object(ops.Container, "stop") as stop,
+        ):
+            calls = Mock()
+            calls.attach_mock(mock.delete_cluster_member, "remove")
+            calls.attach_mock(stop, "stop")
+            context.run(context.on.remove(), state)
 
-        mock.delete_cluster_member.assert_called_once_with("notary-k8s-5", "test-token")
+        mock.delete_cluster_member.assert_called_once_with(SELF_MEMBER_NAME, "test-token")
+        assert [call[0] for call in calls.mock_calls] == ["remove", "stop"]
 
-    def test_given_unnamed_member_with_unexpected_address_when_configure_then_member_removed_by_address(
+    @pytest.mark.parametrize("members", [None, []])
+    def test_removal_does_not_guess_membership(
+        self, context: Context[NotaryCharm], tmp_path: Path, members: list | None
+    ):
+        state = self._base_state(
+            tmp_path, leader=False, with_db_state=True, secrets={self._login_secret()}
+        )
+        mock = self._cluster_mock(**{"list_cluster_members.return_value": members})
+        with (
+            patch("notary.Notary.__new__", return_value=mock),
+            patch.object(ops.Container, "stop") as stop,
+        ):
+            if members is None:
+                with pytest.raises(Exception, match="Cannot determine cluster membership"):
+                    context.run(context.on.remove(), state)
+                stop.assert_not_called()
+            else:
+                context.run(context.on.remove(), state)
+                stop.assert_called_once_with("notary")
+        mock.delete_cluster_member.assert_not_called()
+
+    def test_last_member_is_not_removed(self, context: Context[NotaryCharm], tmp_path: Path):
+        state = self._base_state(
+            tmp_path, leader=True, with_db_state=True, secrets={self._login_secret()}
+        )
+        mock = self._cluster_mock()
+        with (
+            patch("notary.Notary.__new__", return_value=mock),
+            patch.object(ops.Container, "stop") as stop,
+        ):
+            context.run(context.on.remove(), state)
+        mock.delete_cluster_member.assert_not_called()
+        stop.assert_called_once_with("notary")
+
+    def test_reconciliation_does_not_remove_unexpected_members(
         self, context: Context[NotaryCharm], tmp_path: Path
     ):
         peer = PeerRelation(
@@ -4339,7 +4565,7 @@ class TestCharmCluster:
         with patch("notary.Notary.__new__", return_value=mock):
             context.run(context.on.update_status(), state)
 
-        mock.delete_cluster_member.assert_called_once_with("10.9.9.9:9000", "test-token")
+        mock.delete_cluster_member.assert_not_called()
 
     def test_given_members_list_unavailable_when_configure_then_no_members_removed(
         self, context: Context[NotaryCharm], tmp_path: Path
@@ -4404,3 +4630,142 @@ class TestCharmCluster:
         peer_out = out.get_relation(peer.id)
         assert peer_out.local_unit_data["cluster_address"]
         assert peer_out.local_unit_data["has_cluster_state"] == "false"
+
+
+class TestNotaryClient:
+    @pytest.mark.parametrize("existing_cookie", [False, True])
+    def test_expired_token_refresh_uses_only_the_requested_cookie(self, existing_cookie: bool):
+        received_cookies: list[str | None] = []
+
+        class Handler(BaseHTTPRequestHandler):
+            def do_GET(self):
+                cookie = self.headers.get("Cookie")
+                received_cookies.append(cookie)
+                self.send_response(200 if cookie == "user_token=fresh" else 401)
+                self.end_headers()
+                self.wfile.write(b'{"data": {}, "message": ""}')
+
+            def do_POST(self):
+                self.rfile.read(int(self.headers.get("Content-Length", "0")))
+                self.send_response(200)
+                self.send_header("Set-Cookie", "user_token=fresh; Path=/; HttpOnly")
+                self.end_headers()
+
+        with HTTPServer(("127.0.0.1", 0), Handler) as server:
+            thread = Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            client = object.__new__(Notary)
+            client.__init__(f"http://127.0.0.1:{server.server_port}")
+            client.session.trust_env = False
+            if existing_cookie:
+                client.session.cookies.set("user_token", "old", domain="127.0.0.1", path="/")
+            try:
+                assert not client.token_is_valid("expired")
+                response = client.login("admin@example.com", "password")
+                assert response and response.token == "fresh"
+                assert client.token_is_valid(response.token)
+                assert not client.token_is_valid("expired")
+                assert received_cookies == [
+                    "user_token=expired",
+                    "user_token=fresh",
+                    "user_token=expired",
+                ]
+            finally:
+                client.session.close()
+                server.shutdown()
+                thread.join()
+
+    @pytest.mark.parametrize("operation", ["membership", "login"])
+    def test_request_timeout_is_bounded_and_handled(self, operation: str):
+        client = object.__new__(Notary)
+        client.__init__("https://unreachable:2111", ca_path="/trusted/ca.pem")
+        with patch.object(client.session, "request", side_effect=requests.Timeout) as request:
+            if operation == "membership":
+                assert client.list_cluster_members("token") is None
+            else:
+                assert client.login("admin@example.com", "password") is None
+        assert request.call_args.kwargs["timeout"] == (5, 60)
+        assert request.call_args.kwargs["verify"] == "/trusted/ca.pem"
+
+
+class TestIntegrationDiagnostics:
+    @pytest.fixture
+    def helpers(self):
+        path = Path(__file__).parents[1] / "integration/test_charm.py"
+        spec = importlib.util.spec_from_file_location("integration_helpers", path)
+        assert spec and spec.loader
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module
+
+    @pytest.mark.parametrize(
+        "command",
+        [("stop", "notary"), ("start", "notary"), ("services",), ("logs", "-n", "200", "notary")],
+    )
+    def test_pebble_uses_charm_container_socket(
+        self, helpers: ModuleType, command: tuple[str, ...]
+    ):
+        juju = Mock()
+        juju.cli.return_value = "pebble output"
+
+        assert helpers.run_notary_pebble(juju, "notary-k8s/1", *command) == "pebble output"
+
+        juju.cli.assert_called_once_with(
+            "ssh",
+            "--container",
+            "charm",
+            "notary-k8s/1",
+            "env",
+            "PEBBLE_SOCKET=/charm/containers/notary/pebble.socket",
+            "/charm/bin/pebble",
+            *command,
+        )
+
+    def test_collection_requests_bounded_pebble_logs(
+        self, helpers: ModuleType, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        monkeypatch.chdir(tmp_path)
+        juju = Mock()
+        juju.debug_log.return_value = "hook logs"
+        juju.cli.return_value = "unit data"
+        juju.status.return_value.apps = {helpers.APP_NAME: Mock(units={"notary-k8s/0": Mock()})}
+        with patch.object(helpers, "run_notary_pebble", return_value="workload output") as pebble:
+            helpers.collect_failure_diagnostics(juju)
+
+        assert [entry.args for entry in pebble.call_args_list] == [
+            (juju, "notary-k8s/0", "services"),
+            (juju, "notary-k8s/0", "logs", "-n", "200", "notary"),
+        ]
+        assert "workload output" in (tmp_path / "juju-debug.log").read_text()
+
+    def test_snapshots_are_appended(
+        self, helpers: ModuleType, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        monkeypatch.chdir(tmp_path)
+        helpers.append_diagnostic("juju-debug.log", "first", lambda: "first failure")
+        helpers.append_diagnostic("juju-debug.log", "second", lambda: "later failure")
+        content = (tmp_path / "juju-debug.log").read_text()
+        assert "first failure" in content
+        assert "later failure" in content
+
+    def test_collection_failure_preserves_fail_fast_result(
+        self, helpers: ModuleType, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        monkeypatch.chdir(tmp_path)
+        juju = Mock()
+        juju.debug_log.side_effect = RuntimeError("controller unavailable")
+        juju.status.side_effect = RuntimeError("controller unavailable")
+        with patch.object(helpers.jubilant, "any_error", return_value=True):
+            assert helpers.on_app_error(juju)(Mock()) is True
+
+    def test_timeout_triggers_collection(self, helpers: ModuleType):
+        request = Mock()
+        request.session.testsfailed = 0
+        juju = Mock()
+        fixture = helpers.capture_test_failure.__wrapped__(juju, request)
+        next(fixture)
+        request.session.testsfailed = 1
+        with patch.object(helpers, "collect_failure_diagnostics") as collect:
+            with pytest.raises(StopIteration):
+                next(fixture)
+        collect.assert_called_once_with(juju)

@@ -14,27 +14,33 @@ Notary K8s Operator uses the following OCI image:
 ## High Availability
 
 Notary K8s Operator supports scaling out to multiple units. Units form a
-dqlite cluster over the `notary-peers` peer relation: the leader unit
-bootstraps the cluster and mints one-time join tokens for joining units, and
-each departing unit removes itself from the cluster (the leader prunes any
-member left behind).
+dqlite cluster over the `notary-peers` peer relation. The first Juju leader
+records a bootstrap unit before starting Notary. The current Juju leader
+coordinates one-time join tokens through a reachable member's direct HTTPS API,
+even when its own Notary has not joined yet. Notary manages database elections
+and replication independently of Juju leadership. Each departing unit removes
+itself from the cluster before stopping.
 
 ```shell
 juju deploy notary-k8s --trust -n 3
 ```
 
-- Deploy at least 3 units for quorum; dqlite is a Raft-based store.
+- Deploy at least 3 units and wait for three dqlite voters to tolerate one unit
+  failing; membership alone does not imply voter promotion is complete.
+- Scale down one unit at a time, waiting for the remaining units to become active.
 - Units replicate the database over the dqlite port (`9000`) using mutual TLS
   with a cluster certificate managed by Notary. This traffic goes directly
   between pods; only the HTTPS API port (`2111`) is exposed through the Juju
-  service.
+  service. Cluster members use stable unit DNS names across pod replacements.
 - Without the `access-certificates` integration, all units sign their
   certificates with one shared self-signed CA, so clients can trust every
   member with a single CA certificate.
-- A unit that loses its database storage cannot rejoin on its own. Remove and
-  re-add it: `juju remove-unit notary-k8s/1 && juju add-unit notary-k8s`.
-- A leader unit without cluster state will refuse to bootstrap while other
-  members report cluster state, to avoid split-brain. Recover it the same way.
+- Forced removal, lost database storage, and recovery after quorum loss require
+  operator intervention; the charm does not automatically repair cluster membership.
+- Bootstrap authorization is not reassigned on Juju leadership changes. Missing
+  peer reports never reset a recorded bootstrap decision. If initial bootstrap
+  is interrupted and its designated unit cannot return, operator intervention
+  is required rather than automatically creating another cluster.
 
 ## Project & Community
 

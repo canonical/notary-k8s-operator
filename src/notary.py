@@ -164,7 +164,7 @@ class Notary:
         if token:
             # Notary 1.0 authenticates API requests through the session cookie,
             # not the Authorization header.
-            self.session.cookies.set(self.COOKIE_NAME, token)
+            headers["Cookie"] = f"{self.COOKIE_NAME}={token}"
         url = f"{self.url}{endpoint}"
         try:
             req = self.session.request(
@@ -173,6 +173,7 @@ class Notary:
                 verify=self.ca_path,
                 headers=headers,
                 json=data,
+                timeout=(5, 60),
             )
         except requests.RequestException as e:
             logger.error("HTTP request failed: %s", e)
@@ -229,6 +230,7 @@ class Notary:
                 url=url,
                 verify=self.ca_path,
                 json=asdict(login_params),
+                timeout=(5, 60),
             )
         except requests.RequestException as e:
             logger.error("HTTP request failed: %s", e)
@@ -243,12 +245,7 @@ class Notary:
             logger.error("Login failed: code %s", req.status_code)
             return None
 
-        # Extract token from cookie
-        token = None
-        for cookie in self.session.cookies:
-            if cookie.name == self.COOKIE_NAME:
-                token = cookie.value
-                break
+        token = req.cookies.get(self.COOKIE_NAME)
 
         if not token:
             logger.error("Login failed: session cookie not found in response")
