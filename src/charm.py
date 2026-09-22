@@ -9,6 +9,7 @@ import logging
 import random
 import socket
 import string
+import time
 from contextlib import suppress
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -69,6 +70,8 @@ DQLITE_PORT = 9000
 # join token. Tokens expire upstream after 3 hours and are spent by failed join
 # attempts, so a unit that hasn't joined within this interval gets a fresh one.
 JOIN_TOKEN_REMINT_INTERVAL = timedelta(minutes=15)
+CLUSTER_MEMBER_REMOVAL_ATTEMPTS = 3
+CLUSTER_MEMBER_REMOVAL_RETRY_DELAY = 2
 
 
 @dataclass
@@ -199,13 +202,36 @@ class NotaryCharm(ops.CharmBase):
             members = self.client.list_cluster_members(token)
             if members is None:
                 raise RuntimeError("Cannot determine cluster membership before removal")
-            if len(members) > 1 and any(
-                member.name == self._cluster_member_name for member in members
-            ):
-                if not self.client.delete_cluster_member(self._cluster_member_name, token):
+            peers = sorted(
+                (
+                    member
+                    for member in members
+                    if member.name != self._cluster_member_name and member.api_address
+                ),
+                key=lambda member: member.name,
+            )
+            if any(member.name == self._cluster_member_name for member in members) and peers:
+                if not self._remove_cluster_member_via_peers(peers):
                     raise RuntimeError("Cannot remove this member from the cluster")
         with suppress(ops.ModelError):
             self.container.stop("notary")
+
+    def _remove_cluster_member_via_peers(self, peers: list[ClusterMember]) -> bool:
+        """Remove this unit through a survivor, retrying transient leadership changes."""
+        clients = []
+        for member in peers:
+            address = member.api_address
+            if not address.startswith(("http://", "https://")):
+                address = f"https://{address}"
+            clients.append(Notary(address, f"{CHARM_PATH}/{CONFIG_MOUNT}/0/ca.pem"))
+        for attempt in range(CLUSTER_MEMBER_REMOVAL_ATTEMPTS):
+            for client in clients:
+                token = self._get_valid_admin_token(client)
+                if token and client.delete_cluster_member(self._cluster_member_name, token):
+                    return True
+            if attempt < CLUSTER_MEMBER_REMOVAL_ATTEMPTS - 1:
+                time.sleep(CLUSTER_MEMBER_REMOVAL_RETRY_DELAY)
+        return False
 
     def configure(self, event: ops.EventBase):
         """Handle configuration events."""
