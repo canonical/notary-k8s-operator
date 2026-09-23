@@ -42,3 +42,15 @@ bucket. They retain the original member identity and are intended for restoring
 the same unit, address, application, and model. They do not include Juju secrets
 or externally managed encryption keys. Retain the charm's admin login secret and
 any encryption keys alongside your disaster recovery procedures.
+
+## List backups
+
+```shell
+juju run notary-k8s/leader list-backups
+```
+
+The `backup-ids` result is a JSON array of full object keys, suitable for passing
+unchanged to `restore-backup`. Listing reads every S3 result page and includes
+Notary archives beneath the configured path. An empty bucket returns `[]`;
+access errors or missing buckets fail the action. Listing also works when the
+Notary workload is unavailable, and does not interrupt service.
