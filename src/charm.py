@@ -41,7 +41,7 @@ from charms.tempo_coordinator_k8s.v0.charm_tracing import trace_charm
 from charms.tempo_coordinator_k8s.v0.tracing import TracingEndpointRequirer, charm_tracing_config
 from charms.traefik_k8s.v2.ingress import IngressPerAppRequirer
 
-from backup import BackupError, BackupManager
+from backup import DATABASE_PATH, BackupError, BackupManager
 from notary import ClusterMember, Notary
 from s3 import S3Parameters
 from utils import is_valid_hostname
@@ -198,6 +198,45 @@ class NotaryCharm(ops.CharmBase):
         framework.observe(self.on.remove, self._on_remove)
         framework.observe(self.on.create_backup_action, self._on_create_backup_action)
         framework.observe(self.on.list_backups_action, self._on_list_backups_action)
+        framework.observe(self.on.restore_backup_action, self._on_restore_backup_action)
+
+    def _on_restore_backup_action(self, event: ops.ActionEvent) -> None:
+        """Restore a physical backup without requiring a working database API."""
+        try:
+            manager = self._backup_manager()
+            self._validate_backup_workload()
+            # Refuse a cluster that has lost peers without having removed their membership.
+            with self.container.pull(f"{DATABASE_PATH}/cluster.yaml") as source:
+                members = yaml.safe_load(source)
+            if (
+                not isinstance(members, list)
+                or len(members) != 1
+                or not isinstance(members[0], dict)
+                or members[0].get("Address") != manager.identity["address"]
+            ):
+                raise BackupError("Restore requires this unit's existing single-member cluster")
+            key = event.params.get("backup-id")
+            if not isinstance(key, str) or not key.strip():
+                raise BackupError("backup-id is required")
+            manager.restore_backup(key)
+        except (
+            BackupError,
+            ValueError,
+            OSError,
+            ops.ModelError,
+            ops.pebble.Error,
+            BotoCoreError,
+            ClientError,
+            yaml.YAMLError,
+        ) as error:
+            logger.exception("Failed to restore backup")
+            event.fail(
+                str(error)
+                if isinstance(error, (BackupError, ValueError))
+                else f"Failed to restore backup ({type(error).__name__}); see juju debug-log"
+            )
+            return
+        event.set_results({"restored": key})
 
     def _on_list_backups_action(self, event: ops.ActionEvent) -> None:
         """List backups without requiring a running Notary workload."""

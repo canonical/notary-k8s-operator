@@ -113,3 +113,50 @@ def test_list_storage_failure(context: Any, state: Any):
     ):
         context.run(context.on.action("list-backups"), state)
     assert not context.action_results
+
+
+def test_restore_returns_backup_id(context: Any, state: Any):
+    from io import StringIO
+
+    with (
+        patch("charm.socket.getfqdn", return_value="notary-0"),
+        patch("ops.Container.pull", return_value=StringIO("- ID: 1\n  Address: notary-0:9000\n")),
+        patch("charm.BackupManager.restore_backup") as restore,
+    ):
+        context.run(
+            context.on.action(
+                "restore-backup", params={"backup-id": "prefix/notary-backup-test.tar.gz"}
+            ),
+            state,
+        )
+    restore.assert_called_once_with("prefix/notary-backup-test.tar.gz")
+    assert context.action_results == {"restored": "prefix/notary-backup-test.tar.gz"}
+
+
+@pytest.mark.parametrize(
+    "membership",
+    [
+        "[]",
+        "invalid",
+        "- Address: other:9000",
+        "- Address: notary-0:9000\n- Address: notary-1:9000",
+        "[",
+    ],
+)
+def test_restore_rejects_unknown_or_clustered_disk_state(
+    context: Any, state: Any, membership: str
+):
+    from io import StringIO
+
+    with (
+        patch("ops.Container.pull", return_value=StringIO(membership)),
+        patch("charm.BackupManager.restore_backup") as restore,
+        pytest.raises(ActionFailed),
+    ):
+        context.run(
+            context.on.action(
+                "restore-backup", params={"backup-id": "prefix/notary-backup-test.tar.gz"}
+            ),
+            state,
+        )
+    restore.assert_not_called()

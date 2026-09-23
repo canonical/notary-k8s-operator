@@ -186,3 +186,144 @@ def test_empty_bucket_returns_empty_list(manager: Any):
             {}
         ]
         assert manager.list_backups() == []
+
+
+def archive_bytes(address: str = "notary-0:9000", extra_name: str | None = None) -> bytes:
+    import tarfile
+
+    archive = BytesIO()
+    with tarfile.open(fileobj=archive, mode="w:gz") as contents:
+        files = {
+            "info.yaml": f"ID: 1\nAddress: {address}\nRole: 0\n".encode(),
+            "cluster.yaml": f"- ID: 1\n  Address: {address}\n  Role: 0\n".encode(),
+            "metadata1": b"database content",
+        }
+        if extra_name:
+            files[extra_name] = b"unexpected"
+        for name, content in files.items():
+            member = tarfile.TarInfo(name)
+            member.size = len(content)
+            contents.addfile(member, BytesIO(content))
+    return archive.getvalue()
+
+
+def restore_response(manager: Any, data: bytes) -> dict[str, Any]:
+    return {
+        "Body": BytesIO(data),
+        "Metadata": {
+            **manager.identity,
+            "format": "1",
+            "sha256": hashlib.sha256(data).hexdigest(),
+        },
+    }
+
+
+def test_restore_valid_archive(manager: Any):
+    response = restore_response(manager, archive_bytes())
+    with patch("backup.s3_client") as connection:
+        connection.return_value.__enter__.return_value.get_object.return_value = response
+        manager.restore_backup("prefix/notary-backup-test.tar.gz")
+    assert response["Body"].closed
+    commands = [call.args[0] for call in manager.container.exec.call_args_list]
+    assert commands[0][:2] == ["mv", DATABASE_PATH]
+    assert commands[1][:4] == ["notary", "restore", "--db-path", DATABASE_PATH]
+    manager.container.stop.assert_called_once_with("notary")
+    manager.container.start.assert_called_once_with("notary")
+    assert manager.container.remove_path.call_count == 2  # Old database and staging.
+
+
+@pytest.mark.parametrize(
+    "failure",
+    ["identity", "format", "checksum", "bad-tar", "wrong-address", "traversal", "absolute"],
+)
+def test_restore_rejects_before_stopping_workload(manager: Any, failure: str):
+    data = archive_bytes()
+    if failure == "bad-tar":
+        data = b"not an archive"
+    elif failure == "wrong-address":
+        data = archive_bytes("other-unit:9000")
+    elif failure == "traversal":
+        data = archive_bytes(extra_name="../config.yaml")
+    elif failure == "absolute":
+        data = archive_bytes(extra_name="/etc/config.yaml")
+    response = restore_response(manager, data)
+    if failure == "identity":
+        response["Metadata"]["unit"] = "other-unit"
+    elif failure == "format":
+        response["Metadata"]["format"] = "2"
+    elif failure == "checksum":
+        response["Metadata"]["sha256"] = "bad"
+    with patch("backup.s3_client") as connection:
+        connection.return_value.__enter__.return_value.get_object.return_value = response
+        with pytest.raises(BackupError):
+            manager.restore_backup("prefix/notary-backup-test.tar.gz")
+    assert response["Body"].closed
+    manager.container.stop.assert_not_called()
+    manager.container.push.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    "key",
+    [
+        "other/notary-backup-test.tar.gz",
+        "prefix/notary-backup-test.txt",
+        "",
+        "notary-backup-test.tar.gz",
+    ],
+)
+def test_restore_rejects_keys_outside_scope(manager: Any, key: str):
+    with patch("backup.s3_client") as connection, pytest.raises(BackupError):
+        manager.restore_backup(key)
+    connection.assert_not_called()
+
+
+@pytest.mark.parametrize("failure", ["restore", "start"])
+def test_restore_failure_rolls_back_database(manager: Any, failure: str):
+    import ops
+
+    error = ops.pebble.Error("failed")
+    if failure == "restore":
+        process = MagicMock()
+        process.wait_output.side_effect = error
+        manager.container.exec.side_effect = [MagicMock(), process, MagicMock()]
+    else:
+        manager.container.start.side_effect = [error, None]
+    with patch("backup.s3_client") as connection:
+        connection.return_value.__enter__.return_value.get_object.return_value = restore_response(
+            manager, archive_bytes()
+        )
+        with pytest.raises(ops.pebble.Error):
+            manager.restore_backup("prefix/notary-backup-test.tar.gz")
+    commands = [call.args[0] for call in manager.container.exec.call_args_list]
+    assert commands[-1] == ["mv", commands[0][2], DATABASE_PATH]
+    assert manager.container.start.call_count == (2 if failure == "start" else 1)
+    manager.container.remove_path.assert_any_call(DATABASE_PATH, recursive=True)
+
+
+def test_restore_download_error_does_not_stop_workload(manager: Any):
+    from botocore.exceptions import ClientError
+
+    with patch("backup.s3_client") as connection:
+        connection.return_value.__enter__.return_value.get_object.side_effect = ClientError(
+            {"Error": {"Code": "NoSuchKey"}}, "GetObject"
+        )
+        with pytest.raises(ClientError):
+            manager.restore_backup("prefix/notary-backup-test.tar.gz")
+    manager.container.stop.assert_not_called()
+
+
+def test_failed_rollback_retains_original_database(manager: Any):
+    import ops
+
+    failed = MagicMock()
+    failed.wait_output.side_effect = ops.pebble.Error("failed")
+    manager.container.exec.side_effect = [MagicMock(), failed, failed]
+    with patch("backup.s3_client") as connection:
+        connection.return_value.__enter__.return_value.get_object.return_value = restore_response(
+            manager, archive_bytes()
+        )
+        with pytest.raises(ops.pebble.Error):
+            manager.restore_backup("prefix/notary-backup-test.tar.gz")
+    rollback = manager.container.exec.call_args_list[0].args[0][2]
+    assert all(call.args[0] != rollback for call in manager.container.remove_path.call_args_list)
+    manager.container.start.assert_not_called()

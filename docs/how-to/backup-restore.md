@@ -54,3 +54,47 @@ unchanged to `restore-backup`. Listing reads every S3 result page and includes
 Notary archives beneath the configured path. An empty bucket returns `[]`;
 access errors or missing buckets fail the action. Listing also works when the
 Notary workload is unavailable, and does not interrupt service.
+
+## Restore a backup
+
+```shell
+juju run notary-k8s/leader restore-backup backup-id=notary/notary-backup-EXAMPLE.tar.gz
+```
+
+Use the exact key from `list-backups`. Restoring **replaces the database** with
+its earlier contents. Only archives created by this charm on the same unit,
+model, application, and dqlite address are accepted. The unit must still have
+single-member cluster state on disk; removing Juju peers alone does not make a
+multi-member cluster eligible. Cross-deployment restore and recovery from lost
+cluster quorum require a separate recovery procedure and are not implemented by
+this action.
+
+The charm downloads the archive, checks its SHA-256 and identity metadata, and
+validates its archive paths and cluster identity before stopping Notary. It
+stages files with restrictive permissions and preserves the previous database
+until the restore command and service start succeed. On failure it attempts to
+roll back and restart the original database. If rollback itself fails, the old
+database remains in `/var/lib/notary/database/.pre-restore-*`; inspect logs and
+recover it before retrying. A workload that was stopped before the action stays
+stopped. After success, `restored` contains the backup ID.
+
+Ensure the admin credentials in the charm's Juju secret still match the restored
+database. If they changed since the backup, restore the matching secret content.
+These actions require the dqlite-aware Notary CLI (`backup` and `restore` with
+`--db-path`); the older API-based backup CLI is incompatible. Allow free disk
+space for the downloaded archive, the restored database, and a rollback copy.
+
+## Integration test
+
+With a bootstrapped Juju Kubernetes controller and a pre-provisioned test bucket,
+set `S3_TEST_ENDPOINT`, `S3_TEST_BUCKET`, `S3_TEST_ACCESS_KEY`, and
+`S3_TEST_SECRET_KEY` (optionally `S3_TEST_REGION`), then run:
+
+```shell
+PYTHONPATH=lib:src uv run pytest tests/integration/test_backup.py --charm_path=/path/to/notary.charm
+```
+
+The endpoint must be reachable from the deployed charm, and the runner must be
+able to reach the Notary unit API. The test creates certificate requests before
+and after backup and verifies that restore retains only the earlier request.
+It uses a unique S3 prefix; delete that prefix after testing.

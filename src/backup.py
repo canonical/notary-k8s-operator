@@ -5,6 +5,7 @@
 
 import hashlib
 import shutil
+import tarfile
 from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import datetime, timezone
@@ -14,6 +15,7 @@ from typing import Any, BinaryIO
 from uuid import uuid4
 
 import ops
+import yaml
 from botocore.exceptions import ClientError
 
 from s3 import S3Parameters, s3_client
@@ -98,6 +100,106 @@ class BackupManager:
                 for entry in page.get("Contents", [])
                 if entry["Key"].startswith(prefix) and entry["Key"].endswith(".tar.gz")
             )
+
+    def restore_backup(self, key: str) -> None:
+        """Validate a same-unit archive before replacing the offline database."""
+        prefix = f"{self.parameters.path}{BACKUP_PREFIX}"
+        if not key.startswith(prefix) or not key.endswith(".tar.gz"):
+            raise BackupError(
+                "backup-id must be a full Notary backup key in the configured S3 path"
+            )
+        with s3_client(self.parameters) as client, TemporaryFile() as archive:
+            response = client.get_object(Bucket=self.parameters.bucket, Key=key)
+            body = response["Body"]
+            try:
+                metadata = response.get("Metadata", {})
+                if metadata.get("format") != "1" or any(
+                    metadata.get(name) != value for name, value in self.identity.items()
+                ):
+                    raise BackupError(
+                        "Backup belongs to a different unit or has unsupported metadata"
+                    )
+                shutil.copyfileobj(body, archive)
+            finally:
+                body.close()
+            if _digest(archive) != metadata.get("sha256"):
+                raise BackupError("Backup checksum verification failed")
+            self._validate_archive(archive)
+            with self._staging_directory() as directory:
+                path = f"{directory}/restore.tar.gz"
+                self.container.push(path, archive, permissions=0o600)
+                self._replace_database(path)
+
+    def _validate_archive(self, archive: BinaryIO) -> None:
+        """Reject unsafe entries and verify single-member dqlite identity."""
+        identity_files = {}
+        seen = set()
+        try:
+            with tarfile.open(fileobj=archive, mode="r:gz") as contents:
+                for member in contents:
+                    path = PurePosixPath(member.name)
+                    if (
+                        path.is_absolute()
+                        or ".." in path.parts
+                        or str(path) in seen
+                        or not (member.isfile() or member.isdir())
+                    ):
+                        raise BackupError("Backup contains unsafe or duplicate archive entries")
+                    seen.add(str(path))
+                    if member.name in ("info.yaml", "cluster.yaml"):
+                        if not member.isfile() or member.size > 65536:
+                            raise BackupError("Backup contains invalid cluster identity files")
+                        source = contents.extractfile(member)
+                        if source is None:
+                            raise BackupError("Backup is missing cluster identity data")
+                        with source:
+                            identity_files[member.name] = yaml.safe_load(source.read())
+        except (tarfile.TarError, EOFError, yaml.YAMLError) as error:
+            raise BackupError("Backup is not a valid Notary archive") from error
+        finally:
+            archive.seek(0)
+        info = identity_files.get("info.yaml")
+        members = identity_files.get("cluster.yaml")
+        if (
+            not isinstance(info, dict)
+            or info.get("Address") != self.identity["address"]
+            or not isinstance(members, list)
+            or len(members) != 1
+            or not isinstance(members[0], dict)
+            or members[0].get("Address") != info.get("Address")
+            or members[0].get("ID") != info.get("ID")
+            or not info.get("ID")
+        ):
+            raise BackupError("Backup must contain this unit's single-member cluster identity")
+
+    def _replace_database(self, path: str) -> None:
+        """Keep the previous database available for rollback until service restart."""
+        was_running = self.container.get_service("notary").is_running()
+        rollback = f"{STAGING_ROOT}/.pre-restore-{uuid4().hex}"
+        moved = False
+        if was_running:
+            self.container.stop("notary")
+        try:
+            if self.container.exists(DATABASE_PATH):
+                self.container.exec(["mv", DATABASE_PATH, rollback], timeout=60).wait_output()
+                moved = True
+            self.container.exec(
+                ["notary", "restore", "--db-path", DATABASE_PATH, "--file", path],
+                timeout=600,
+            ).wait_output()
+            if was_running:
+                self.container.start("notary")
+        except (ops.pebble.Error, ops.ModelError, OSError):
+            if moved:
+                # A failed start can leave the daemon running. Stop it before rollback.
+                self.container.stop("notary")
+                self.container.remove_path(DATABASE_PATH, recursive=True)
+                self.container.exec(["mv", rollback, DATABASE_PATH], timeout=60).wait_output()
+            if was_running:
+                self.container.start("notary")
+            raise
+        if moved:
+            self.container.remove_path(rollback, recursive=True)
 
     def create_backup(self) -> str:
         """Create a cold archive and upload it after bringing Notary back online."""
