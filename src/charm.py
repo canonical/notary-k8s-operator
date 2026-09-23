@@ -32,6 +32,7 @@ from charmlibs.interfaces.tls_certificates import (
     generate_csr,
     generate_private_key,
 )
+from charms.data_platform_libs.v0.s3 import S3Requirer
 from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardProvider
 from charms.loki_k8s.v1.loki_push_api import LogForwarder
 from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointProvider
@@ -40,6 +41,7 @@ from charms.tempo_coordinator_k8s.v0.tracing import TracingEndpointRequirer, cha
 from charms.traefik_k8s.v2.ingress import IngressPerAppRequirer
 
 from notary import ClusterMember, Notary
+from s3 import S3Parameters
 from utils import is_valid_hostname
 
 logger = logging.getLogger(__name__)
@@ -51,6 +53,7 @@ METRICS_RELATION_NAME = "metrics"
 GRAFANA_RELATION_NAME = "grafana-dashboard"
 TLS_ACCESS_RELATION_NAME = "access-certificates"
 PEER_RELATION_NAME = "notary-peers"
+S3_RELATION_NAME = "s3-parameters"
 
 DB_MOUNT = "database"
 CONFIG_MOUNT = "config"
@@ -125,6 +128,7 @@ class NotaryCharm(ops.CharmBase):
         # on that port, so it must not be exposed to clients.
         self.unit.set_ports(self.port)
         self.container = self.unit.get_container("notary")
+        self.s3_requirer = S3Requirer(self, S3_RELATION_NAME)
         self.tls = TLSCertificatesProvidesV4(
             self, relationship_name=CERTIFICATE_PROVIDER_RELATION_NAME
         )
@@ -319,6 +323,12 @@ class NotaryCharm(ops.CharmBase):
         if not self.client.is_initialized():
             event.add_status(ops.BlockedStatus("please initialize Notary"))
             return
+        if self.model.get_relation(S3_RELATION_NAME):
+            try:
+                S3Parameters.from_relation(self.s3_requirer.get_s3_connection_info())
+            except ValueError as error:
+                event.add_status(ops.BlockedStatus(str(error)))
+                return
         event.add_status(ops.ActiveStatus())
 
     ## Configure Dependencies ##
