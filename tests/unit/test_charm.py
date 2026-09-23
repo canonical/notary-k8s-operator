@@ -4471,10 +4471,13 @@ class TestCharmCluster:
         assert tokens == {}
 
     @pytest.mark.parametrize("leader", [False, True])
+    @pytest.mark.parametrize(
+        "peer_host", ["notary-k8s-5.notary-k8s-endpoints.model.svc", "[2001:db8::5]"]
+    )
     def test_removing_unit_leaves_cluster_before_stopping(
-        self, context: Context[NotaryCharm], tmp_path: Path, leader: bool
+        self, context: Context[NotaryCharm], tmp_path: Path, leader: bool, peer_host: str
     ):
-        peer_url = "https://notary-k8s-5.notary-k8s-endpoints.model.svc:2111"
+        peer_url = f"https://{peer_host}:2111"
         state = self._base_state(
             tmp_path,
             leader=leader,
@@ -4485,7 +4488,7 @@ class TestCharmCluster:
             **{
                 "list_cluster_members.return_value": [
                     _member(SELF_MEMBER_NAME, "10.0.0.1:9000"),
-                    _member("notary-k8s-5", "10.0.0.5:9000", peer_url),
+                    _member("notary-k8s-5", f"{peer_host}:9000", "notary.example.com:2111"),
                 ]
             }
         )
@@ -4507,6 +4510,110 @@ class TestCharmCluster:
         mock.delete_cluster_member.assert_not_called()
         peer_client.delete_cluster_member.assert_called_once_with(SELF_MEMBER_NAME, "test-token")
         assert [call[0] for call in calls.mock_calls] == ["remove", "stop"]
+
+    def test_removal_accepts_confirmed_eviction_after_failed_response(
+        self, context: Context[NotaryCharm], tmp_path: Path
+    ):
+        state = self._base_state(
+            tmp_path, leader=False, with_db_state=True, secrets={self._login_secret()}
+        )
+        survivor = _member(PEER_MEMBER_NAME, "notary-k8s-1:9000")
+        local_client = self._cluster_mock(
+            **{
+                "list_cluster_members.return_value": [
+                    _member(SELF_MEMBER_NAME, "notary-k8s-0:9000"),
+                    survivor,
+                ]
+            }
+        )
+        peer_client = self._cluster_mock(
+            **{
+                "delete_cluster_member.return_value": False,
+                "list_cluster_members.return_value": [survivor],
+            }
+        )
+        with (
+            patch("charm.Notary", side_effect=[local_client, peer_client]),
+            patch.object(ops.Container, "stop") as stop,
+        ):
+            context.run(context.on.remove(), state)
+
+        peer_client.delete_cluster_member.assert_called_once_with(SELF_MEMBER_NAME, "test-token")
+        peer_client.list_cluster_members.assert_called_once_with("test-token")
+        stop.assert_called_once_with("notary")
+
+    @pytest.mark.parametrize("members", [None, [], [_member("", "notary-k8s-1:9000")]])
+    def test_failed_removal_does_not_stop_without_confirmed_absence(
+        self, context: Context[NotaryCharm], tmp_path: Path, members: list | None
+    ):
+        state = self._base_state(
+            tmp_path, leader=False, with_db_state=True, secrets={self._login_secret()}
+        )
+        local_client = self._cluster_mock(
+            **{
+                "list_cluster_members.return_value": [
+                    _member(SELF_MEMBER_NAME, "notary-k8s-0:9000"),
+                    _member(PEER_MEMBER_NAME, "notary-k8s-1:9000"),
+                ]
+            }
+        )
+        peer_client = self._cluster_mock(
+            **{
+                "delete_cluster_member.return_value": False,
+                "list_cluster_members.return_value": members,
+            }
+        )
+        with (
+            patch("charm.Notary", side_effect=[local_client, peer_client]),
+            patch("charm.time.sleep"),
+            patch.object(ops.Container, "stop") as stop,
+        ):
+            with pytest.raises(Exception, match="Cannot remove this member"):
+                context.run(context.on.remove(), state)
+        stop.assert_not_called()
+        assert peer_client.delete_cluster_member.call_count == 3
+
+    @pytest.mark.parametrize("local_auth_available", [False, True])
+    def test_retried_remove_checks_survivor_when_local_api_is_unavailable(
+        self, context: Context[NotaryCharm], tmp_path: Path, local_auth_available: bool
+    ):
+        peer_url = "https://notary-k8s-1:2111"
+        peer = PeerRelation(
+            endpoint=PEER_RELATION_NAME,
+            peers_data={1: {"api_address": peer_url}},
+        )
+        state = self._base_state(
+            tmp_path,
+            leader=False,
+            with_db_state=True,
+            secrets={self._login_secret()},
+            peer_relation=peer,
+        )
+        local_client = self._cluster_mock(
+            **{
+                "list_cluster_members.return_value": None,
+                "token_is_valid.return_value": local_auth_available,
+                "login.return_value": None,
+                "is_api_available.return_value": False,
+            }
+        )
+        peer_client = self._cluster_mock(
+            **{
+                "list_cluster_members.return_value": [
+                    _member(PEER_MEMBER_NAME, "notary-k8s-1:9000")
+                ]
+            }
+        )
+        with (
+            patch("charm.Notary", side_effect=[local_client, peer_client]) as clients,
+            patch.object(ops.Container, "stop") as stop,
+        ):
+            context.run(context.on.remove(), state)
+
+        assert clients.call_args_list[1].args[0] == peer_url
+        peer_client.list_cluster_members.assert_called_once_with("test-token")
+        peer_client.delete_cluster_member.assert_not_called()
+        stop.assert_called_once_with("notary")
 
     def test_removing_unit_tries_another_peer_when_removal_fails(
         self, context: Context[NotaryCharm], tmp_path: Path

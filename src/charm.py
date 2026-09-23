@@ -196,17 +196,22 @@ class NotaryCharm(ops.CharmBase):
         if not self.container.can_connect():
             return
         if self._cluster_has_state():
-            token = self._get_valid_admin_token()
-            if not token:
-                raise RuntimeError("Cannot authenticate to remove this cluster member")
-            members = self.client.list_cluster_members(token)
+            relation = self.model.get_relation(PEER_RELATION_NAME)
+            clients = self._cluster_clients(relation) if relation else iter([self.client])
+            members = None
+            for client in clients:
+                token = self._get_valid_admin_token(client)
+                if token:
+                    members = client.list_cluster_members(token)
+                    if members is not None:
+                        break
             if members is None:
                 raise RuntimeError("Cannot determine cluster membership before removal")
             peers = sorted(
                 (
                     member
                     for member in members
-                    if member.name != self._cluster_member_name and member.api_address
+                    if member.name != self._cluster_member_name and member.address
                 ),
                 key=lambda member: member.name,
             )
@@ -220,14 +225,24 @@ class NotaryCharm(ops.CharmBase):
         """Remove this unit through a survivor, retrying transient leadership changes."""
         clients = []
         for member in peers:
-            address = member.api_address
-            if not address.startswith(("http://", "https://")):
-                address = f"https://{address}"
+            # The advertised API address may be a shared ingress hostname. Use
+            # the persisted dqlite host to reach this specific surviving unit.
+            host = member.address.rsplit(":", 1)[0]
+            address = f"https://{host}:{self.port}"
             clients.append(Notary(address, f"{CHARM_PATH}/{CONFIG_MOUNT}/0/ca.pem"))
         for attempt in range(CLUSTER_MEMBER_REMOVAL_ATTEMPTS):
             for client in clients:
                 token = self._get_valid_admin_token(client)
-                if token and client.delete_cluster_member(self._cluster_member_name, token):
+                if not token:
+                    continue
+                if client.delete_cluster_member(self._cluster_member_name, token):
+                    return True
+                # Eviction may succeed even when cleanup or the HTTP response
+                # fails. Confirm absence through a survivor before retrying.
+                members = client.list_cluster_members(token)
+                if members and all(
+                    member.name and member.name != self._cluster_member_name for member in members
+                ):
                     return True
             if attempt < CLUSTER_MEMBER_REMOVAL_ATTEMPTS - 1:
                 time.sleep(CLUSTER_MEMBER_REMOVAL_RETRY_DELAY)
