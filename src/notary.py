@@ -108,6 +108,33 @@ class CertificateRequest:
     status: Literal["Outstanding", "Rejected", "Revoked", "Active"]
 
 
+@dataclass(frozen=True)
+class ClusterMember:
+    """A member of the Notary dqlite cluster."""
+
+    name: str
+    id: int
+    address: str
+    api_address: str
+    role: str
+    leader: bool
+
+
+@dataclass
+class CreateClusterMemberParams:
+    """Parameters to create a cluster join token."""
+
+    server_name: str
+
+
+@dataclass
+class CreateClusterMemberResponse:
+    """Response from Notary when creating a cluster join token."""
+
+    server_name: str
+    join_token: str
+
+
 class Notary:
     """Class to interact with Notary."""
 
@@ -137,7 +164,7 @@ class Notary:
         if token:
             # Notary 1.0 authenticates API requests through the session cookie,
             # not the Authorization header.
-            self.session.cookies.set(self.COOKIE_NAME, token)
+            headers["Cookie"] = f"{self.COOKIE_NAME}={token}"
         url = f"{self.url}{endpoint}"
         try:
             req = self.session.request(
@@ -146,6 +173,7 @@ class Notary:
                 verify=self.ca_path,
                 headers=headers,
                 json=data,
+                timeout=(5, 60),
             )
         except requests.RequestException as e:
             logger.error("HTTP request failed: %s", e)
@@ -202,6 +230,7 @@ class Notary:
                 url=url,
                 verify=self.ca_path,
                 json=asdict(login_params),
+                timeout=(5, 60),
             )
         except requests.RequestException as e:
             logger.error("HTTP request failed: %s", e)
@@ -216,12 +245,7 @@ class Notary:
             logger.error("Login failed: code %s", req.status_code)
             return None
 
-        # Extract token from cookie
-        token = None
-        for cookie in self.session.cookies:
-            if cookie.name == self.COOKIE_NAME:
-                token = cookie.value
-                break
+        token = req.cookies.get(self.COOKIE_NAME)
 
         if not token:
             logger.error("Login failed: session cookie not found in response")
@@ -314,6 +338,59 @@ class Notary:
                 id=response.result.get("id"),
             )
         return None
+
+    def list_cluster_members(self, token: str) -> Optional[List[ClusterMember]]:
+        """Get all cluster members from Notary.
+
+        Returns:
+            The list of cluster members, or None if the request failed. Callers must
+            treat None as "unknown" and avoid destructive actions such as pruning members.
+        """
+        response = self._make_request(
+            "GET", f"/api/{self.API_VERSION}/cluster/members", token=token
+        )
+        if response is None:
+            return None
+        if not response.result:
+            return []
+        return [
+            ClusterMember(
+                name=member.get("name"),
+                id=member.get("id"),
+                address=member.get("address"),
+                api_address=member.get("api_address"),
+                role=member.get("role"),
+                leader=member.get("leader"),
+            )
+            for member in response.result
+        ]
+
+    def create_cluster_join_token(
+        self, server_name: str, token: str
+    ) -> CreateClusterMemberResponse | None:
+        """Create a one-time join token for a new cluster member."""
+        params = CreateClusterMemberParams(server_name=server_name)
+        response = self._make_request(
+            "POST",
+            f"/api/{self.API_VERSION}/cluster/members",
+            token=token,
+            data=asdict(params),
+        )
+        if response and response.result:
+            return CreateClusterMemberResponse(
+                server_name=response.result.get("server_name"),
+                join_token=response.result.get("join_token"),
+            )
+        return None
+
+    def delete_cluster_member(self, name_or_address: str, token: str) -> bool:
+        """Remove a cluster member by name or dqlite address. Return True on success."""
+        response = self._make_request(
+            "DELETE",
+            f"/api/{self.API_VERSION}/cluster/members/{name_or_address}",
+            token=token,
+        )
+        return response is not None
 
 
 def serialize(pem_string: str) -> list[str]:

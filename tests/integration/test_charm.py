@@ -18,11 +18,12 @@ from charmlibs.interfaces.tls_certificates import (
     CertificateSigningRequest,
     generate_ca,
     generate_certificate,
+    generate_csr,
     generate_private_key,
 )
 
 from charm import NOTARY_LOGIN_SECRET_LABEL
-from notary import Notary
+from notary import ClusterMember, Notary
 
 logger = logging.getLogger(__name__)
 
@@ -71,6 +72,20 @@ def juju(request: pytest.FixtureRequest):
                 )
             )
             logger.info("Wrote juju-debug.log and juju-units.yaml")
+
+
+def run_notary_pebble(juju: jubilant.Juju, unit: str, *command: str) -> str:
+    """Access workload Pebble through the charm container's shared socket."""
+    return juju.cli(
+        "ssh",
+        "--container",
+        "charm",
+        unit,
+        "env",
+        "PEBBLE_SOCKET=/charm/containers/notary/pebble.socket",
+        "/charm/bin/pebble",
+        *command,
+    )
 
 
 @contextmanager
@@ -124,44 +139,45 @@ def test_build_and_deploy(juju: jubilant.Juju, request: pytest.FixtureRequest):
 def test_given_tls_access_relation_when_related_and_unrelated_to_notary_then_certificates_replaced_correctly(
     juju: jubilant.Juju,
 ):
-    juju.wait(
-        lambda status: jubilant.all_active(status, APP_NAME, TLS_PROVIDER_APPLICATION_NAME),
-        error=lambda status: jubilant.any_error(status, APP_NAME),
-    )
-    first_ca = get_file_from_notary(juju, "ca.pem")
-    assert first_ca.startswith("-----BEGIN CERTIFICATE-----")
+    with fast_forward(juju, JUJU_FAST_INTERVAL):
+        juju.wait(
+            lambda status: jubilant.all_active(status, APP_NAME, TLS_PROVIDER_APPLICATION_NAME),
+            error=lambda status: jubilant.any_error(status, APP_NAME),
+        )
+        first_ca = get_file_from_notary(juju, "ca.pem")
+        assert first_ca.startswith("-----BEGIN CERTIFICATE-----")
 
-    juju.integrate(
-        app1=f"{APP_NAME}:access-certificates",
-        app2=f"{TLS_PROVIDER_APPLICATION_NAME}:certificates",
-    )
-    juju.wait(
-        lambda status: (
-            jubilant.all_agents_idle(status, APP_NAME, TLS_PROVIDER_APPLICATION_NAME)
-            and jubilant.all_active(status, APP_NAME, TLS_PROVIDER_APPLICATION_NAME)
-            and get_file_from_notary(juju, "ca.pem") != first_ca
-        ),
-        error=lambda status: jubilant.any_error(status, APP_NAME),
-    )
+        juju.integrate(
+            app1=f"{APP_NAME}:access-certificates",
+            app2=f"{TLS_PROVIDER_APPLICATION_NAME}:certificates",
+        )
+        juju.wait(
+            lambda status: (
+                jubilant.all_agents_idle(status, APP_NAME, TLS_PROVIDER_APPLICATION_NAME)
+                and jubilant.all_active(status, APP_NAME, TLS_PROVIDER_APPLICATION_NAME)
+                and get_file_from_notary(juju, "ca.pem") != first_ca
+            ),
+            error=lambda status: jubilant.any_error(status, APP_NAME),
+        )
 
-    new_ca = get_file_from_notary(juju, "ca.pem")
-    assert new_ca != first_ca
+        new_ca = get_file_from_notary(juju, "ca.pem")
+        assert new_ca != first_ca
 
-    juju.remove_relation(
-        app1=f"{APP_NAME}:access-certificates",
-        app2=f"{TLS_PROVIDER_APPLICATION_NAME}:certificates",
-    )
-    juju.wait(
-        lambda status: (
-            jubilant.all_agents_idle(status, APP_NAME, TLS_PROVIDER_APPLICATION_NAME)
-            and jubilant.all_active(status, APP_NAME, TLS_PROVIDER_APPLICATION_NAME)
-            and get_file_from_notary(juju, "ca.pem") != new_ca
-        ),
-        error=lambda status: jubilant.any_error(status, APP_NAME),
-    )
+        juju.remove_relation(
+            app1=f"{APP_NAME}:access-certificates",
+            app2=f"{TLS_PROVIDER_APPLICATION_NAME}:certificates",
+        )
+        juju.wait(
+            lambda status: (
+                jubilant.all_agents_idle(status, APP_NAME, TLS_PROVIDER_APPLICATION_NAME)
+                and jubilant.all_active(status, APP_NAME, TLS_PROVIDER_APPLICATION_NAME)
+                and get_file_from_notary(juju, "ca.pem") != new_ca
+            ),
+            error=lambda status: jubilant.any_error(status, APP_NAME),
+        )
 
-    final_ca = get_file_from_notary(juju, "ca.pem")
-    assert final_ca != new_ca
+        final_ca = get_file_from_notary(juju, "ca.pem")
+        assert final_ca != new_ca
 
 
 def test_given_notary_when_tls_requirer_related_then_csr_uploaded_to_notary_and_certificate_provided_to_requirer(
@@ -181,10 +197,12 @@ def test_given_notary_when_tls_requirer_related_then_csr_uploaded_to_notary_and_
         app1=f"{APP_NAME}:certificates",
         app2=f"{TLS_REQUIRER_APPLICATION_NAME}:certificates",
     )
+    # Both apps can still be active and idle before the relation hooks run.
     juju.wait(
         lambda status: (
             jubilant.all_agents_idle(status, APP_NAME, TLS_REQUIRER_APPLICATION_NAME)
             and jubilant.all_active(status, APP_NAME, TLS_REQUIRER_APPLICATION_NAME)
+            and len(client.list_certificate_requests(token)) == 1
         ),
         error=lambda status: jubilant.any_error(status, APP_NAME),
     )
@@ -211,6 +229,10 @@ def test_given_notary_when_tls_requirer_related_then_csr_uploaded_to_notary_and_
         lambda status: (
             jubilant.all_agents_idle(status, APP_NAME, TLS_REQUIRER_APPLICATION_NAME)
             and jubilant.all_active(status, APP_NAME, TLS_REQUIRER_APPLICATION_NAME)
+            and status.apps[TLS_REQUIRER_APPLICATION_NAME]
+            .units[f"{TLS_REQUIRER_APPLICATION_NAME}/0"]
+            .workload_status.message
+            == "1/1 certificate requests are fulfilled"
         ),
         error=lambda status: jubilant.any_error(status, APP_NAME),
     )
@@ -292,6 +314,104 @@ def assert_notary_reachable_through_ingress(juju: jubilant.Juju, ca_path: str) -
     raise AssertionError("Notary was not reachable through the Traefik ingress endpoint")
 
 
+def test_given_notary_when_scaled_out_then_dqlite_cluster_forms_and_scales_back(
+    juju: jubilant.Juju,
+):
+    """Check replicated data, leader failover, restart, and graceful scale-down."""
+    admin_credentials = get_notary_credentials(juju)
+    client = Notary(url=get_notary_endpoint(juju), ca_path=False)
+    login_response = client.login(admin_credentials["email"], admin_credentials["password"])
+    assert login_response and login_response.token
+    token = login_response.token
+    csr = str(generate_csr(private_key=generate_private_key(), common_name="scaling-test"))
+    assert client.create_certificate_request(csr, token)
+
+    with fast_forward(juju, JUJU_FAST_INTERVAL):
+        juju.add_unit(APP_NAME, num_units=2)
+        juju.wait(
+            lambda status: (
+                jubilant.all_agents_idle(status, APP_NAME)
+                and jubilant.all_active(status, APP_NAME)
+                and len(status.apps[APP_NAME].units) == 3
+            ),
+            error=lambda status: jubilant.any_error(status, APP_NAME),
+        )
+        members = _wait_for_cluster_members(client, token, 3, voters=3)
+
+    units = juju.status().apps[APP_NAME].units
+    clients = {
+        unit: Notary(url=f"https://{details.address}:2111", ca_path=False)
+        for unit, details in units.items()
+    }
+    for unit_client in clients.values():
+        _wait_for_request(unit_client, token, csr)
+
+    leader = next(member for member in members if member.leader)
+    leader_unit = next(unit for unit in units if unit.replace("/", "-") == leader.name)
+    survivor = next(unit_client for unit, unit_client in clients.items() if unit != leader_unit)
+    with fast_forward(juju, "60m"):
+        try:
+            run_notary_pebble(juju, leader_unit, "stop", "notary")
+            assert not clients[leader_unit].is_api_available()
+            _wait_for_request(survivor, token, csr)
+            failover_csr = str(
+                generate_csr(private_key=generate_private_key(), common_name="failover-test")
+            )
+            assert survivor.create_certificate_request(failover_csr, token)
+        finally:
+            run_notary_pebble(juju, leader_unit, "start", "notary")
+    _wait_for_request(clients[leader_unit], token, failover_csr)
+    with fast_forward(juju, JUJU_FAST_INTERVAL):
+        for remaining in (2, 1):
+            _wait_for_cluster_members(client, token, remaining + 1)
+            juju.remove_unit(APP_NAME, num_units=1)
+            juju.wait(
+                lambda status: (
+                    jubilant.all_agents_idle(status, APP_NAME)
+                    and jubilant.all_active(status, APP_NAME)
+                    and len(status.apps[APP_NAME].units) == remaining
+                ),
+                error=lambda status: jubilant.any_error(status, APP_NAME),
+            )
+            clients = {
+                unit: Notary(url=f"https://{details.address}:2111", ca_path=False)
+                for unit, details in juju.status().apps[APP_NAME].units.items()
+            }
+            client = next(iter(clients.values()))
+            _wait_for_cluster_members(client, token, remaining)
+            _wait_for_request(client, token, failover_csr)
+
+
+def _wait_for_request(client: Notary, token: str, csr: str, timeout: int = 120) -> None:
+    """Wait for persisted data to be readable through a specific unit."""
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if any(request.csr == csr for request in client.list_certificate_requests(token)):
+            return
+        time.sleep(5)
+    raise AssertionError(f"Certificate request not readable through {client.url}")
+
+
+def _wait_for_cluster_members(
+    client: Notary, token: str, count: int, timeout: int = 300, voters: int | None = None
+) -> list[ClusterMember]:
+    """Wait for named membership and, when requested, completed voter promotion."""
+    deadline = time.monotonic() + timeout
+    members = None
+    while time.monotonic() < deadline:
+        members = client.list_cluster_members(token)
+        if (
+            members is not None
+            and len(members) == count
+            and all(member.name for member in members)
+            and any(member.leader for member in members)
+            and (voters is None or sum(member.role == "voter" for member in members) == voters)
+        ):
+            return members
+        time.sleep(10)
+    raise AssertionError(f"expected {count} named members with voters={voters}, got {members}")
+
+
 def get_notary_endpoint(juju: jubilant.Juju) -> str:
     notary_ip = juju.status().apps[APP_NAME].units[f"{APP_NAME}/0"].address
     return f"https://{notary_ip}:2111"
@@ -333,8 +453,6 @@ def get_external_notary_endpoint(juju: jubilant.Juju) -> str:
 
 
 def get_file_from_notary(juju: jubilant.Juju, file_name: str) -> str:
-    result = juju.exec(
-        unit=f"{APP_NAME}/0",
-        command=f"sudo cat /var/lib/juju/storage/config/0/{file_name}",
+    return run_notary_pebble(
+        juju, f"{APP_NAME}/0", "pull", f"/etc/notary/config/{file_name}", "/dev/stdout"
     )
-    return result.stdout
