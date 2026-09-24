@@ -58,6 +58,11 @@ peers:
       (exchange of member addresses and one-time join tokens).
 
 requires:
+  s3-parameters:
+    interface: s3
+    limit: 1
+    optional: true
+    description: S3-compatible storage for Notary backups.
   access-certificates:
     interface: tls-certificates
     description: |
@@ -100,6 +105,8 @@ resources:
     upstream-source: ghcr.io/canonical/notary:1.0.0
 
 charm-libs:
+  - lib: data_platform_libs.s3
+    version: "0.6"
   - lib: grafana_k8s.grafana_dashboard
     version: "0.36"
   - lib: loki_k8s.loki_push_api
