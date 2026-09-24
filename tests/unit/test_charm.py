@@ -9,7 +9,7 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from threading import Thread
 from types import ModuleType
-from unittest.mock import MagicMock, Mock, patch
+from unittest.mock import MagicMock, Mock, PropertyMock, patch
 
 import ops
 import pytest
@@ -2986,9 +2986,11 @@ class TestCharm:
             leader=True,
         )
 
-        certificate, _, _, _ = self.example_certs_and_key()
+        certificate, ca, _, _ = self.example_certs_and_key()
         with open(tmp_path / "certificate.pem", "w") as f:
             f.write(str(certificate))
+
+        (tmp_path / "ca.pem").write_text(str(ca))
 
         with patch(
             "notary.Notary.__new__",
@@ -4037,6 +4039,112 @@ def _member(name: str, address: str, api_address: str = "") -> ClusterMember:
 class TestCharmCluster:
     """Tests for dqlite cluster coordination over the peer relation."""
 
+    @pytest.mark.parametrize("detached", [False, True])
+    def test_clients_read_workload_ca_without_storage_metadata(
+        self, context: Context[NotaryCharm], tmp_path: Path, detached: bool
+    ):
+        peer = PeerRelation(
+            endpoint=PEER_RELATION_NAME,
+            peers_data={1: {"api_address": "https://peer:2111"}},
+        )
+        state = self._base_state(
+            tmp_path,
+            leader=True,
+            peer_relation=peer,
+            with_db_state=True,
+            secrets={self._login_secret()},
+        )
+        ca = "workload CA certificate"
+        (tmp_path / "config/ca.pem").write_text(ca)
+        if detached:
+            state = replace(state, storages=set())
+        with (
+            patch.object(ops.Storage, "location", new_callable=PropertyMock) as location,
+            patch("charm.Notary", return_value=self._cluster_mock()) as clients,
+            patch.object(ops.Container, "stop"),
+        ):
+            location.side_effect = ops.ModelError("filesystem attachment not provisioned")
+            with context(context.on.remove(), state) as manager:
+                charm = manager.charm
+                relation = charm.model.get_relation(PEER_RELATION_NAME)
+                assert relation is not None
+                assert len(list(charm._cluster_clients(relation))) == 2
+                assert charm._remove_cluster_member_via_peers(
+                    [_member(PEER_MEMBER_NAME, "peer:9000")]
+                )
+                ca_path = clients.call_args.args[1]
+                assert Path(ca_path).read_text() == ca
+                assert all(call.args[1] == ca_path for call in clients.call_args_list)
+                manager.run()
+            location.assert_not_called()
+
+    def test_ca_copy_refreshes_on_next_hook(self, context: Context[NotaryCharm], tmp_path: Path):
+        state = self._base_state(tmp_path, leader=True, with_db_state=True)
+        for ca in ("original CA", "replacement CA"):
+            (tmp_path / "config/ca.pem").write_text(ca)
+            with context(context.on.collect_unit_status(), state) as manager:
+                assert Path(manager.charm._ca_certificate_path).read_text() == ca
+                manager.run()
+
+    def test_unchanged_pebble_layer_is_not_added_again(
+        self, context: Context[NotaryCharm], tmp_path: Path
+    ):
+        state = self._base_state(tmp_path, leader=True, with_db_state=True)
+        with patch("charm.Notary", return_value=self._cluster_mock()):
+            configured = context.run(context.on.update_status(), state)
+            assert "notary" in configured.get_container("notary").plan.services
+            with patch.object(ops.Container, "add_layer") as add_layer:
+                out = context.run(context.on.update_status(), configured)
+            assert out.unit_status == ops.ActiveStatus()
+        add_layer.assert_not_called()
+
+    def test_restart_survives_pebble_timeout_after_config_change(
+        self, context: Context[NotaryCharm], tmp_path: Path
+    ):
+        state = self._base_state(tmp_path, leader=True, with_db_state=True)
+        with patch("charm.Notary", return_value=self._cluster_mock()):
+            configured = context.run(context.on.update_status(), state)
+            (tmp_path / "config/config.yaml").write_text("port: 9999\n")
+            with patch.object(ops.Container, "replan", side_effect=TimeoutError("timed out")):
+                waiting = context.run(context.on.update_status(), configured)
+            assert waiting.unit_status == ops.WaitingStatus("waiting for workload container")
+            with patch.object(ops.Container, "restart") as restart:
+                recovered = context.run(context.on.update_status(), waiting)
+            restart.assert_called_once_with("notary")
+            assert recovered.unit_status == ops.ActiveStatus()
+
+    @pytest.mark.parametrize("operation", ["pull", "add_layer"])
+    @pytest.mark.parametrize("error", [TimeoutError, ops.pebble.ConnectionError])
+    def test_pebble_failure_waits_and_recovers_on_next_event(
+        self,
+        context: Context[NotaryCharm],
+        tmp_path: Path,
+        operation: str,
+        error: type[Exception],
+    ):
+        peer = PeerRelation(endpoint=PEER_RELATION_NAME)
+        state = self._base_state(tmp_path, leader=True, peer_relation=peer)
+        with (
+            patch("charm.Notary", return_value=self._cluster_mock()),
+            patch.object(ops.Container, operation, side_effect=error("temporarily unavailable")),
+        ):
+            waiting = context.run(context.on.update_status(), state)
+        assert waiting.unit_status == ops.WaitingStatus("waiting for workload container")
+        with patch("charm.Notary", return_value=self._cluster_mock()):
+            recovered = context.run(context.on.update_status(), waiting)
+        assert recovered.unit_status == ops.ActiveStatus()
+        assert "notary" in recovered.get_container("notary").plan.services
+
+    def test_status_waits_when_pebble_times_out(
+        self, context: Context[NotaryCharm], tmp_path: Path
+    ):
+        state = self._base_state(tmp_path, leader=True, with_db_state=True)
+        with (
+            patch.object(ops.Container, "pull", side_effect=TimeoutError("timed out")),
+        ):
+            out = context.run(context.on.collect_unit_status(), state)
+        assert out.unit_status == ops.WaitingStatus("waiting for workload container")
+
     def test_follower_publishes_its_own_access_certificate_request(self, tmp_path: Path):
         context = Context(NotaryCharm, unit_id=1)
         relation = Relation(endpoint=TLS_ACCESS_RELATION_NAME, interface="tls-certificates")
@@ -4139,6 +4247,7 @@ class TestCharmCluster:
         (tmp_path / "config").mkdir(parents=True, exist_ok=True)
         (tmp_path / "db").mkdir(parents=True, exist_ok=True)
         if with_db_state:
+            (tmp_path / "config/ca.pem").write_text("workload CA certificate")
             (tmp_path / "db" / "dqlite").mkdir(parents=True, exist_ok=True)
             (tmp_path / "db" / "dqlite" / "info.yaml").write_text("ID: 1\n")
         return State(
@@ -4222,14 +4331,13 @@ class TestCharmCluster:
         remote = self._cluster_mock(
             **{"list_cluster_members.return_value": [_member(PEER_MEMBER_NAME, "peer:9000")]}
         )
-        with patch("charm.Notary", side_effect=[local, remote, remote]) as clients:
+        with patch(
+            "charm.Notary", side_effect=lambda url, ca_path: remote if url == peer_url else local
+        ) as clients:
             out = context.run(context.on.leader_elected(), state)
         remote.create_cluster_join_token.assert_called_with(SELF_MEMBER_NAME, "test-token")
         local.create_cluster_join_token.assert_not_called()
-        assert clients.call_args_list[1].args == (
-            peer_url,
-            "/var/lib/juju/storage/config/0/ca.pem",
-        )
+        assert any(call.args[0] == peer_url for call in clients.call_args_list)
         config = yaml.safe_load((tmp_path / "config/config.yaml").read_text())
         assert config["cluster"]["join_token"] == "join-token-1"
         assert "notary" in out.get_container("notary").plan.services
@@ -4364,16 +4472,20 @@ class TestCharmCluster:
             context(context.on.update_status(), state) as manager,
         ):
             charm = manager.charm
-            assert charm._configure_notary_config_file()
+            charm._configure_notary_config_file()
+            assert charm._stored.restart_required
+            charm._stored.restart_required = False
             config_path = tmp_path / "config/config.yaml"
             config = yaml.safe_load(config_path.read_text())
             config["cluster"]["join_token"] = "spent-token"
             config_path.write_text(yaml.safe_dump(config))
-            assert not charm._configure_notary_config_file()
+            charm._configure_notary_config_file()
+            assert not charm._stored.restart_required
             assert "join_token" not in yaml.safe_load(config_path.read_text())["cluster"]
             config["port"] = 1234
             config_path.write_text(yaml.safe_dump(config))
-            assert charm._configure_notary_config_file()
+            charm._configure_notary_config_file()
+            assert charm._stored.restart_required
 
     def test_given_stale_token_and_member_not_joined_when_configure_then_token_reminted(
         self, context: Context[NotaryCharm], tmp_path: Path
@@ -4503,10 +4615,7 @@ class TestCharmCluster:
             calls.attach_mock(stop, "stop")
             context.run(context.on.remove(), state)
 
-        assert clients.call_args_list[1].args == (
-            peer_url,
-            "/var/lib/juju/storage/config/0/ca.pem",
-        )
+        assert clients.call_args_list[1].args[0] == peer_url
         mock.delete_cluster_member.assert_not_called()
         peer_client.delete_cluster_member.assert_called_once_with(SELF_MEMBER_NAME, "test-token")
         assert [call[0] for call in calls.mock_calls] == ["remove", "stop"]
@@ -4858,7 +4967,7 @@ class TestNotaryClient:
         assert request.call_args.kwargs["verify"] == "/trusted/ca.pem"
 
 
-class TestIntegrationDiagnostics:
+class TestIntegrationHelpers:
     @pytest.fixture
     def helpers(self):
         path = Path(__file__).parents[1] / "integration/test_charm.py"
@@ -4868,9 +4977,26 @@ class TestIntegrationDiagnostics:
         spec.loader.exec_module(module)
         return module
 
+    def test_file_reads_use_workload_mount(self, helpers: ModuleType):
+        juju = Mock()
+        juju.cli.return_value = "certificate content"
+        assert helpers.get_file_from_notary(juju, "ca.pem") == "certificate content"
+        juju.cli.assert_called_once_with(
+            "ssh",
+            "--container",
+            "charm",
+            "notary-k8s/0",
+            "env",
+            "PEBBLE_SOCKET=/charm/containers/notary/pebble.socket",
+            "/charm/bin/pebble",
+            "pull",
+            "/etc/notary/config/ca.pem",
+            "/dev/stdout",
+        )
+
     @pytest.mark.parametrize(
         "command",
-        [("stop", "notary"), ("start", "notary"), ("services",), ("logs", "-n", "200", "notary")],
+        [("stop", "notary"), ("start", "notary")],
     )
     def test_pebble_uses_charm_container_socket(
         self, helpers: ModuleType, command: tuple[str, ...]
@@ -4890,52 +5016,3 @@ class TestIntegrationDiagnostics:
             "/charm/bin/pebble",
             *command,
         )
-
-    def test_collection_requests_bounded_pebble_logs(
-        self, helpers: ModuleType, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ):
-        monkeypatch.chdir(tmp_path)
-        juju = Mock()
-        juju.debug_log.return_value = "hook logs"
-        juju.cli.return_value = "unit data"
-        juju.status.return_value.apps = {helpers.APP_NAME: Mock(units={"notary-k8s/0": Mock()})}
-        with patch.object(helpers, "run_notary_pebble", return_value="workload output") as pebble:
-            helpers.collect_failure_diagnostics(juju)
-
-        assert [entry.args for entry in pebble.call_args_list] == [
-            (juju, "notary-k8s/0", "services"),
-            (juju, "notary-k8s/0", "logs", "-n", "200", "notary"),
-        ]
-        assert "workload output" in (tmp_path / "juju-debug.log").read_text()
-
-    def test_snapshots_are_appended(
-        self, helpers: ModuleType, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ):
-        monkeypatch.chdir(tmp_path)
-        helpers.append_diagnostic("juju-debug.log", "first", lambda: "first failure")
-        helpers.append_diagnostic("juju-debug.log", "second", lambda: "later failure")
-        content = (tmp_path / "juju-debug.log").read_text()
-        assert "first failure" in content
-        assert "later failure" in content
-
-    def test_collection_failure_preserves_fail_fast_result(
-        self, helpers: ModuleType, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ):
-        monkeypatch.chdir(tmp_path)
-        juju = Mock()
-        juju.debug_log.side_effect = RuntimeError("controller unavailable")
-        juju.status.side_effect = RuntimeError("controller unavailable")
-        with patch.object(helpers.jubilant, "any_error", return_value=True):
-            assert helpers.on_app_error(juju)(Mock()) is True
-
-    def test_timeout_triggers_collection(self, helpers: ModuleType):
-        request = Mock()
-        request.session.testsfailed = 0
-        juju = Mock()
-        fixture = helpers.capture_test_failure.__wrapped__(juju, request)
-        next(fixture)
-        request.session.testsfailed = 1
-        with patch.object(helpers, "collect_failure_diagnostics") as collect:
-            with pytest.raises(StopIteration):
-                next(fixture)
-        collect.assert_called_once_with(juju)

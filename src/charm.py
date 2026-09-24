@@ -13,6 +13,7 @@ import time
 from contextlib import suppress
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
+from functools import cached_property
 from typing import Iterator
 
 import ops
@@ -53,7 +54,6 @@ PEER_RELATION_NAME = "notary-peers"
 
 DB_MOUNT = "database"
 CONFIG_MOUNT = "config"
-CHARM_PATH = "/var/lib/juju/storage"
 WORKLOAD_CONFIG_PATH = "/etc/notary"
 WORKLOAD_DB_PATH = "/var/lib"
 
@@ -107,8 +107,12 @@ class JoinTokenRecord:
 class NotaryCharm(ops.CharmBase):
     """Charmed Notary."""
 
+    _stored = ops.StoredState()
+
     def __init__(self, framework: ops.Framework):
         super().__init__(framework)
+        self._stored.set_default(restart_required=False)
+        self._pebble_unavailable = False
         self.port = 2111
         self.access_csr = CertificateRequestAttributes(
             common_name="Notary",
@@ -158,10 +162,6 @@ class NotaryCharm(ops.CharmBase):
         )
         self.certificate_transfer = CertificateTransferProvides(
             self, SEND_ACCESS_CA_CERT_RELATION_NAME
-        )
-        self.client = Notary(
-            f"https://{socket.getfqdn()}:{self.port}",
-            f"{CHARM_PATH}/{CONFIG_MOUNT}/0/ca.pem",
         )
         [
             framework.observe(event, self.configure)
@@ -229,7 +229,7 @@ class NotaryCharm(ops.CharmBase):
             # the persisted dqlite host to reach this specific surviving unit.
             host = member.address.rsplit(":", 1)[0]
             address = f"https://{host}:{self.port}"
-            clients.append(Notary(address, f"{CHARM_PATH}/{CONFIG_MOUNT}/0/ca.pem"))
+            clients.append(Notary(address, self._ca_certificate_path))
         for attempt in range(CLUSTER_MEMBER_REMOVAL_ATTEMPTS):
             for client in clients:
                 token = self._get_valid_admin_token(client)
@@ -250,27 +250,38 @@ class NotaryCharm(ops.CharmBase):
 
     def configure(self, event: ops.EventBase):
         """Handle configuration events."""
+        try:
+            self._configure()
+        except (TimeoutError, ops.pebble.ConnectionError) as error:
+            logger.warning("Workload container temporarily unavailable: %s", error)
+            self._pebble_unavailable = True
+
+    def _configure(self):
+        """Reconcile workload configuration."""
         if not self.container.can_connect() or not self._storages_attached():
             return
         self._sync_peer_relation_data()
         self._coordinate_bootstrap()
-        certificates_changed = self._configure_access_certificates()
+        self._configure_access_certificates()
         if not self._cluster_prerequisites_met():
             if self._certificates_available():
                 self._reconcile_cluster_membership()
             if not self._cluster_prerequisites_met():
                 return
-        config_changed = self._configure_notary_config_file()
+        self._configure_notary_config_file()
         if not self._certificates_available():
             return
         service_was_running = False
         with suppress(ops.ModelError):
             service_was_running = self.container.get_service("notary").is_running()
         self._configure_pebble_plan()
-        if service_was_running and (config_changed or certificates_changed):
+        if service_was_running and self._stored.restart_required:
             logger.info("Configuration or certificates changed. Restarting service.")
             with suppress(ops.pebble.ChangeError):
                 self.container.restart("notary")
+                self._stored.restart_required = False
+        elif not service_was_running:
+            self._stored.restart_required = False
         if not self.unit.is_leader():
             return
         self._configure_charm_authorization()
@@ -280,6 +291,16 @@ class NotaryCharm(ops.CharmBase):
         self._configure_juju_workload_version()
 
     def _on_collect_status(self, event: ops.CollectStatusEvent):
+        if self._pebble_unavailable:
+            event.add_status(ops.WaitingStatus("waiting for workload container"))
+            return
+        try:
+            self._collect_status(event)
+        except (TimeoutError, ops.pebble.ConnectionError) as error:
+            logger.warning("Workload container temporarily unavailable: %s", error)
+            event.add_status(ops.WaitingStatus("waiting for workload container"))
+
+    def _collect_status(self, event: ops.CollectStatusEvent):
         if not self.container.can_connect():
             event.add_status(ops.WaitingStatus("container not yet connectable"))
             return
@@ -303,16 +324,14 @@ class NotaryCharm(ops.CharmBase):
     ## Configure Dependencies ##
     def _configure_pebble_plan(self):
         """Add the Pebble layer and replan."""
-        self.container.add_layer("notary", self._pebble_layer, combine=True)
+        layer = ops.pebble.Layer(self._pebble_layer)
+        if self.container.get_plan().services.get("notary") != layer.services["notary"]:
+            self.container.add_layer("notary", layer, combine=True)
         with suppress(ops.pebble.ChangeError):
             self.container.replan()
 
-    def _configure_notary_config_file(self) -> bool:
-        """Push the config file if it has changed or doesn't exist.
-
-        Returns:
-            bool: True if the config file was (re)written and Notary must be restarted.
-        """
+    def _configure_notary_config_file(self) -> None:
+        """Push changed config and record whether the workload needs a restart."""
         desired_config = yaml.dump(
             data={
                 "key_path": f"{WORKLOAD_CONFIG_PATH}/config/private_key.pem",
@@ -344,7 +363,7 @@ class NotaryCharm(ops.CharmBase):
             ).read()
             if existing_config == desired_config:
                 logger.info("Config file already up to date.")
-                return False
+                return
             existing_data = yaml.safe_load(existing_config)
             desired_data = yaml.safe_load(desired_config)
             if isinstance(existing_data, dict) and isinstance(existing_data.get("cluster"), dict):
@@ -356,12 +375,14 @@ class NotaryCharm(ops.CharmBase):
         except yaml.YAMLError:
             pass
         self.container.make_dir(path=f"{WORKLOAD_CONFIG_PATH}/config", make_parents=True)
+        # Retain the restart across hooks if Pebble becomes unavailable after writing.
+        if restart_required:
+            self._stored.restart_required = True
         self.container.push(
             path=f"{WORKLOAD_CONFIG_PATH}/config/config.yaml",
             source=desired_config,
         )
         logger.info("Config file updated.")
-        return restart_required
 
     @property
     def _cluster_config(self) -> dict[str, str]:
@@ -396,23 +417,20 @@ class NotaryCharm(ops.CharmBase):
         except ops.pebble.PathError:
             return False
 
-    def _configure_access_certificates(self) -> bool:
-        """Write access certificates and report whether they changed."""
-        certificates_changed = False
+    def _configure_access_certificates(self) -> None:
+        """Write access certificates when they change."""
         if not self._tls_access_relation_active():
             ca = self._get_or_create_self_signed_ca()
             if ca is None:
                 logger.info(
                     "Self-signed CA not available yet, skipping certificate configuration."
                 )
-                return False
+                return
             ca_certificate, ca_private_key = ca
             if not self._self_signed_certificates_generated(ca_certificate):
-                certificates_changed = True
                 self._generate_self_signed_certificates(ca_certificate, ca_private_key)
         else:
-            certificates_changed = self._store_certificate_from_access_relation_if_available()
-        return certificates_changed
+            self._store_certificate_from_access_relation_if_available()
 
     def _cluster_join_pending(self) -> bool:
         """Return whether dqlite still marks its first admission as incomplete."""
@@ -541,6 +559,24 @@ class NotaryCharm(ops.CharmBase):
             self.unit.set_workload_version(version)
 
     ## Properties ##
+    @cached_property
+    def _ca_certificate_path(self) -> str:
+        """Copy the workload CA locally for HTTPS clients once per hook.
+
+        Juju's storage paths differ between versions, and storage metadata may
+        be unavailable during startup or removal. The workload mount is stable.
+        """
+        with self.container.pull(f"{WORKLOAD_CONFIG_PATH}/{CONFIG_MOUNT}/ca.pem") as source:
+            ca = source.read()
+        path = self.charm_dir / "notary-ca.pem"
+        path.write_text(ca)
+        return str(path)
+
+    @cached_property
+    def client(self) -> Notary:
+        """Create the local client when needed, after storage is attached."""
+        return Notary(f"https://{socket.getfqdn()}:{self.port}", self._ca_certificate_path)
+
     @property
     def _pebble_layer(self) -> ops.pebble.LayerDict:
         """Return a dictionary representing a Pebble layer."""
@@ -650,7 +686,7 @@ class NotaryCharm(ops.CharmBase):
             yield self.client
         for unit in sorted(relation.units, key=lambda unit: unit.name):
             if address := relation.data[unit].get("api_address"):
-                yield Notary(address, f"{CHARM_PATH}/{CONFIG_MOUNT}/0/ca.pem")
+                yield Notary(address, self._ca_certificate_path)
 
     def _reconcile_join_tokens(
         self, relation: ops.Relation, members: list[ClusterMember], token: str, client: Notary
@@ -739,7 +775,7 @@ class NotaryCharm(ops.CharmBase):
         """Bump a version key in the peer app databag.
 
         Writes to a peer relation's application databag trigger a
-        relation-changed event on every unit (including the leader), so units
+        relation-changed event on the other units, so units
         waiting for a join token or the self-signed CA re-run configure promptly
         instead of waiting for the next update-status.
         """
@@ -753,22 +789,18 @@ class NotaryCharm(ops.CharmBase):
         )
 
     ## Helpers ##
-    def _store_certificate_from_access_relation_if_available(self) -> bool:
-        """Check if the requirer object has a certificate assigned. Save it to the workload if so.
-
-        Returns:
-            bool: True if a new certificate was saved.
-        """
+    def _store_certificate_from_access_relation_if_available(self) -> None:
+        """Write the assigned access certificate when it changes."""
         try:
             cert, pk = self.tls_access.get_assigned_certificate(
                 certificate_request=self.access_csr
             )
         except (KeyError, TypeError, ValueError) as error:
             logger.info("Access certificate relation is not ready: %s", error)
-            return False
+            return
         if not cert or not pk or not cert.ca:
             logger.info("Access certificate relation is not fully available yet.")
-            return False
+            return
         try:
             saved_cert = self.container.pull(
                 f"{WORKLOAD_CONFIG_PATH}/{CONFIG_MOUNT}/certificate.pem",
@@ -776,9 +808,8 @@ class NotaryCharm(ops.CharmBase):
         except ops.pebble.PathError:
             saved_cert = None
         if str(cert.certificate) == saved_cert:
-            return False
+            return
         self._push_files_to_workload(cert.ca, cert.certificate, pk)
-        return True
 
     def _get_or_create_self_signed_ca(self) -> tuple[Certificate, PrivateKey] | None:
         """Return the shared self-signed CA from the app secret, creating it on the leader if needed.
@@ -917,6 +948,8 @@ class NotaryCharm(ops.CharmBase):
         private_key: PrivateKey | None,
     ) -> None:
         """Push all given files to workload."""
+        if ca_certificate or certificate or private_key:
+            self._stored.restart_required = True
         if ca_certificate:
             self.container.push(
                 f"{WORKLOAD_CONFIG_PATH}/{CONFIG_MOUNT}/ca.pem",
