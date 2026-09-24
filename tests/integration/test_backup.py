@@ -3,6 +3,7 @@
 
 """Opt-in round trip against a real S3 bucket and a single-unit Notary deployment."""
 
+import base64
 import json
 import os
 from pathlib import Path
@@ -27,10 +28,20 @@ def s3_configuration() -> dict[str, str]:
     return {name: os.environ[name] for name in required}
 
 
+@pytest.mark.parametrize("custom_ca", [False, True], ids=["standard", "private-ca"])
 def test_backup_list_restore_round_trip(
-    request: pytest.FixtureRequest, s3_configuration: dict[str, str]
+    request: pytest.FixtureRequest, s3_configuration: dict[str, str], custom_ca: bool
 ) -> None:
     """Restore removes post-backup writes while preserving pre-backup data."""
+    endpoint = s3_configuration["S3_TEST_ENDPOINT"]
+    ca_bundle = ""
+    if custom_ca:
+        endpoint = os.environ.get("S3_TLS_TEST_ENDPOINT", "")
+        ca_path = os.environ.get("S3_TEST_CA_FILE", "")
+        if not endpoint or not ca_path:
+            pytest.skip("Set S3_TLS_TEST_ENDPOINT and S3_TEST_CA_FILE for private CA coverage")
+        assert endpoint.startswith("https://")
+        ca_bundle = base64.b64encode(Path(ca_path).read_bytes()).decode()
     charm = Path(str(request.config.getoption("--charm_path"))).resolve()
     metadata = yaml.safe_load(Path("charmcraft.yaml").read_text())
     app = "notary-backup-test"
@@ -47,7 +58,7 @@ def test_backup_list_restore_round_trip(
             "s3-integrator",
             channel="latest/stable",
             config={
-                "endpoint": s3_configuration["S3_TEST_ENDPOINT"],
+                "endpoint": endpoint,
                 "bucket": s3_configuration["S3_TEST_BUCKET"],
                 "region": os.environ.get("S3_TEST_REGION", "us-east-1"),
                 "path": prefix,
@@ -64,6 +75,12 @@ def test_backup_list_restore_round_trip(
         ).raise_on_failure()
         juju.integrate(f"{app}:s3-parameters", "s3-integrator:s3-credentials")
         juju.wait(lambda status: jubilant.all_active(status, app, "s3-integrator"))
+        if custom_ca:
+            with pytest.raises(jubilant.TaskError) as failure:
+                juju.run(f"{app}/leader", "create-backup", wait=600)
+            assert "SSLError" in failure.value.task.message
+            juju.config("s3-integrator", {"tls-ca-chain": ca_bundle})
+            juju.wait(lambda status: jubilant.all_agents_idle(status, app, "s3-integrator"))
         address = juju.status().apps[app].units[f"{app}/0"].address
         client = Notary(f"https://{address}:2111", ca_path=False)
         credentials = juju.show_secret(NOTARY_LOGIN_SECRET_LABEL, reveal=True).content
@@ -89,12 +106,40 @@ def test_backup_list_restore_round_trip(
         assert key in json.loads(listed.results["backup-ids"])
         assert client.create_certificate_request(after, login.token) is not None
         assert after in {entry.csr for entry in client.list_certificate_requests(login.token)}
-        restored = juju.run(f"{app}/leader", "restore-backup", {"backup-id": key}, wait=600)
+        restored = juju.run(
+            f"{app}/leader",
+            "restore-backup",
+            {"backup-id": key.removeprefix(f"{prefix}/")},
+            wait=600,
+        )
         restored.raise_on_failure()
-        assert restored.results["restored"] == key
+        assert restored.results["restored"] == key.removeprefix(f"{prefix}/")
         juju.wait(lambda status: jubilant.all_active(status, app))
         login = client.login(credentials["email"], credentials["password"])
         assert login is not None
         requests = {entry.csr for entry in client.list_certificate_requests(login.token)}
         assert before in requests
         assert after not in requests
+
+        # Changing the path must not prevent restoring an older root-level archive.
+        juju.config("s3-integrator", {"path": ""})
+        juju.wait(lambda _: key not in _backup_ids(juju, app))
+        legacy = juju.run(f"{app}/leader", "create-backup", wait=600).results["backup-id"]
+        assert legacy.startswith("notary-backup-")
+        juju.config("s3-integrator", {"path": prefix})
+        juju.wait(lambda _: key in _backup_ids(juju, app))
+        assert legacy not in _backup_ids(juju, app)
+        assert client.create_certificate_request(after, login.token) is not None
+        restored = juju.run(f"{app}/leader", "restore-backup", {"backup-id": legacy}, wait=600)
+        assert restored.results["restored"] == legacy
+        juju.wait(lambda status: jubilant.all_active(status, app))
+        login = client.login(credentials["email"], credentials["password"])
+        assert login is not None
+        requests = {entry.csr for entry in client.list_certificate_requests(login.token)}
+        assert before in requests
+        assert after not in requests
+
+
+def _backup_ids(juju: jubilant.Juju, app: str) -> list[str]:
+    """Read backup IDs to confirm that a changed relation path has propagated."""
+    return json.loads(juju.run(f"{app}/leader", "list-backups").results["backup-ids"])

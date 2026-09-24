@@ -103,13 +103,9 @@ class BackupManager:
 
     def restore_backup(self, key: str) -> None:
         """Validate a same-unit archive before replacing the offline database."""
-        prefix = f"{self.parameters.path}{BACKUP_PREFIX}"
-        if not key.startswith(prefix) or not key.endswith(".tar.gz"):
-            raise BackupError(
-                "backup-id must be a full Notary backup key in the configured S3 path"
-            )
+        candidates = self._restore_candidates(key)
         with s3_client(self.parameters) as client, TemporaryFile() as archive:
-            response = client.get_object(Bucket=self.parameters.bucket, Key=key)
+            response = self._get_backup_object(client, candidates)
             body = response["Body"]
             try:
                 metadata = response.get("Metadata", {})
@@ -129,6 +125,32 @@ class BackupManager:
                 path = f"{directory}/restore.tar.gz"
                 self.container.push(path, archive, permissions=0o600)
                 self._replace_database(path)
+
+    def _restore_candidates(self, key: str) -> list[str]:
+        """Resolve full keys directly, or try an unprefixed ID before its legacy root key."""
+        path = self.parameters.path
+        name = key[len(path) :] if path and key.startswith(path) else key
+        if "/" in name or not name.startswith(BACKUP_PREFIX) or not name.endswith(".tar.gz"):
+            raise BackupError(
+                "backup-id must be a Notary backup ID or a full key in the configured S3 path"
+            )
+        if path and not key.startswith(path):
+            return [f"{path}{key}", key]
+        return [key]
+
+    def _get_backup_object(self, client: Any, candidates: list[str]) -> Any:
+        """Fall back only for a missing object, never for permission or transport failures."""
+        for key in candidates:
+            try:
+                return client.get_object(Bucket=self.parameters.bucket, Key=key)
+            except ClientError as error:
+                if error.response.get("Error", {}).get("Code") not in (
+                    "NoSuchKey",
+                    "404",
+                    "NotFound",
+                ):
+                    raise
+        raise BackupError("Backup not found in the configured S3 path or at the bucket root")
 
     def _validate_archive(self, archive: BinaryIO) -> None:
         """Reject unsafe entries and verify single-member dqlite identity."""

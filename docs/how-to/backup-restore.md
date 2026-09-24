@@ -61,7 +61,12 @@ Notary workload is unavailable, and does not interrupt service.
 juju run notary-k8s/leader restore-backup backup-id=notary/notary-backup-EXAMPLE.tar.gz
 ```
 
-Use the exact key from `list-backups`. Restoring **replaces the database** with
+Use the exact key from `list-backups`, or an unprefixed Notary backup ID.
+For an unprefixed ID, restore tries the configured path first, then the bucket
+root if the object is missing. This allows restoration of backups created before
+a path was configured. A full prefixed key is fetched directly. Authentication,
+network, checksum, and identity errors never trigger fallback. Listing remains
+scoped to the configured path; clear the path temporarily to list root backups. Restoring **replaces the database** with
 its earlier contents. Only archives created by this charm on the same unit,
 model, application, and dqlite address are accepted. The unit must still have
 single-member cluster state on disk; removing Juju peers alone does not make a
@@ -97,4 +102,13 @@ PYTHONPATH=lib:src uv run pytest tests/integration/test_backup.py --charm_path=/
 The endpoint must be reachable from the deployed charm, and the runner must be
 able to reach the Notary unit API. The test creates certificate requests before
 and after backup and verifies that restore retains only the earlier request.
-It uses a unique S3 prefix; delete that prefix after testing.
+It uses a unique S3 prefix and creates one legacy root-level archive; delete the
+prefix and that archive after testing. It checks both short IDs and restoration
+of a root-level backup after configuring a path.
+
+For the private-CA variant, also set `S3_TLS_TEST_ENDPOINT` to an HTTPS endpoint
+signed by a private CA and `S3_TEST_CA_FILE` to its PEM CA bundle. It must accept
+the same bucket and credentials. The test first checks that backup fails without
+the CA, then configures `tls-ca-chain` and exercises create, list, and restore.
+The local unit suite also tests real boto3 HTTPS connections with a temporary CA,
+including rejection when that CA is absent.
