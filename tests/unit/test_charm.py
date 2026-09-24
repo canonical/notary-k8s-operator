@@ -3,6 +3,7 @@
 
 import importlib.util
 import json
+from collections.abc import Callable
 from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from http.server import BaseHTTPRequestHandler, HTTPServer
@@ -5014,6 +5015,58 @@ class TestIntegrationHelpers:
         module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)
         return module
+
+    def test_certificate_integration_waits_for_relation_results(self, helpers: ModuleType):
+        juju = Mock()
+        client = Mock()
+        client.login.return_value.token = "token"
+        client.list_certificate_requests.return_value = []
+        request = Mock(
+            csr=str(generate_csr(private_key=generate_private_key(), common_name="test")),
+            certificate_chain=[],
+        )
+        status = Mock()
+        unit = Mock()
+        unit.workload_status.message = "0/1 certificate requests are fulfilled"
+        status.apps = {
+            helpers.TLS_REQUIRER_APPLICATION_NAME: Mock(
+                units={f"{helpers.TLS_REQUIRER_APPLICATION_NAME}/0": unit}
+            )
+        }
+        waits = 0
+
+        def wait(ready: Callable[[Mock], bool], **kwargs: object) -> None:
+            nonlocal waits
+            # Active/idle status alone must not satisfy either relation operation.
+            assert not ready(status)
+            if waits == 0:
+                client.list_certificate_requests.return_value = [request]
+            else:
+                unit.workload_status.message = "1/1 certificate requests are fulfilled"
+            assert ready(status)
+            waits += 1
+
+        juju.wait.side_effect = wait
+        with (
+            patch.object(
+                helpers,
+                "get_notary_credentials",
+                return_value={"email": "admin@example.com", "password": "password"},
+            ),
+            patch.object(helpers, "get_notary_endpoint", return_value="https://notary:2111"),
+            patch.object(helpers, "Notary", return_value=client),
+            patch.object(helpers.jubilant, "all_agents_idle", return_value=True),
+            patch.object(helpers.jubilant, "all_active", return_value=True),
+            patch.object(
+                helpers,
+                "get_first_certificate_from_requirer",
+                side_effect=lambda _: client.create_certificate_from_csr.call_args.args[1][0],
+            ),
+        ):
+            helpers.test_given_notary_when_tls_requirer_related_then_csr_uploaded_to_notary_and_certificate_provided_to_requirer(
+                juju
+            )
+        assert waits == 2
 
     def test_file_reads_use_workload_mount(self, helpers: ModuleType):
         juju = Mock()

@@ -197,10 +197,12 @@ def test_given_notary_when_tls_requirer_related_then_csr_uploaded_to_notary_and_
         app1=f"{APP_NAME}:certificates",
         app2=f"{TLS_REQUIRER_APPLICATION_NAME}:certificates",
     )
+    # Both apps can still be active and idle before the relation hooks run.
     juju.wait(
         lambda status: (
             jubilant.all_agents_idle(status, APP_NAME, TLS_REQUIRER_APPLICATION_NAME)
             and jubilant.all_active(status, APP_NAME, TLS_REQUIRER_APPLICATION_NAME)
+            and len(client.list_certificate_requests(token)) == 1
         ),
         error=lambda status: jubilant.any_error(status, APP_NAME),
     )
@@ -227,6 +229,10 @@ def test_given_notary_when_tls_requirer_related_then_csr_uploaded_to_notary_and_
         lambda status: (
             jubilant.all_agents_idle(status, APP_NAME, TLS_REQUIRER_APPLICATION_NAME)
             and jubilant.all_active(status, APP_NAME, TLS_REQUIRER_APPLICATION_NAME)
+            and status.apps[TLS_REQUIRER_APPLICATION_NAME]
+            .units[f"{TLS_REQUIRER_APPLICATION_NAME}/0"]
+            .workload_status.message
+            == "1/1 certificate requests are fulfilled"
         ),
         error=lambda status: jubilant.any_error(status, APP_NAME),
     )
