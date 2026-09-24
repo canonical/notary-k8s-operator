@@ -18,6 +18,7 @@ from typing import Iterator
 
 import ops
 import yaml
+from botocore.exceptions import BotoCoreError, ClientError
 from charmlibs.interfaces.certificate_transfer import CertificateTransferProvides
 from charmlibs.interfaces.tls_certificates import (
     Certificate,
@@ -40,6 +41,7 @@ from charms.tempo_coordinator_k8s.v0.charm_tracing import trace_charm
 from charms.tempo_coordinator_k8s.v0.tracing import TracingEndpointRequirer, charm_tracing_config
 from charms.traefik_k8s.v2.ingress import IngressPerAppRequirer
 
+from backup import BackupError, BackupManager
 from notary import ClusterMember, Notary
 from s3 import S3Parameters
 from utils import is_valid_hostname
@@ -194,6 +196,61 @@ class NotaryCharm(ops.CharmBase):
         framework.observe(self.on.collect_app_status, self._on_collect_status)
         framework.observe(self.on.collect_unit_status, self._on_collect_status)
         framework.observe(self.on.remove, self._on_remove)
+        framework.observe(self.on.create_backup_action, self._on_create_backup_action)
+
+    def _backup_manager(self) -> BackupManager:
+        """Read current S3 credentials and identify this deployment's physical data."""
+        if not self.unit.is_leader():
+            raise BackupError("Run backup actions on the leader unit")
+        if not self.model.get_relation(S3_RELATION_NAME):
+            raise BackupError("S3 relation not created")
+        parameters = S3Parameters.from_relation(self.s3_requirer.get_s3_connection_info())
+        return BackupManager(
+            self.container,
+            parameters,
+            {
+                "model": self.model.uuid,
+                "application": self.app.name,
+                "unit": self.unit.name.replace("/", "-"),
+                "address": f"{self._cluster_bind_address}:{DQLITE_PORT}",
+            },
+        )
+
+    def _validate_backup_workload(self) -> None:
+        """Require a local, single-unit deployment before stopping the workload."""
+        relation = self.model.get_relation(PEER_RELATION_NAME)
+        if self.app.planned_units() != 1 or (relation and relation.units):
+            raise BackupError("Physical backup and restore require a single-unit deployment")
+        if not self.container.can_connect() or not self._storages_attached():
+            raise BackupError("Notary container and storage must be available")
+
+    def _on_create_backup_action(self, event: ops.ActionEvent) -> None:
+        """Create a consistent cold backup of a single-member Notary cluster."""
+        try:
+            manager = self._backup_manager()
+            self._validate_backup_workload()
+            token = self._get_valid_admin_token()
+            members = self.client.list_cluster_members(token) if token else None
+            if not members or len(members) != 1 or members[0].name != self._cluster_member_name:
+                raise BackupError("Cannot confirm a single-member Notary cluster")
+            backup_id = manager.create_backup()
+        except (
+            BackupError,
+            ValueError,
+            OSError,
+            ops.ModelError,
+            ops.pebble.Error,
+            BotoCoreError,
+            ClientError,
+        ) as error:
+            logger.exception("Failed to create backup")
+            event.fail(
+                str(error)
+                if isinstance(error, (BackupError, ValueError))
+                else f"Failed to create backup ({type(error).__name__}); see juju debug-log"
+            )
+            return
+        event.set_results({"backup-id": backup_id})
 
     def _on_remove(self, event: ops.RemoveEvent):
         """Remove this member while it can still participate in quorum."""
