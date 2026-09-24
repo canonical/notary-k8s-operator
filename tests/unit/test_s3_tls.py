@@ -79,6 +79,7 @@ def https_s3(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[tuple[
 
     server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
     tls = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+    tls.minimum_version = ssl.TLSVersion.TLSv1_2
     tls.load_cert_chain(cert_path, key_path)
     server.socket = tls.wrap_socket(server.socket, server_side=True)
     thread = Thread(target=server.serve_forever, daemon=True)
