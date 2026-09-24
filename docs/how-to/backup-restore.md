@@ -9,8 +9,10 @@ juju run s3-integrator/leader sync-s3-credentials access-key=ACCESS_KEY secret-k
 juju integrate notary-k8s:s3-parameters s3-integrator:s3-credentials
 ```
 
-Provision the bucket before running backup actions. The credentials need permission
-to upload, list, and retrieve objects in the configured path. The charm uses the
+The credentials need permission to check the bucket and to upload, list, and
+retrieve objects in the configured path. The backup action creates a missing
+bucket if the credentials also grant bucket creation permission. Otherwise,
+provision the bucket beforehand. The charm uses the
 relation's endpoint, bucket, region, path, credentials, and optional `tls-ca-chain`.
 TLS verification is always enabled; configure the integrator's CA chain for a
 private S3 endpoint. Juju charm HTTP/HTTPS proxies are honored.
@@ -26,7 +28,7 @@ juju run notary-k8s/leader create-backup
 ```
 
 Save the returned `backup-id`. Backups are stored beneath the S3 relation's `path`
-with a unique `notary-backup-` name. The bucket must already exist.
+with a unique `notary-backup-` name. A missing bucket is created before Notary is stopped.
 
 This action supports **single-unit, single-member deployments**. It checks both
 Juju's planned units and Notary's actual membership before proceeding. There is

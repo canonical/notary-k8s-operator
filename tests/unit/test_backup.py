@@ -98,3 +98,57 @@ def test_originally_stopped_service_remains_stopped(manager: Any):
         manager.create_backup()
     manager.container.start.assert_not_called()
     manager.container.stop.assert_not_called()
+
+
+@pytest.mark.parametrize("region", ["us-east-1", "eu-west-1"])
+def test_backup_creates_missing_bucket_before_stopping(manager: Any, region: str):
+    from dataclasses import replace
+
+    from botocore.exceptions import ClientError
+
+    manager.parameters = replace(manager.parameters, region=region)
+    with patch("backup.s3_client") as connection:
+        client = connection.return_value.__enter__.return_value
+        client.head_bucket.side_effect = ClientError({"Error": {"Code": "404"}}, "HeadBucket")
+        client.create_bucket.side_effect = lambda **kwargs: (
+            manager.container.stop.assert_not_called()
+        )
+        manager.create_backup()
+        expected: dict[str, Any] = {"Bucket": "bucket"}
+        if region != "us-east-1":
+            expected["CreateBucketConfiguration"] = {"LocationConstraint": region}
+        client.create_bucket.assert_called_once_with(**expected)
+        client.get_waiter.return_value.wait.assert_called_once_with(
+            Bucket="bucket", WaiterConfig={"Delay": 2, "MaxAttempts": 15}
+        )
+
+
+@pytest.mark.parametrize("code", ["403", "AccessDenied", "500", "PermanentRedirect"])
+def test_bucket_errors_do_not_attempt_creation(manager: Any, code: str):
+    from botocore.exceptions import ClientError
+
+    with patch("backup.s3_client") as connection:
+        client = connection.return_value.__enter__.return_value
+        client.head_bucket.side_effect = ClientError({"Error": {"Code": code}}, "HeadBucket")
+        with pytest.raises(ClientError):
+            manager.create_backup()
+        client.create_bucket.assert_not_called()
+    manager.container.stop.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    "code", ["BucketAlreadyOwnedByYou", "BucketAlreadyExists", "AccessDenied"]
+)
+def test_bucket_creation_race_and_failure(manager: Any, code: str):
+    from botocore.exceptions import ClientError
+
+    with patch("backup.s3_client") as connection:
+        client = connection.return_value.__enter__.return_value
+        client.head_bucket.side_effect = ClientError({"Error": {"Code": "404"}}, "HeadBucket")
+        client.create_bucket.side_effect = ClientError({"Error": {"Code": code}}, "CreateBucket")
+        if code == "BucketAlreadyOwnedByYou":
+            manager.create_backup()
+        else:
+            with pytest.raises(ClientError):
+                manager.create_backup()
+            manager.container.stop.assert_not_called()

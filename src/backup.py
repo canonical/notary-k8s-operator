@@ -10,10 +10,11 @@ from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import PurePosixPath
 from tempfile import TemporaryFile
-from typing import BinaryIO
+from typing import Any, BinaryIO
 from uuid import uuid4
 
 import ops
+from botocore.exceptions import ClientError
 
 from s3 import S3Parameters, s3_client
 
@@ -58,13 +59,39 @@ class BackupManager:
             if was_running:
                 self.container.start("notary")
 
+    def _ensure_bucket(self, client: Any) -> None:
+        """Create a missing bucket without treating access or network errors as absence."""
+        try:
+            client.head_bucket(Bucket=self.parameters.bucket)
+            return
+        except ClientError as error:
+            if error.response.get("Error", {}).get("Code") not in (
+                "404",
+                "NoSuchBucket",
+                "NotFound",
+            ):
+                raise
+        configuration = {}
+        if self.parameters.region != "us-east-1":
+            configuration["CreateBucketConfiguration"] = {
+                "LocationConstraint": self.parameters.region
+            }
+        try:
+            client.create_bucket(Bucket=self.parameters.bucket, **configuration)
+        except ClientError as error:
+            if error.response.get("Error", {}).get("Code") != "BucketAlreadyOwnedByYou":
+                raise
+        client.get_waiter("bucket_exists").wait(
+            Bucket=self.parameters.bucket, WaiterConfig={"Delay": 2, "MaxAttempts": 15}
+        )
+
     def create_backup(self) -> str:
         """Create a cold archive and upload it after bringing Notary back online."""
         timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
         key = f"{self.parameters.path}{BACKUP_PREFIX}{timestamp}-{uuid4().hex}.tar.gz"
         with s3_client(self.parameters) as client:
             # Fail before interrupting service if the bucket is inaccessible.
-            client.head_bucket(Bucket=self.parameters.bucket)
+            self._ensure_bucket(client)
             with self._staging_directory() as directory:
                 with self._stopped_service():
                     self.container.exec(
