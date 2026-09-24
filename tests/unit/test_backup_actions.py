@@ -3,7 +3,7 @@
 
 from dataclasses import replace
 from typing import Any
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, PropertyMock, patch
 
 import pytest
 from scenario import ActionFailed, Container, Context, PeerRelation, Relation, State, Storage
@@ -14,7 +14,15 @@ from notary import ClusterMember
 
 @pytest.fixture
 def context():
-    with patch.object(NotaryCharm, "_on_collect_status", autospec=True):
+    with (
+        patch.object(NotaryCharm, "_on_collect_status", autospec=True),
+        patch.object(
+            NotaryCharm,
+            "_ca_certificate_path",
+            new_callable=PropertyMock,
+            return_value="/unused-test-ca.pem",
+        ),
+    ):
         yield Context(NotaryCharm)
 
 
