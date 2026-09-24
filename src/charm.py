@@ -218,7 +218,14 @@ class NotaryCharm(ops.CharmBase):
             key = event.params.get("backup-id")
             if not isinstance(key, str) or not key.strip():
                 raise BackupError("backup-id is required")
-            manager.restore_backup(key)
+            client = self.client
+
+            def is_ready() -> bool:
+                # /status queries the users table. An empty replacement DB is not a restore.
+                status = client.get_status()
+                return bool(status and status.initialized)
+
+            manager.restore_backup(key, is_ready)
         except (
             BackupError,
             ValueError,

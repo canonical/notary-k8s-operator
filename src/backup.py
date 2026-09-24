@@ -6,7 +6,8 @@
 import hashlib
 import shutil
 import tarfile
-from collections.abc import Iterator
+import time
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import PurePosixPath
@@ -101,7 +102,7 @@ class BackupManager:
                 if entry["Key"].startswith(prefix) and entry["Key"].endswith(".tar.gz")
             )
 
-    def restore_backup(self, key: str) -> None:
+    def restore_backup(self, key: str, is_ready: Callable[[], bool]) -> None:
         """Validate a same-unit archive before replacing the offline database."""
         object_key = self._restore_key(key)
         with s3_client(self.parameters) as client, TemporaryFile() as archive:
@@ -124,7 +125,7 @@ class BackupManager:
             with self._staging_directory() as directory:
                 path = f"{directory}/restore.tar.gz"
                 self.container.push(path, archive, permissions=0o600)
-                self._replace_database(path)
+                self._replace_database(path, is_ready)
 
     def _restore_key(self, key: str) -> str:
         """Resolve a full key or short ID within the configured S3 path."""
@@ -178,8 +179,8 @@ class BackupManager:
         ):
             raise BackupError("Backup must contain this unit's single-member cluster identity")
 
-    def _replace_database(self, path: str) -> None:
-        """Keep the previous database available for rollback until service restart."""
+    def _replace_database(self, path: str, is_ready: Callable[[], bool]) -> None:
+        """Keep the previous database until the restored API can read initialized state."""
         was_running = self.container.get_service("notary").is_running()
         rollback = f"{STAGING_ROOT}/.pre-restore-{uuid4().hex}"
         moved = False
@@ -193,12 +194,14 @@ class BackupManager:
                 ["notary", "restore", "--db-path", DATABASE_PATH, "--file", path],
                 timeout=600,
             ).wait_output()
-            if was_running:
-                self.container.start("notary")
-        except (ops.pebble.Error, ops.ModelError, OSError):
-            if moved:
-                # A failed start can leave the daemon running. Stop it before rollback.
+            self.container.start("notary")
+            self._wait_until_ready(is_ready)
+            if not was_running:
                 self.container.stop("notary")
+        except Exception:
+            # Readiness checks can fail independently of Pebble operations.
+            self.container.stop("notary")
+            if moved:
                 self.container.remove_path(DATABASE_PATH, recursive=True)
                 self.container.exec(["mv", rollback, DATABASE_PATH], timeout=60).wait_output()
             if was_running:
@@ -206,6 +209,18 @@ class BackupManager:
             raise
         if moved:
             self.container.remove_path(rollback, recursive=True)
+
+    def _wait_until_ready(self, is_ready: Callable[[], bool]) -> None:
+        """Require three consecutive database-backed checks, two seconds apart."""
+        consecutive = 0
+        for attempt in range(30):
+            running = self.container.get_service("notary").is_running()
+            consecutive = consecutive + 1 if running and is_ready() else 0
+            if consecutive == 3:
+                return
+            if attempt < 29:
+                time.sleep(2)
+        raise BackupError("Restored database did not become healthy; restoring original database")
 
     def create_backup(self) -> str:
         """Create a cold archive and upload it after bringing Notary back online."""

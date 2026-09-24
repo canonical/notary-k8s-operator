@@ -115,7 +115,8 @@ def test_list_storage_failure(context: Any, state: Any):
     assert not context.action_results
 
 
-def test_restore_returns_backup_id(context: Any, state: Any):
+@pytest.mark.parametrize("initialized", [True, False, None])
+def test_restore_returns_backup_id(context: Any, state: Any, initialized: bool | None):
     from io import StringIO
 
     with (
@@ -129,7 +130,13 @@ def test_restore_returns_backup_id(context: Any, state: Any):
             ),
             state,
         )
-    restore.assert_called_once_with("prefix/notary-backup-test.tar.gz")
+    restore.assert_called_once()
+    assert restore.call_args.args[0] == "prefix/notary-backup-test.tar.gz"
+    from unittest.mock import MagicMock
+
+    status = MagicMock(initialized=initialized) if initialized is not None else None
+    with patch("charm.Notary.get_status", return_value=status):
+        assert restore.call_args.args[1]() is bool(initialized)
     assert context.action_results == {"restored": "prefix/notary-backup-test.tar.gz"}
 
 

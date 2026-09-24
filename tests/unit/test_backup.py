@@ -13,6 +13,12 @@ from backup import DATABASE_PATH, BackupError, BackupManager
 from s3 import S3Parameters
 
 
+@pytest.fixture(autouse=True)
+def no_readiness_delay():
+    with patch("backup.time.sleep"):
+        yield
+
+
 @pytest.fixture
 def manager():
     container = MagicMock()
@@ -188,7 +194,9 @@ def test_empty_bucket_returns_empty_list(manager: Any):
         assert manager.list_backups() == []
 
 
-def archive_bytes(address: str = "notary-0:9000", extra_name: str | None = None) -> bytes:
+def archive_bytes(
+    address: str = "notary-0:9000", extra_name: str | None = None, identity_only: bool = False
+) -> bytes:
     import tarfile
 
     archive = BytesIO()
@@ -198,6 +206,8 @@ def archive_bytes(address: str = "notary-0:9000", extra_name: str | None = None)
             "cluster.yaml": f"- ID: 1\n  Address: {address}\n  Role: 0\n".encode(),
             "metadata1": b"database content",
         }
+        if identity_only:
+            del files["metadata1"]
         if extra_name:
             files[extra_name] = b"unexpected"
         for name, content in files.items():
@@ -222,7 +232,7 @@ def test_restore_valid_archive(manager: Any):
     response = restore_response(manager, archive_bytes())
     with patch("backup.s3_client") as connection:
         connection.return_value.__enter__.return_value.get_object.return_value = response
-        manager.restore_backup("prefix/notary-backup-test.tar.gz")
+        manager.restore_backup("prefix/notary-backup-test.tar.gz", lambda: True)
     assert response["Body"].closed
     commands = [call.args[0] for call in manager.container.exec.call_args_list]
     assert commands[0][:2] == ["mv", DATABASE_PATH]
@@ -256,7 +266,7 @@ def test_restore_rejects_before_stopping_workload(manager: Any, failure: str):
     with patch("backup.s3_client") as connection:
         connection.return_value.__enter__.return_value.get_object.return_value = response
         with pytest.raises(BackupError):
-            manager.restore_backup("prefix/notary-backup-test.tar.gz")
+            manager.restore_backup("prefix/notary-backup-test.tar.gz", lambda: True)
     assert response["Body"].closed
     manager.container.stop.assert_not_called()
     manager.container.push.assert_not_called()
@@ -273,7 +283,7 @@ def test_restore_rejects_before_stopping_workload(manager: Any, failure: str):
 )
 def test_restore_rejects_keys_outside_scope(manager: Any, key: str):
     with patch("backup.s3_client") as connection, pytest.raises(BackupError):
-        manager.restore_backup(key)
+        manager.restore_backup(key, lambda: True)
     connection.assert_not_called()
 
 
@@ -293,7 +303,7 @@ def test_restore_failure_rolls_back_database(manager: Any, failure: str):
             manager, archive_bytes()
         )
         with pytest.raises(ops.pebble.Error):
-            manager.restore_backup("prefix/notary-backup-test.tar.gz")
+            manager.restore_backup("prefix/notary-backup-test.tar.gz", lambda: True)
     commands = [call.args[0] for call in manager.container.exec.call_args_list]
     assert commands[-1] == ["mv", commands[0][2], DATABASE_PATH]
     assert manager.container.start.call_count == (2 if failure == "start" else 1)
@@ -308,7 +318,7 @@ def test_restore_download_error_does_not_stop_workload(manager: Any):
             {"Error": {"Code": "NoSuchKey"}}, "GetObject"
         )
         with pytest.raises(ClientError):
-            manager.restore_backup("prefix/notary-backup-test.tar.gz")
+            manager.restore_backup("prefix/notary-backup-test.tar.gz", lambda: True)
     manager.container.stop.assert_not_called()
 
 
@@ -323,7 +333,7 @@ def test_failed_rollback_retains_original_database(manager: Any):
             manager, archive_bytes()
         )
         with pytest.raises(ops.pebble.Error):
-            manager.restore_backup("prefix/notary-backup-test.tar.gz")
+            manager.restore_backup("prefix/notary-backup-test.tar.gz", lambda: True)
     rollback = manager.container.exec.call_args_list[0].args[0][2]
     assert all(call.args[0] != rollback for call in manager.container.remove_path.call_args_list)
     manager.container.start.assert_not_called()
@@ -334,7 +344,7 @@ def test_restore_resolves_id_in_configured_path(manager: Any, key: str):
     with patch("backup.s3_client") as connection:
         client = connection.return_value.__enter__.return_value
         client.get_object.return_value = restore_response(manager, archive_bytes())
-        manager.restore_backup(key)
+        manager.restore_backup(key, lambda: True)
         client.get_object.assert_called_once_with(
             Bucket="bucket", Key="prefix/notary-backup-test.tar.gz"
         )
@@ -348,7 +358,7 @@ def test_restore_propagates_s3_errors(manager: Any, code: str):
         client = connection.return_value.__enter__.return_value
         client.get_object.side_effect = ClientError({"Error": {"Code": code}}, "GetObject")
         with pytest.raises(ClientError):
-            manager.restore_backup("notary-backup-test.tar.gz")
+            manager.restore_backup("notary-backup-test.tar.gz", lambda: True)
         assert client.get_object.call_count == 1
     manager.container.stop.assert_not_called()
 
@@ -360,7 +370,7 @@ def test_missing_backup_does_not_search_bucket_root(manager: Any):
         client = connection.return_value.__enter__.return_value
         client.get_object.side_effect = ClientError({"Error": {"Code": "NoSuchKey"}}, "GetObject")
         with pytest.raises(ClientError):
-            manager.restore_backup("notary-backup-test.tar.gz")
+            manager.restore_backup("notary-backup-test.tar.gz", lambda: True)
         client.get_object.assert_called_once_with(
             Bucket="bucket", Key="prefix/notary-backup-test.tar.gz"
         )
@@ -374,7 +384,7 @@ def test_restore_rejects_corrupt_backup_before_stopping_workload(manager: Any):
         client = connection.return_value.__enter__.return_value
         client.get_object.return_value = response
         with pytest.raises(BackupError, match="checksum"):
-            manager.restore_backup("notary-backup-test.tar.gz")
+            manager.restore_backup("notary-backup-test.tar.gz", lambda: True)
         assert client.get_object.call_count == 1
     manager.container.stop.assert_not_called()
 
@@ -386,5 +396,74 @@ def test_restore_without_configured_path_fetches_once(manager: Any):
     with patch("backup.s3_client") as connection:
         client = connection.return_value.__enter__.return_value
         client.get_object.return_value = restore_response(manager, archive_bytes())
-        manager.restore_backup("notary-backup-test.tar.gz")
+        manager.restore_backup("notary-backup-test.tar.gz", lambda: True)
         client.get_object.assert_called_once_with(Bucket="bucket", Key="notary-backup-test.tar.gz")
+
+
+@pytest.mark.parametrize("was_running", [True, False])
+@pytest.mark.parametrize("healthy", [True, False])
+def test_restore_checks_database_before_discarding_original(
+    manager: Any, was_running: bool, healthy: bool
+):
+    manager.container.get_service.return_value.is_running.side_effect = [was_running] + [True] * 30
+
+    def readiness():
+        # The original database must still be available during every check.
+        assert not manager.container.remove_path.called
+        return healthy
+
+    with patch("backup.s3_client") as connection:
+        connection.return_value.__enter__.return_value.get_object.return_value = restore_response(
+            manager, archive_bytes()
+        )
+        if healthy:
+            manager.restore_backup("notary-backup-test.tar.gz", readiness)
+        else:
+            with pytest.raises(BackupError, match="did not become healthy"):
+                manager.restore_backup("notary-backup-test.tar.gz", readiness)
+    commands = [call.args[0] for call in manager.container.exec.call_args_list]
+    rollback = commands[0][2]
+    if healthy:
+        manager.container.remove_path.assert_any_call(rollback, recursive=True)
+    else:
+        assert commands[-1] == ["mv", rollback, DATABASE_PATH]
+        assert all(
+            call.args[0] != rollback for call in manager.container.remove_path.call_args_list
+        )
+    assert manager.container.start.call_count == (2 if was_running and not healthy else 1)
+    assert manager.container.stop.call_count == (
+        int(was_running) + int(not healthy or not was_running)
+    )
+
+
+def test_readiness_requires_consecutive_successes(manager: Any):
+    check = MagicMock(side_effect=[True, True, False, True, True, True])
+    manager._wait_until_ready(check)
+    assert check.call_count == 6
+
+
+def test_readiness_exception_rolls_back(manager: Any):
+    with pytest.raises(ValueError, match="invalid response"):
+        manager._replace_database(
+            "/archive", MagicMock(side_effect=ValueError("invalid response"))
+        )
+    commands = [call.args[0] for call in manager.container.exec.call_args_list]
+    assert commands[-1] == ["mv", commands[0][2], DATABASE_PATH]
+    assert all(
+        call.args[0] != commands[0][2] for call in manager.container.remove_path.call_args_list
+    )
+
+
+def test_identity_only_archive_cannot_discard_original_database(manager: Any):
+    # Extraction can succeed while startup creates a fresh, uninitialized database.
+    with patch("backup.s3_client") as connection:
+        connection.return_value.__enter__.return_value.get_object.return_value = restore_response(
+            manager, archive_bytes(identity_only=True)
+        )
+        with pytest.raises(BackupError, match="did not become healthy"):
+            manager.restore_backup("notary-backup-test.tar.gz", lambda: False)
+    commands = [call.args[0] for call in manager.container.exec.call_args_list]
+    assert commands[-1] == ["mv", commands[0][2], DATABASE_PATH]
+    assert all(
+        call.args[0] != commands[0][2] for call in manager.container.remove_path.call_args_list
+    )

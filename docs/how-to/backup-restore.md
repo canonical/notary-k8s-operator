@@ -76,11 +76,12 @@ this action.
 The charm downloads the archive, checks its SHA-256 and identity metadata, and
 validates its archive paths and cluster identity before stopping Notary. It
 stages files with restrictive permissions and preserves the previous database
-until the restore command and service start succeed. On failure it attempts to
+until the restored service passes three consecutive database-backed status checks,
+two seconds apart. These checks require an initialized database. On failure it attempts to
 roll back and restart the original database. If rollback itself fails, the old
 database remains in `/var/lib/notary/database/.pre-restore-*`; inspect logs and
-recover it before retrying. A workload that was stopped before the action stays
-stopped. After success, `restored` contains the backup ID.
+recover it before retrying. A workload that was stopped before the action is started temporarily for
+validation and stopped again afterward. After success, `restored` contains the backup ID.
 
 Ensure the admin credentials in the charm's Juju secret still match the restored
 database. If they changed since the backup, restore the matching secret content.
