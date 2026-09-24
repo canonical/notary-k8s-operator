@@ -113,3 +113,57 @@ def test_list_storage_failure(context: Any, state: Any):
     ):
         context.run(context.on.action("list-backups"), state)
     assert not context.action_results
+
+
+@pytest.mark.parametrize("initialized", [True, False, None])
+def test_restore_returns_backup_id(context: Any, state: Any, initialized: bool | None):
+    from io import StringIO
+
+    with (
+        patch("charm.socket.getfqdn", return_value="notary-0"),
+        patch("ops.Container.pull", return_value=StringIO("- ID: 1\n  Address: notary-0:9000\n")),
+        patch("charm.BackupManager.restore_backup") as restore,
+    ):
+        context.run(
+            context.on.action(
+                "restore-backup", params={"backup-id": "prefix/notary-backup-test.tar.gz"}
+            ),
+            state,
+        )
+    restore.assert_called_once()
+    assert restore.call_args.args[0] == "prefix/notary-backup-test.tar.gz"
+    from unittest.mock import MagicMock
+
+    status = MagicMock(initialized=initialized) if initialized is not None else None
+    with patch("charm.Notary.get_status", return_value=status):
+        assert restore.call_args.args[1]() is bool(initialized)
+    assert context.action_results == {"restored": "prefix/notary-backup-test.tar.gz"}
+
+
+@pytest.mark.parametrize(
+    "membership",
+    [
+        "[]",
+        "invalid",
+        "- Address: other:9000",
+        "- Address: notary-0:9000\n- Address: notary-1:9000",
+        "[",
+    ],
+)
+def test_restore_rejects_unknown_or_clustered_disk_state(
+    context: Any, state: Any, membership: str
+):
+    from io import StringIO
+
+    with (
+        patch("ops.Container.pull", return_value=StringIO(membership)),
+        patch("charm.BackupManager.restore_backup") as restore,
+        pytest.raises(ActionFailed),
+    ):
+        context.run(
+            context.on.action(
+                "restore-backup", params={"backup-id": "prefix/notary-backup-test.tar.gz"}
+            ),
+            state,
+        )
+    restore.assert_not_called()

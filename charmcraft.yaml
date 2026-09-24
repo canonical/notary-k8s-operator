@@ -22,6 +22,16 @@ platforms:
   ubuntu@24.04:arm64:
 
 actions:
+  restore-backup:
+    description: |
+      Replace this single unit's database with a backup created on the same unit.
+      Stops Notary during restore. Multi-unit and cross-deployment recovery are unsupported.
+    params:
+      backup-id:
+        type: string
+        description: Full S3 object key or unprefixed Notary backup ID within the configured S3 path.
+    required: [backup-id]
+    additionalProperties: false
   list-backups:
     description: List backup IDs in the configured S3 path as a JSON array.
   create-backup:
