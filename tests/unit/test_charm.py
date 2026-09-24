@@ -4582,6 +4582,44 @@ class TestCharmCluster:
         tokens = json.loads(secret.latest_content["tokens"])
         assert tokens == {}
 
+    def test_removal_retries_when_pebble_is_unavailable(
+        self, context: Context[NotaryCharm], tmp_path: Path
+    ):
+        state = self._base_state(
+            tmp_path, leader=False, with_db_state=True, secrets={self._login_secret()}
+        )
+        unavailable = replace(
+            state,
+            containers={replace(state.get_container("notary"), can_connect=False)},
+        )
+        local_client = self._cluster_mock(
+            **{
+                "list_cluster_members.return_value": [
+                    _member(SELF_MEMBER_NAME, "notary-k8s-0:9000"),
+                    _member(PEER_MEMBER_NAME, "notary-k8s-1:9000"),
+                ]
+            }
+        )
+        peer_client = self._cluster_mock()
+        with (
+            patch("charm.Notary", side_effect=[local_client, peer_client]) as clients,
+            patch.object(ops.Container, "stop") as stop,
+        ):
+            with pytest.raises(
+                Exception, match="Cannot safely remove unit: Pebble is unavailable"
+            ):
+                context.run(context.on.remove(), unavailable)
+            clients.assert_not_called()
+            stop.assert_not_called()
+
+            calls = Mock()
+            calls.attach_mock(peer_client.delete_cluster_member, "remove")
+            calls.attach_mock(stop, "stop")
+            context.run(context.on.remove(), state)
+
+        peer_client.delete_cluster_member.assert_called_once_with(SELF_MEMBER_NAME, "test-token")
+        assert [call[0] for call in calls.mock_calls] == ["remove", "stop"]
+
     @pytest.mark.parametrize("leader", [False, True])
     @pytest.mark.parametrize(
         "peer_host", ["notary-k8s-5.notary-k8s-endpoints.model.svc", "[2001:db8::5]"]

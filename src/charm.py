@@ -194,7 +194,7 @@ class NotaryCharm(ops.CharmBase):
     def _on_remove(self, event: ops.RemoveEvent):
         """Remove this member while it can still participate in quorum."""
         if not self.container.can_connect():
-            return
+            raise RuntimeError("Cannot safely remove unit: Pebble is unavailable")
         if self._cluster_has_state():
             relation = self.model.get_relation(PEER_RELATION_NAME)
             clients = self._cluster_clients(relation) if relation else iter([self.client])
