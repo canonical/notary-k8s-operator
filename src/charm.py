@@ -197,6 +197,28 @@ class NotaryCharm(ops.CharmBase):
         framework.observe(self.on.collect_unit_status, self._on_collect_status)
         framework.observe(self.on.remove, self._on_remove)
         framework.observe(self.on.create_backup_action, self._on_create_backup_action)
+        framework.observe(self.on.list_backups_action, self._on_list_backups_action)
+
+    def _on_list_backups_action(self, event: ops.ActionEvent) -> None:
+        """List backups without requiring a running Notary workload."""
+        try:
+            backups = self._backup_manager().list_backups()
+        except (
+            BackupError,
+            ValueError,
+            OSError,
+            ops.ModelError,
+            BotoCoreError,
+            ClientError,
+        ) as error:
+            logger.exception("Failed to list backups")
+            event.fail(
+                str(error)
+                if isinstance(error, (BackupError, ValueError))
+                else f"Failed to list backups ({type(error).__name__}); see juju debug-log"
+            )
+            return
+        event.set_results({"backup-ids": json.dumps(backups)})
 
     def _backup_manager(self) -> BackupManager:
         """Read current S3 credentials and identify this deployment's physical data."""
