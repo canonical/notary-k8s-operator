@@ -29,7 +29,7 @@ actions:
     params:
       backup-id:
         type: string
-        description: Full S3 object key or unprefixed Notary backup ID; missing unprefixed IDs fall back to the bucket root.
+        description: Full S3 object key or unprefixed Notary backup ID within the configured S3 path.
     required: [backup-id]
     additionalProperties: false
   list-backups:

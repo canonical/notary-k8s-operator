@@ -120,26 +120,3 @@ def test_backup_list_restore_round_trip(
         requests = {entry.csr for entry in client.list_certificate_requests(login.token)}
         assert before in requests
         assert after not in requests
-
-        # Changing the path must not prevent restoring an older root-level archive.
-        juju.config("s3-integrator", {"path": ""})
-        juju.wait(lambda _: key not in _backup_ids(juju, app))
-        legacy = juju.run(f"{app}/leader", "create-backup", wait=600).results["backup-id"]
-        assert legacy.startswith("notary-backup-")
-        juju.config("s3-integrator", {"path": prefix})
-        juju.wait(lambda _: key in _backup_ids(juju, app))
-        assert legacy not in _backup_ids(juju, app)
-        assert client.create_certificate_request(after, login.token) is not None
-        restored = juju.run(f"{app}/leader", "restore-backup", {"backup-id": legacy}, wait=600)
-        assert restored.results["restored"] == legacy
-        juju.wait(lambda status: jubilant.all_active(status, app))
-        login = client.login(credentials["email"], credentials["password"])
-        assert login is not None
-        requests = {entry.csr for entry in client.list_certificate_requests(login.token)}
-        assert before in requests
-        assert after not in requests
-
-
-def _backup_ids(juju: jubilant.Juju, app: str) -> list[str]:
-    """Read backup IDs to confirm that a changed relation path has propagated."""
-    return json.loads(juju.run(f"{app}/leader", "list-backups").results["backup-ids"])

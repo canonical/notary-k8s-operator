@@ -307,7 +307,7 @@ def test_restore_download_error_does_not_stop_workload(manager: Any):
         connection.return_value.__enter__.return_value.get_object.side_effect = ClientError(
             {"Error": {"Code": "NoSuchKey"}}, "GetObject"
         )
-        with pytest.raises(BackupError, match="not found"):
+        with pytest.raises(ClientError):
             manager.restore_backup("prefix/notary-backup-test.tar.gz")
     manager.container.stop.assert_not_called()
 
@@ -329,31 +329,19 @@ def test_failed_rollback_retains_original_database(manager: Any):
     manager.container.start.assert_not_called()
 
 
-@pytest.mark.parametrize("missing", [False, True])
-def test_restore_unprefixed_id_tries_path_then_root(manager: Any, missing: bool):
-    from botocore.exceptions import ClientError
-
-    response = restore_response(manager, archive_bytes())
+@pytest.mark.parametrize("key", ["notary-backup-test.tar.gz", "prefix/notary-backup-test.tar.gz"])
+def test_restore_resolves_id_in_configured_path(manager: Any, key: str):
     with patch("backup.s3_client") as connection:
         client = connection.return_value.__enter__.return_value
-        if missing:
-            client.get_object.side_effect = [
-                ClientError({"Error": {"Code": "NoSuchKey"}}, "GetObject"),
-                response,
-            ]
-        else:
-            client.get_object.return_value = response
-        manager.restore_backup("notary-backup-test.tar.gz")
-        keys = [call.kwargs["Key"] for call in client.get_object.call_args_list]
-        assert keys == (
-            ["prefix/notary-backup-test.tar.gz", "notary-backup-test.tar.gz"]
-            if missing
-            else ["prefix/notary-backup-test.tar.gz"]
+        client.get_object.return_value = restore_response(manager, archive_bytes())
+        manager.restore_backup(key)
+        client.get_object.assert_called_once_with(
+            Bucket="bucket", Key="prefix/notary-backup-test.tar.gz"
         )
 
 
 @pytest.mark.parametrize("code", ["AccessDenied", "NoSuchBucket", "InternalError"])
-def test_restore_fallback_does_not_hide_s3_errors(manager: Any, code: str):
+def test_restore_propagates_s3_errors(manager: Any, code: str):
     from botocore.exceptions import ClientError
 
     with patch("backup.s3_client") as connection:
@@ -365,19 +353,21 @@ def test_restore_fallback_does_not_hide_s3_errors(manager: Any, code: str):
     manager.container.stop.assert_not_called()
 
 
-def test_restore_fallback_missing_everywhere(manager: Any):
+def test_missing_backup_does_not_search_bucket_root(manager: Any):
     from botocore.exceptions import ClientError
 
     with patch("backup.s3_client") as connection:
         client = connection.return_value.__enter__.return_value
         client.get_object.side_effect = ClientError({"Error": {"Code": "NoSuchKey"}}, "GetObject")
-        with pytest.raises(BackupError, match="not found"):
+        with pytest.raises(ClientError):
             manager.restore_backup("notary-backup-test.tar.gz")
-        assert client.get_object.call_count == 2
+        client.get_object.assert_called_once_with(
+            Bucket="bucket", Key="prefix/notary-backup-test.tar.gz"
+        )
     manager.container.stop.assert_not_called()
 
 
-def test_restore_does_not_fall_back_after_validation_failure(manager: Any):
+def test_restore_rejects_corrupt_backup_before_stopping_workload(manager: Any):
     response = restore_response(manager, archive_bytes())
     response["Metadata"]["sha256"] = "invalid"
     with patch("backup.s3_client") as connection:

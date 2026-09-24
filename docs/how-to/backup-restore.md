@@ -62,12 +62,11 @@ juju run notary-k8s/leader restore-backup backup-id=notary/notary-backup-EXAMPLE
 ```
 
 Use the exact key from `list-backups`, or an unprefixed Notary backup ID.
-For an unprefixed ID, restore tries the configured path first, then the bucket
-root if the object is missing. This allows restoration of backups created before
-a path was configured. A full prefixed key is fetched directly. Authentication,
-network, checksum, and identity errors never trigger fallback. Listing remains
-scoped to the configured path; clear the path temporarily to list root backups. Restoring **replaces the database** with
-its earlier contents. Only archives created by this charm on the same unit,
+Short IDs are resolved within the configured path; full keys must belong to that
+path. When no path is configured, backups are stored and restored at the bucket
+root. Missing backups fail the action without searching other locations.
+
+Restoring **replaces the database** with its earlier contents. Only archives created by this charm on the same unit,
 model, application, and dqlite address are accepted. The unit must still have
 single-member cluster state on disk; removing Juju peers alone does not make a
 multi-member cluster eligible. Cross-deployment restore and recovery from lost
@@ -102,9 +101,8 @@ PYTHONPATH=lib:src uv run pytest tests/integration/test_backup.py --charm_path=/
 The endpoint must be reachable from the deployed charm, and the runner must be
 able to reach the Notary unit API. The test creates certificate requests before
 and after backup and verifies that restore retains only the earlier request.
-It uses a unique S3 prefix and creates one legacy root-level archive; delete the
-prefix and that archive after testing. It checks both short IDs and restoration
-of a root-level backup after configuring a path.
+It uses a unique S3 prefix; delete that prefix after testing. It restores using
+a short ID resolved within the configured path.
 
 For the private-CA variant, also set `S3_TLS_TEST_ENDPOINT` to an HTTPS endpoint
 signed by a private CA and `S3_TEST_CA_FILE` to its PEM CA bundle. It must accept
