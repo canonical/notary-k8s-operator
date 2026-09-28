@@ -21,6 +21,12 @@ platforms:
   ubuntu@24.04:amd64:
   ubuntu@24.04:arm64:
 
+actions:
+  create-backup:
+    description: |
+      Create a physical database backup in S3 and return its backup-id.
+      Supported on a single-unit deployment only. Briefly stops Notary.
+
 config:
   options:
     external-hostname:
