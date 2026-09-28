@@ -2994,7 +2994,7 @@ class TestCharm:
         (tmp_path / "ca.pem").write_text(str(ca))
 
         with patch(
-            "notary.Notary.__new__",
+            "charm.Notary",
             return_value=Mock(
                 **{"is_api_available.return_value": True, "is_initialized.return_value": True},  # type: ignore
             ),
@@ -3035,7 +3035,7 @@ class TestCharm:
         )
 
         with patch(
-            "notary.Notary.__new__",
+            "charm.Notary",
             return_value=Mock(
                 **{
                     "is_api_available.return_value": True,
@@ -3080,7 +3080,7 @@ class TestCharm:
         )
 
         with patch(
-            "notary.Notary.__new__",
+            "charm.Notary",
             return_value=Mock(
                 **{
                     "is_api_available.return_value": True,
@@ -3132,7 +3132,7 @@ class TestCharm:
             relations=[Relation(id=1, endpoint=CERTIFICATE_PROVIDER_RELATION_NAME)],
         )
         with patch(
-            "notary.Notary.__new__",
+            "charm.Notary",
             return_value=Mock(
                 **{
                     "is_api_available.return_value": True,
@@ -3195,7 +3195,7 @@ class TestCharm:
         ]
         post_call = Mock()
         with patch(
-            "notary.Notary.__new__",
+            "charm.Notary",
             return_value=Mock(
                 **{
                     "is_api_available.return_value": True,
@@ -3261,7 +3261,7 @@ class TestCharm:
         ]
         post_call = Mock()
         with patch(
-            "notary.Notary.__new__",
+            "charm.Notary",
             return_value=Mock(
                 **{
                     "is_api_available.return_value": True,
@@ -3337,7 +3337,7 @@ class TestCharm:
             )
         ]
         with patch(
-            "notary.Notary.__new__",
+            "charm.Notary",
             return_value=Mock(
                 **{
                     "is_api_available.return_value": True,
@@ -3426,7 +3426,7 @@ class TestCharm:
             )
         ]
         with patch(
-            "notary.Notary.__new__",
+            "charm.Notary",
             return_value=Mock(
                 **{
                     "is_api_available.return_value": True,
@@ -3514,7 +3514,7 @@ class TestCharm:
             )
         ]
         with patch(
-            "notary.Notary.__new__",
+            "charm.Notary",
             return_value=Mock(
                 **{
                     "is_api_available.return_value": True,
@@ -3572,7 +3572,7 @@ class TestCharm:
             f.write(str(ca))
         mock_assigned_certificates.return_value = (None, None)
         with patch(
-            "notary.Notary.__new__",
+            "charm.Notary",
             return_value=Mock(
                 **{
                     "is_api_available.return_value": True,
@@ -3630,7 +3630,7 @@ class TestCharm:
             f.write(str(existing_certificate))
         mock_assigned_certificates.return_value = (provider_certificate_mock, pk)
         with patch(
-            "notary.Notary.__new__",
+            "charm.Notary",
             return_value=Mock(
                 **{
                     "is_api_available.return_value": True,
@@ -3688,7 +3688,7 @@ class TestCharm:
             f.write(str(ca))
         mock_assigned_certificates.return_value = (provider_certificate_mock, pk)
         with patch(
-            "notary.Notary.__new__",
+            "charm.Notary",
             return_value=Mock(
                 **{
                     "is_api_available.return_value": True,
@@ -3757,7 +3757,7 @@ class TestCharm:
         with open(tmp_path / "ca.pem", "w") as f:
             f.write(str(ca))
         with patch(
-            "notary.Notary.__new__",
+            "charm.Notary",
             return_value=Mock(
                 **{
                     "is_api_available.return_value": True,
@@ -3839,7 +3839,7 @@ class TestCharm:
         )
 
         with patch(
-            "notary.Notary.__new__",
+            "charm.Notary",
             return_value=Mock(
                 **{
                     "is_api_available.return_value": False,
@@ -3926,7 +3926,7 @@ class TestCharm:
         )
 
         with patch(
-            "notary.Notary.__new__",
+            "charm.Notary",
             return_value=Mock(
                 **{
                     "is_api_available.return_value": False,
@@ -4006,7 +4006,7 @@ class TestCharm:
         )
 
         with patch(
-            "notary.Notary.__new__",
+            "charm.Notary",
             return_value=Mock(
                 **{
                     "is_api_available.return_value": False,
@@ -4151,7 +4151,7 @@ class TestCharmCluster:
         relation = Relation(endpoint=TLS_ACCESS_RELATION_NAME, interface="tls-certificates")
         state = self._base_state(tmp_path, leader=False)
         state = replace(state, relations={relation})
-        with patch("notary.Notary.__new__", return_value=self._cluster_mock()):
+        with patch("charm.Notary", return_value=self._cluster_mock()):
             out = context.run(context.on.relation_created(relation), state)
         relation_out = out.get_relation(relation.id)
         assert json.loads(relation_out.local_unit_data["certificate_signing_requests"])
@@ -4167,7 +4167,7 @@ class TestCharmCluster:
         certificate, ca, _, private_key = TestCharm().example_certs_and_key()
         assigned = Mock(certificate=certificate, ca=ca)
         with (
-            patch("notary.Notary.__new__", return_value=self._cluster_mock()),
+            patch("charm.Notary", return_value=self._cluster_mock()),
             patch(
                 f"{TLS_LIB_PATH}.TLSCertificatesRequiresV4.get_assigned_certificate",
                 return_value=(assigned, private_key),
@@ -4186,7 +4186,7 @@ class TestCharmCluster:
             self._base_state(tmp_path, leader=True, with_db_state=True), relations={relation}
         )
         with (
-            patch("notary.Notary.__new__", return_value=self._cluster_mock()),
+            patch("charm.Notary", return_value=self._cluster_mock()),
             patch(
                 f"{TLS_LIB_PATH}.TLSCertificatesRequiresV4.get_assigned_certificate",
                 side_effect=KeyError("certificate"),
@@ -4272,7 +4272,7 @@ class TestCharmCluster:
         state = self._base_state(tmp_path, leader=False, peer_relation=peer)
 
         with patch(
-            "notary.Notary.__new__",
+            "charm.Notary",
             return_value=self._cluster_mock(),
         ):
             out = context.run(context.on.update_status(), state)
@@ -4296,7 +4296,7 @@ class TestCharmCluster:
             endpoint=PEER_RELATION_NAME, interface="notary_peers", local_app_data=app_data
         )
         state = self._base_state(tmp_path, leader=True, peer_relation=peer)
-        with patch("notary.Notary.__new__", return_value=self._cluster_mock()):
+        with patch("charm.Notary", return_value=self._cluster_mock()):
             out = context.run(context.on.leader_elected(), state)
         assert "notary" not in out.get_container("notary").plan.services
         assert app_data.items() <= out.get_relation(peer.id).local_app_data.items()
@@ -4307,7 +4307,7 @@ class TestCharmCluster:
         peer = PeerRelation(endpoint=PEER_RELATION_NAME, interface="notary_peers")
         state = self._base_state(tmp_path, leader=True, peer_relation=peer)
         with (
-            patch("notary.Notary.__new__", return_value=self._cluster_mock()),
+            patch("charm.Notary", return_value=self._cluster_mock()),
             patch.object(NotaryCharm, "_configure_pebble_plan") as start,
         ):
             with context(context.on.start(), state) as manager:
@@ -4381,7 +4381,7 @@ class TestCharmCluster:
 
         with (
             patch(
-                "notary.Notary.__new__",
+                "charm.Notary",
                 return_value=self._cluster_mock(),
             ),
             patch("charm.socket.getfqdn", return_value="notary-0.notary-endpoints.model.svc"),
@@ -4412,7 +4412,7 @@ class TestCharmCluster:
         )
 
         with patch(
-            "notary.Notary.__new__",
+            "charm.Notary",
             return_value=self._cluster_mock(),
         ):
             out = context.run(context.on.update_status(), state)
@@ -4439,7 +4439,7 @@ class TestCharmCluster:
         )
         mock = self._cluster_mock()
 
-        with patch("notary.Notary.__new__", return_value=mock):
+        with patch("charm.Notary", return_value=mock):
             out = context.run(context.on.update_status(), state)
 
         mock.create_cluster_join_token.assert_called_once_with(PEER_MEMBER_NAME, "test-token")
@@ -4459,7 +4459,7 @@ class TestCharmCluster:
             secrets={self._tokens_secret({SELF_MEMBER_NAME: "pending-token"})},
         )
         (tmp_path / "db/dqlite/join").touch()
-        with patch("notary.Notary.__new__", return_value=self._cluster_mock()):
+        with patch("charm.Notary", return_value=self._cluster_mock()):
             context.run(context.on.update_status(), state)
         config = yaml.safe_load((tmp_path / "config/config.yaml").read_text())
         assert config["cluster"]["join_token"] == "pending-token"
@@ -4469,7 +4469,7 @@ class TestCharmCluster:
     ):
         state = self._base_state(tmp_path, leader=True, with_db_state=True)
         with (
-            patch("notary.Notary.__new__", return_value=self._cluster_mock()),
+            patch("charm.Notary", return_value=self._cluster_mock()),
             context(context.on.update_status(), state) as manager,
         ):
             charm = manager.charm
@@ -4509,7 +4509,7 @@ class TestCharmCluster:
         )
         mock = self._cluster_mock()
 
-        with patch("notary.Notary.__new__", return_value=mock):
+        with patch("charm.Notary", return_value=mock):
             out = context.run(context.on.update_status(), state)
 
         mock.create_cluster_join_token.assert_called_once_with(PEER_MEMBER_NAME, "test-token")
@@ -4538,7 +4538,7 @@ class TestCharmCluster:
         )
         mock = self._cluster_mock()
 
-        with patch("notary.Notary.__new__", return_value=mock):
+        with patch("charm.Notary", return_value=mock):
             out = context.run(context.on.update_status(), state)
 
         mock.create_cluster_join_token.assert_not_called()
@@ -4574,7 +4574,7 @@ class TestCharmCluster:
             }
         )
 
-        with patch("notary.Notary.__new__", return_value=mock):
+        with patch("charm.Notary", return_value=mock):
             out = context.run(context.on.update_status(), state)
 
         mock.create_cluster_join_token.assert_not_called()
@@ -4848,7 +4848,7 @@ class TestCharmCluster:
         )
         mock = self._cluster_mock()
         with (
-            patch("notary.Notary.__new__", return_value=mock),
+            patch("charm.Notary", return_value=mock),
             patch.object(ops.Container, "stop") as stop,
         ):
             context.run(context.on.remove(), state)
@@ -4880,7 +4880,7 @@ class TestCharmCluster:
             }
         )
 
-        with patch("notary.Notary.__new__", return_value=mock):
+        with patch("charm.Notary", return_value=mock):
             context.run(context.on.update_status(), state)
 
         mock.delete_cluster_member.assert_not_called()
@@ -4898,7 +4898,7 @@ class TestCharmCluster:
         )
         mock = self._cluster_mock(**{"list_cluster_members.return_value": None})
 
-        with patch("notary.Notary.__new__", return_value=mock):
+        with patch("charm.Notary", return_value=mock):
             context.run(context.on.update_status(), state)
 
         mock.delete_cluster_member.assert_not_called()
@@ -4915,7 +4915,7 @@ class TestCharmCluster:
         state = self._base_state(tmp_path, leader=True, peer_relation=peer)
 
         with patch(
-            "notary.Notary.__new__",
+            "charm.Notary",
             return_value=self._cluster_mock(),
         ):
             out = context.run(context.on.update_status(), state)
@@ -4935,7 +4935,7 @@ class TestCharmCluster:
         state = self._base_state(tmp_path, leader=True, peer_relation=peer)
 
         with patch(
-            "notary.Notary.__new__",
+            "charm.Notary",
             return_value=self._cluster_mock(),
         ):
             out = context.run(context.on.update_status(), state)
