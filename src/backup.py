@@ -85,6 +85,20 @@ class BackupManager:
             Bucket=self.parameters.bucket, WaiterConfig={"Delay": 2, "MaxAttempts": 15}
         )
 
+    def list_backups(self) -> list[str]:
+        """List complete archive keys in the configured path across every S3 page."""
+        prefix = f"{self.parameters.path}{BACKUP_PREFIX}"
+        with s3_client(self.parameters) as client:
+            pages = client.get_paginator("list_objects_v2").paginate(
+                Bucket=self.parameters.bucket, Prefix=prefix
+            )
+            return sorted(
+                entry["Key"]
+                for page in pages
+                for entry in page.get("Contents", [])
+                if entry["Key"].startswith(prefix) and entry["Key"].endswith(".tar.gz")
+            )
+
     def create_backup(self) -> str:
         """Create a cold archive and upload it after bringing Notary back online."""
         timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")

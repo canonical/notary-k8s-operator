@@ -152,3 +152,37 @@ def test_bucket_creation_race_and_failure(manager: Any, code: str):
             with pytest.raises(ClientError):
                 manager.create_backup()
             manager.container.stop.assert_not_called()
+
+
+def test_list_backups_paginates_and_filters(manager: Any):
+    with patch("backup.s3_client") as connection:
+        paginator = connection.return_value.__enter__.return_value.get_paginator.return_value
+        paginator.paginate.return_value = [
+            {
+                "Contents": [
+                    {"Key": "prefix/notary-backup-b.tar.gz"},
+                    {"Key": "prefix/other.tar.gz"},
+                ]
+            },
+            {},
+            {
+                "Contents": [
+                    {"Key": "prefix/notary-backup-a.tar.gz"},
+                    {"Key": "prefix/notary-backup-a.tmp"},
+                ]
+            },
+        ]
+        assert manager.list_backups() == [
+            "prefix/notary-backup-a.tar.gz",
+            "prefix/notary-backup-b.tar.gz",
+        ]
+        paginator.paginate.assert_called_once_with(Bucket="bucket", Prefix="prefix/notary-backup-")
+    manager.container.stop.assert_not_called()
+
+
+def test_empty_bucket_returns_empty_list(manager: Any):
+    with patch("backup.s3_client") as connection:
+        connection.return_value.__enter__.return_value.get_paginator.return_value.paginate.return_value = [
+            {}
+        ]
+        assert manager.list_backups() == []

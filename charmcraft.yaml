@@ -22,6 +22,8 @@ platforms:
   ubuntu@24.04:arm64:
 
 actions:
+  list-backups:
+    description: List backup IDs in the configured S3 path as a JSON array.
   create-backup:
     description: |
       Create a physical database backup in S3 and return its backup-id.

@@ -92,3 +92,24 @@ def test_unknown_or_clustered_membership_fails(context: Any, state: Any, members
     ):
         context.run(context.on.action("create-backup"), state)
     create.assert_not_called()
+
+
+def test_list_without_workload(context: Any, state: Any):
+    state = replace(state, containers={Container("notary")}, storages=set())
+    with patch("charm.BackupManager.list_backups", return_value=["prefix/backup.tar.gz"]):
+        context.run(context.on.action("list-backups"), state)
+    assert context.action_results == {"backup-ids": '["prefix/backup.tar.gz"]'}
+
+
+def test_list_storage_failure(context: Any, state: Any):
+    from botocore.exceptions import EndpointConnectionError
+
+    with (
+        patch(
+            "charm.BackupManager.list_backups",
+            side_effect=EndpointConnectionError(endpoint_url="https://s3.example"),
+        ),
+        pytest.raises(ActionFailed),
+    ):
+        context.run(context.on.action("list-backups"), state)
+    assert not context.action_results
