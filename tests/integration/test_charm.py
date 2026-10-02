@@ -15,6 +15,7 @@ import jubilant
 import pytest
 import yaml
 from charmlibs.interfaces.tls_certificates import (
+    Certificate,
     CertificateSigningRequest,
     generate_ca,
     generate_certificate,
@@ -22,7 +23,7 @@ from charmlibs.interfaces.tls_certificates import (
     generate_private_key,
 )
 
-from charm import NOTARY_LOGIN_SECRET_LABEL
+from charm import CHARM_ACME_SERVER_NAME, CHARM_CA_COMMON_NAME, NOTARY_LOGIN_SECRET_LABEL
 from notary import ClusterMember, Notary
 
 logger = logging.getLogger(__name__)
@@ -46,6 +47,8 @@ TLS_PROVIDER_APPLICATION_NAME = "self-signed-certificates"
 TLS_PROVIDER_CHANNEL = "1/stable"
 TLS_PROVIDER_REVISION = 586
 TLS_REQUIRER_APPLICATION_NAME = "tls-certificates-requirer"
+SELF_SIGNED_REQUIRER_APPLICATION_NAME = "self-signed-certificates-requirer"
+ACME_REQUIRER_APPLICATION_NAME = "acme-certificates-requirer"
 TLS_REQUIRER_CHANNEL = "latest/stable"
 TLS_REQUIRER_REVISION = 143
 
@@ -119,6 +122,21 @@ def test_build_and_deploy(juju: jubilant.Juju, request: pytest.FixtureRequest):
         TLS_REQUIRER_APPLICATION_NAME,
         channel=TLS_REQUIRER_CHANNEL,
         revision=TLS_REQUIRER_REVISION,
+        trust=True,
+    )
+    juju.deploy(
+        TLS_REQUIRER_APPLICATION_NAME,
+        app=SELF_SIGNED_REQUIRER_APPLICATION_NAME,
+        channel=TLS_REQUIRER_CHANNEL,
+        revision=TLS_REQUIRER_REVISION,
+        trust=True,
+    )
+    juju.deploy(
+        TLS_REQUIRER_APPLICATION_NAME,
+        app=ACME_REQUIRER_APPLICATION_NAME,
+        channel=TLS_REQUIRER_CHANNEL,
+        revision=TLS_REQUIRER_REVISION,
+        config={"num_certificates": 0},
         trust=True,
     )
     juju.deploy(
@@ -237,8 +255,95 @@ def test_given_notary_when_tls_requirer_related_then_csr_uploaded_to_notary_and_
         error=lambda status: jubilant.any_error(status, APP_NAME),
     )
 
-    given_certificate = get_first_certificate_from_requirer(juju)
+    given_certificate = get_first_certificate_from_requirer(juju)["certificate"]
     assert given_certificate.replace("\n", "") == str(cert).replace("\n", "")
+
+
+def test_given_self_signed_requirer_when_related_then_certificate_is_automatically_provided(
+    juju: jubilant.Juju,
+):
+    juju.integrate(
+        app1=f"{APP_NAME}:self-signed-certificates",
+        app2=f"{SELF_SIGNED_REQUIRER_APPLICATION_NAME}:certificates",
+    )
+    juju.wait(
+        lambda status: (
+            jubilant.all_agents_idle(status, APP_NAME, SELF_SIGNED_REQUIRER_APPLICATION_NAME)
+            and jubilant.all_active(status, APP_NAME, SELF_SIGNED_REQUIRER_APPLICATION_NAME)
+            and _requirer_has_certificate(juju, SELF_SIGNED_REQUIRER_APPLICATION_NAME)
+        ),
+        error=lambda status: jubilant.any_error(status, APP_NAME),
+    )
+
+    certificates = get_first_certificate_from_requirer(juju, SELF_SIGNED_REQUIRER_APPLICATION_NAME)
+    assert Certificate.from_string(certificates["certificate"])
+    assert (
+        Certificate.from_string(certificates["ca-certificate"]).common_name == CHARM_CA_COMMON_NAME
+    )
+
+
+def test_given_acme_requirer_when_related_then_configuration_and_server_are_reconciled(
+    juju: jubilant.Juju,
+):
+    juju.integrate(
+        app1=f"{APP_NAME}:acme-certificates",
+        app2=f"{ACME_REQUIRER_APPLICATION_NAME}:certificates",
+    )
+    juju.wait(
+        lambda status: (
+            status.apps[APP_NAME].units[f"{APP_NAME}/0"].workload_status.current == "blocked"
+            and status.apps[APP_NAME]
+            .units[f"{APP_NAME}/0"]
+            .workload_status.message.startswith("missing ACME configuration:")
+        ),
+        error=lambda status: jubilant.any_error(
+            status,
+            APP_NAME,
+            SELF_SIGNED_REQUIRER_APPLICATION_NAME,
+            ACME_REQUIRER_APPLICATION_NAME,
+        ),
+    )
+
+    secret_uri = juju.add_secret(
+        "acme-plugin-credentials",
+        {"namecheap-api-key": "integration-test", "namecheap-api-user": "integration-test"},
+    )
+    juju.grant_secret(secret_uri, app=APP_NAME)
+    juju.config(
+        APP_NAME,
+        {
+            "email": "integration-test@example.com",
+            "server": "https://acme-staging-v02.api.letsencrypt.org/directory",
+            "plugin": "namecheap",
+            "plugin-config-secret-id": secret_uri.unique_identifier,
+        },
+    )
+
+    credentials = get_notary_credentials(juju)
+    client = Notary(url=get_notary_endpoint(juju), ca_path=False)
+    login_response = client.login(credentials["email"], credentials["password"])
+    assert login_response is not None
+    assert login_response.token
+    token = login_response.token
+
+    juju.wait(
+        lambda status: (
+            jubilant.all_agents_idle(status, APP_NAME, ACME_REQUIRER_APPLICATION_NAME)
+            and jubilant.all_active(status, APP_NAME, ACME_REQUIRER_APPLICATION_NAME)
+            and any(
+                server.name == CHARM_ACME_SERVER_NAME
+                and server.active
+                and server.dns_provider == "namecheap"
+                for server in client.list_acme_servers(token)
+            )
+        ),
+        error=lambda status: jubilant.any_error(
+            status,
+            APP_NAME,
+            SELF_SIGNED_REQUIRER_APPLICATION_NAME,
+            ACME_REQUIRER_APPLICATION_NAME,
+        ),
+    )
 
 
 def test_given_loki_and_prometheus_related_to_notary_all_charm_statuses_active(
@@ -426,21 +531,33 @@ def get_notary_credentials(juju: jubilant.Juju) -> dict[str, str]:
     }
 
 
-def get_first_certificate_from_requirer(juju: jubilant.Juju) -> str:
-    """Run `get-certificate` on the `tls-requirer-requirer/0` unit.
+def get_first_certificate_from_requirer(
+    juju: jubilant.Juju, app_name: str = TLS_REQUIRER_APPLICATION_NAME
+) -> dict[str, str]:
+    """Return the first certificate exposed by a TLS requirer's action.
 
     Args:
         juju (Juju): juju
+        app_name: Name of the deployed TLS requirer application.
 
     Returns:
-        dict: Action output
+        The first certificate entry.
     """
     result = juju.run(
-        unit=f"{TLS_REQUIRER_APPLICATION_NAME}/0",
+        unit=f"{app_name}/0",
         action="get-certificate",
     )
     obj = json.loads(result.results.get("certificates", "{}"))
-    return obj[0].get("certificate", "")
+    return obj[0]
+
+
+def _requirer_has_certificate(juju: jubilant.Juju, app_name: str) -> bool:
+    """Return whether a TLS requirer exposes a certificate."""
+    try:
+        certificate = get_first_certificate_from_requirer(juju, app_name)
+    except (IndexError, json.JSONDecodeError, jubilant.TaskError):
+        return False
+    return bool(certificate.get("certificate") and certificate.get("ca-certificate"))
 
 
 def get_external_notary_endpoint(juju: jubilant.Juju) -> str:

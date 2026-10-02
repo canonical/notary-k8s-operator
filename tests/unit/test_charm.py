@@ -5496,7 +5496,9 @@ class TestIntegrationHelpers:
             patch.object(
                 helpers,
                 "get_first_certificate_from_requirer",
-                side_effect=lambda _: client.create_certificate_from_csr.call_args.args[1][0],
+                side_effect=lambda _: {
+                    "certificate": client.create_certificate_from_csr.call_args.args[1][0]
+                },
             ),
         ):
             helpers.test_given_notary_when_tls_requirer_related_then_csr_uploaded_to_notary_and_certificate_provided_to_requirer(
