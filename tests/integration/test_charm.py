@@ -194,7 +194,7 @@ def test_given_notary_when_tls_requirer_related_then_csr_uploaded_to_notary_and_
     assert client.token_is_valid(token)
 
     juju.integrate(
-        app1=f"{APP_NAME}:certificates",
+        app1=f"{APP_NAME}:managed-certificates",
         app2=f"{TLS_REQUIRER_APPLICATION_NAME}:certificates",
     )
     # Both apps can still be active and idle before the relation hooks run.

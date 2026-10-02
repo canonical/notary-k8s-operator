@@ -10,6 +10,7 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from threading import Thread
 from types import ModuleType
+from typing import Any
 from unittest.mock import MagicMock, Mock, PropertyMock, patch
 
 import ops
@@ -40,23 +41,31 @@ from scenario import (
 )
 
 from charm import (
-    CERTIFICATE_PROVIDER_RELATION_NAME,
+    ACME_CERTIFICATES_RELATION_NAME,
+    CHARM_ACME_SERVER_NAME,
+    CHARM_CA_COMMON_NAME,
     CLUSTER_DATA_VERSION_KEY,
     CLUSTER_JOIN_SECRET_LABEL,
+    MANAGED_CERTIFICATES_RELATION_NAME,
     NOTARY_LOGIN_SECRET_LABEL,
     PEER_RELATION_NAME,
     SELF_SIGNED_CA_SECRET_LABEL,
+    SELF_SIGNED_CERTIFICATES_RELATION_NAME,
     SEND_ACCESS_CA_CERT_RELATION_NAME,
     TLS_ACCESS_RELATION_NAME,
     NotaryCharm,
 )
-from notary import CertificateRequest as CertificateRequestEntry
 from notary import (
+    ACMEServer,
+    CertificateAuthority,
     ClusterMember,
+    CreateCertificateAuthorityResponse,
+    CreateCertificateRequestResponse,
     CreateClusterMemberResponse,
     LoginResponse,
     Notary,
 )
+from notary import CertificateRequest as CertificateRequestEntry
 
 TLS_LIB_PATH = "charmlibs.interfaces.tls_certificates"
 CERT_TRANSFER_LIB_PATH = "charmlibs.interfaces.certificate_transfer"
@@ -3129,7 +3138,7 @@ class TestCharm:
             ],
             networks={Network("juju-info")},
             leader=True,
-            relations=[Relation(id=1, endpoint=CERTIFICATE_PROVIDER_RELATION_NAME)],
+            relations=[Relation(id=1, endpoint=MANAGED_CERTIFICATES_RELATION_NAME)],
         )
         with patch(
             "charm.Notary",
@@ -3175,7 +3184,7 @@ class TestCharm:
             ],
             networks={Network("juju-info")},
             leader=True,
-            relations=[Relation(id=1, endpoint=CERTIFICATE_PROVIDER_RELATION_NAME)],
+            relations=[Relation(id=1, endpoint=MANAGED_CERTIFICATES_RELATION_NAME)],
             secrets={
                 Secret(
                     {"username": "hello", "password": "world", "token": "test-token"},
@@ -3241,7 +3250,7 @@ class TestCharm:
             ],
             networks={Network("juju-info")},
             leader=True,
-            relations=[Relation(id=1, endpoint=CERTIFICATE_PROVIDER_RELATION_NAME)],
+            relations=[Relation(id=1, endpoint=MANAGED_CERTIFICATES_RELATION_NAME)],
             secrets={
                 Secret(
                     {"username": "hello", "password": "world", "token": "test-token"},
@@ -3315,7 +3324,7 @@ class TestCharm:
             ],
             networks={Network("juju-info")},
             leader=True,
-            relations=[Relation(id=1, endpoint=CERTIFICATE_PROVIDER_RELATION_NAME)],
+            relations=[Relation(id=1, endpoint=MANAGED_CERTIFICATES_RELATION_NAME)],
             secrets={
                 Secret(
                     {"username": "hello", "password": "world", "token": "test-token"},
@@ -3394,7 +3403,7 @@ class TestCharm:
             ],
             networks={Network("juju-info")},
             leader=True,
-            relations=[Relation(id=1, endpoint=CERTIFICATE_PROVIDER_RELATION_NAME)],
+            relations=[Relation(id=1, endpoint=MANAGED_CERTIFICATES_RELATION_NAME)],
             secrets={
                 Secret(
                     {"username": "hello", "password": "world", "token": "test-token"},
@@ -3483,7 +3492,7 @@ class TestCharm:
             ],
             networks={Network("juju-info")},
             leader=True,
-            relations=[Relation(id=1, endpoint=CERTIFICATE_PROVIDER_RELATION_NAME)],
+            relations=[Relation(id=1, endpoint=MANAGED_CERTIFICATES_RELATION_NAME)],
             secrets=[
                 Secret(
                     {"username": "hello", "password": "world", "token": "test-token"},
@@ -4020,6 +4029,433 @@ class TestCharm:
         with open(tmp_path / "certificate.pem") as f:
             saved_cert = f.read()
         assert saved_cert == str(existing_certificate)
+
+
+class TestCharmSigningModes:
+    """Tests for the managed, self-signed and ACME certificate signing modes."""
+
+    @pytest.fixture(scope="function")
+    def context(self):
+        """Exercise application behavior independently of cluster admission."""
+        with patch.object(NotaryCharm, "_cluster_prerequisites_met", return_value=True):
+            yield Context(NotaryCharm)
+
+    def _base_state(self, relation: Relation, **kwargs: Any) -> State:
+        secrets = {
+            Secret(
+                {"username": "hello", "password": "world", "token": "test-token"},
+                id="1",
+                label=NOTARY_LOGIN_SECRET_LABEL,
+                owner="app",
+            )
+        }
+        secrets.update(kwargs.pop("secrets", set()))
+        return State(
+            storages={Storage(name="config"), Storage(name="database")},
+            containers=[
+                Container(
+                    name="notary",
+                    can_connect=True,
+                    layers={
+                        "notary": Layer(
+                            {
+                                "summary": "notary layer",
+                                "description": "pebble config layer for notary",
+                                "services": {
+                                    "notary": {
+                                        "override": "replace",
+                                        "summary": "notary",
+                                        "command": "notary -config /etc/notary/config/config.yaml",
+                                        "startup": "enabled",
+                                    }
+                                },
+                            }
+                        )
+                    },
+                )
+            ],
+            networks={Network("juju-info")},
+            leader=True,
+            relations=[relation],
+            secrets=secrets,
+            **kwargs,
+        )
+
+    @staticmethod
+    def _requests_by_endpoint(endpoint: str, requests: list) -> Callable:
+        """Return the given CSRs only when the provider of the given endpoint is queried."""
+
+        def side_effect(provider: MagicMock, relation_id: int | None = None) -> list:
+            if provider.relationship_name == endpoint:
+                return requests
+            return []
+
+        return side_effect
+
+    @staticmethod
+    def _acme_config(secret_id: str = "plugin-config") -> dict[str, str]:
+        return {
+            "email": "admin@example.com",
+            "server": "https://acme.example.com/directory",
+            "plugin": "route53",
+            "plugin-config-secret-id": secret_id,
+        }
+
+    @patch(f"{TLS_LIB_PATH}.TLSCertificatesProvidesV4.set_relation_certificate")
+    @patch(f"{TLS_LIB_PATH}.TLSCertificatesProvidesV4.get_issued_certificates")
+    @patch(f"{TLS_LIB_PATH}.TLSCertificatesProvidesV4.get_certificate_requests", autospec=True)
+    def test_given_self_signed_relation_and_no_ca_when_configure_then_ca_provisioned_and_csr_signed(
+        self,
+        mock_get_certificate_requests: MagicMock,
+        mock_get_issued_certificates: MagicMock,
+        mock_set_relation_certificate: MagicMock,
+        context: Context[NotaryCharm],
+    ):
+        csr = generate_csr(private_key=generate_private_key(), common_name="me")
+        mock_get_certificate_requests.side_effect = self._requests_by_endpoint(
+            SELF_SIGNED_CERTIFICATES_RELATION_NAME,
+            [
+                RequirerCertificateRequest(
+                    relation_id=1, certificate_signing_request=csr, is_ca=False
+                )
+            ],
+        )
+        mock_get_issued_certificates.return_value = []
+        ca_pk = generate_private_key()
+        ca = generate_ca(ca_pk, timedelta(days=365), "me")
+        cert = generate_certificate(csr, ca, ca_pk, timedelta(days=365))
+        active_entry = CertificateRequestEntry(
+            id=7, csr=str(csr), certificate_chain=[str(cert), str(ca)], status="Active"
+        )
+        notary_client = Mock(
+            **{
+                "is_api_available.return_value": True,
+                "is_initialized.return_value": True,
+                "token_is_valid.return_value": True,
+                "get_version.return_value": None,
+                "list_certificate_requests.side_effect": [[], [active_entry]],
+                "create_certificate_request.return_value": CreateCertificateRequestResponse(id=7),
+                "list_certificate_authorities.return_value": [],
+                "create_certificate_authority.return_value": CreateCertificateAuthorityResponse(
+                    id=3
+                ),
+                "sign_certificate_request.return_value": True,
+            }
+        )
+        state = self._base_state(Relation(id=1, endpoint=SELF_SIGNED_CERTIFICATES_RELATION_NAME))
+        with patch("charm.Notary", return_value=notary_client):
+            context.run(context.on.update_status(), state)
+
+        notary_client.create_certificate_authority.assert_called_once_with(
+            CHARM_CA_COMMON_NAME, "test-token"
+        )
+        notary_client.sign_certificate_request.assert_called_once_with(
+            7, "test-token", certificate_authority_id="3"
+        )
+        mock_set_relation_certificate.assert_called_once()
+
+    @patch(f"{TLS_LIB_PATH}.TLSCertificatesProvidesV4.set_relation_certificate")
+    @patch(f"{TLS_LIB_PATH}.TLSCertificatesProvidesV4.get_issued_certificates")
+    @patch(f"{TLS_LIB_PATH}.TLSCertificatesProvidesV4.get_certificate_requests", autospec=True)
+    def test_given_self_signed_relation_and_existing_ca_when_configure_then_outstanding_csr_signed_with_it(
+        self,
+        mock_get_certificate_requests: MagicMock,
+        mock_get_issued_certificates: MagicMock,
+        mock_set_relation_certificate: MagicMock,
+        context: Context[NotaryCharm],
+    ):
+        csr = generate_csr(private_key=generate_private_key(), common_name="me")
+        mock_get_certificate_requests.side_effect = self._requests_by_endpoint(
+            SELF_SIGNED_CERTIFICATES_RELATION_NAME,
+            [
+                RequirerCertificateRequest(
+                    relation_id=1, certificate_signing_request=csr, is_ca=False
+                )
+            ],
+        )
+        mock_get_issued_certificates.return_value = []
+        charm_ca = generate_ca(generate_private_key(), timedelta(days=365), CHARM_CA_COMMON_NAME)
+        ca_pk = generate_private_key()
+        ca = generate_ca(ca_pk, timedelta(days=365), "me")
+        cert = generate_certificate(csr, ca, ca_pk, timedelta(days=365))
+        outstanding_entry = CertificateRequestEntry(
+            id=7, csr=str(csr), certificate_chain=[], status="Outstanding"
+        )
+        active_entry = CertificateRequestEntry(
+            id=7, csr=str(csr), certificate_chain=[str(cert), str(ca)], status="Active"
+        )
+        notary_client = Mock(
+            **{
+                "is_api_available.return_value": True,
+                "is_initialized.return_value": True,
+                "token_is_valid.return_value": True,
+                "get_version.return_value": None,
+                "list_certificate_requests.side_effect": [
+                    [outstanding_entry],
+                    [active_entry],
+                ],
+                "list_certificate_authorities.return_value": [
+                    CertificateAuthority(
+                        id=3, enabled=True, certificate=str(charm_ca), csr="", crl=""
+                    )
+                ],
+                "sign_certificate_request.return_value": True,
+            }
+        )
+        state = self._base_state(Relation(id=1, endpoint=SELF_SIGNED_CERTIFICATES_RELATION_NAME))
+        with patch("charm.Notary", return_value=notary_client):
+            context.run(context.on.update_status(), state)
+
+        notary_client.create_certificate_authority.assert_not_called()
+        notary_client.create_certificate_request.assert_not_called()
+        notary_client.sign_certificate_request.assert_called_once_with(
+            7, "test-token", certificate_authority_id="3"
+        )
+        mock_set_relation_certificate.assert_called_once()
+
+    @patch(f"{TLS_LIB_PATH}.TLSCertificatesProvidesV4.set_relation_certificate")
+    @patch(f"{TLS_LIB_PATH}.TLSCertificatesProvidesV4.get_issued_certificates")
+    @patch(f"{TLS_LIB_PATH}.TLSCertificatesProvidesV4.get_certificate_requests", autospec=True)
+    def test_given_self_signed_relation_when_ca_provisioning_fails_then_csr_forwarded_but_not_signed(
+        self,
+        mock_get_certificate_requests: MagicMock,
+        mock_get_issued_certificates: MagicMock,
+        mock_set_relation_certificate: MagicMock,
+        context: Context[NotaryCharm],
+    ):
+        csr = generate_csr(private_key=generate_private_key(), common_name="me")
+        mock_get_certificate_requests.side_effect = self._requests_by_endpoint(
+            SELF_SIGNED_CERTIFICATES_RELATION_NAME,
+            [
+                RequirerCertificateRequest(
+                    relation_id=1, certificate_signing_request=csr, is_ca=False
+                )
+            ],
+        )
+        mock_get_issued_certificates.return_value = []
+        notary_client = Mock(
+            **{
+                "is_api_available.return_value": True,
+                "is_initialized.return_value": True,
+                "token_is_valid.return_value": True,
+                "get_version.return_value": None,
+                "list_certificate_requests.return_value": [],
+                "create_certificate_request.return_value": CreateCertificateRequestResponse(id=7),
+                "list_certificate_authorities.return_value": [],
+                "create_certificate_authority.return_value": None,
+            }
+        )
+        state = self._base_state(Relation(id=1, endpoint=SELF_SIGNED_CERTIFICATES_RELATION_NAME))
+        with patch("charm.Notary", return_value=notary_client):
+            context.run(context.on.update_status(), state)
+
+        notary_client.create_certificate_request.assert_called_once_with(str(csr), "test-token")
+        notary_client.sign_certificate_request.assert_not_called()
+        mock_set_relation_certificate.assert_not_called()
+
+    @patch(f"{TLS_LIB_PATH}.TLSCertificatesProvidesV4.set_relation_certificate")
+    @patch(f"{TLS_LIB_PATH}.TLSCertificatesProvidesV4.get_issued_certificates")
+    @patch(f"{TLS_LIB_PATH}.TLSCertificatesProvidesV4.get_certificate_requests", autospec=True)
+    def test_given_acme_relation_and_config_when_configure_then_acme_server_created_and_csr_signed(
+        self,
+        mock_get_certificate_requests: MagicMock,
+        mock_get_issued_certificates: MagicMock,
+        mock_set_relation_certificate: MagicMock,
+        context: Context[NotaryCharm],
+    ):
+        csr = generate_csr(private_key=generate_private_key(), common_name="me")
+        mock_get_certificate_requests.side_effect = self._requests_by_endpoint(
+            ACME_CERTIFICATES_RELATION_NAME,
+            [
+                RequirerCertificateRequest(
+                    relation_id=1, certificate_signing_request=csr, is_ca=False
+                )
+            ],
+        )
+        mock_get_issued_certificates.return_value = []
+        ca_pk = generate_private_key()
+        ca = generate_ca(ca_pk, timedelta(days=365), "me")
+        cert = generate_certificate(csr, ca, ca_pk, timedelta(days=365))
+        active_entry = CertificateRequestEntry(
+            id=7, csr=str(csr), certificate_chain=[str(cert), str(ca)], status="Active"
+        )
+        notary_client = Mock(
+            **{
+                "is_api_available.return_value": True,
+                "is_initialized.return_value": True,
+                "token_is_valid.return_value": True,
+                "get_version.return_value": None,
+                "list_certificate_requests.side_effect": [[], [active_entry]],
+                "create_certificate_request.return_value": CreateCertificateRequestResponse(id=7),
+                "list_acme_servers.return_value": [],
+                "create_acme_server.return_value": ACMEServer(
+                    id=5,
+                    name=CHARM_ACME_SERVER_NAME,
+                    directory_url="https://acme.example.com/directory",
+                    email="admin@example.com",
+                    dns_provider="route53",
+                    active=False,
+                    env_var_keys=["AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY"],
+                ),
+                "set_active_acme_server.return_value": True,
+                "list_cluster_members.return_value": [
+                    ClusterMember(
+                        name="notary-k8s-0",
+                        id=1,
+                        address="leader.example.com:9000",
+                        api_address="",
+                        role="voter",
+                        leader=True,
+                    )
+                ],
+                "sign_certificate_request.return_value": True,
+            }
+        )
+        state = self._base_state(
+            Relation(id=1, endpoint=ACME_CERTIFICATES_RELATION_NAME),
+            config=self._acme_config(),
+            secrets={
+                Secret(
+                    {"aws-access-key-id": "AKIA", "aws-secret-access-key": "shh"},
+                    id="plugin-config",
+                )
+            },
+        )
+        with patch("charm.Notary", return_value=notary_client):
+            context.run(context.on.update_status(), state)
+
+        create_params = notary_client.create_acme_server.call_args.args[0]
+        assert create_params.name == CHARM_ACME_SERVER_NAME
+        assert create_params.directory_url == "https://acme.example.com/directory"
+        assert create_params.email == "admin@example.com"
+        assert create_params.dns_provider == "route53"
+        assert create_params.env_vars == {
+            "AWS_ACCESS_KEY_ID": "AKIA",
+            "AWS_SECRET_ACCESS_KEY": "shh",
+        }
+        notary_client.set_active_acme_server.assert_called_once_with(5, "test-token")
+        notary_client.sign_certificate_request.assert_called_once_with(
+            7, "test-token", signing_method="acme"
+        )
+        mock_set_relation_certificate.assert_called_once()
+
+    @patch(f"{TLS_LIB_PATH}.TLSCertificatesProvidesV4.set_relation_certificate")
+    @patch(f"{TLS_LIB_PATH}.TLSCertificatesProvidesV4.get_issued_certificates")
+    @patch(f"{TLS_LIB_PATH}.TLSCertificatesProvidesV4.get_certificate_requests", autospec=True)
+    def test_given_acme_relation_and_existing_inactive_server_when_configure_then_server_updated_and_activated(
+        self,
+        mock_get_certificate_requests: MagicMock,
+        mock_get_issued_certificates: MagicMock,
+        mock_set_relation_certificate: MagicMock,
+        context: Context[NotaryCharm],
+    ):
+        csr = generate_csr(private_key=generate_private_key(), common_name="me")
+        mock_get_certificate_requests.side_effect = self._requests_by_endpoint(
+            ACME_CERTIFICATES_RELATION_NAME,
+            [
+                RequirerCertificateRequest(
+                    relation_id=1, certificate_signing_request=csr, is_ca=False
+                )
+            ],
+        )
+        mock_get_issued_certificates.return_value = []
+        notary_client = Mock(
+            **{
+                "is_api_available.return_value": True,
+                "is_initialized.return_value": True,
+                "token_is_valid.return_value": True,
+                "get_version.return_value": None,
+                "list_certificate_requests.return_value": [],
+                "create_certificate_request.return_value": CreateCertificateRequestResponse(id=7),
+                "list_acme_servers.return_value": [
+                    ACMEServer(
+                        id=5,
+                        name=CHARM_ACME_SERVER_NAME,
+                        directory_url="https://acme-staging.example.com/directory",
+                        email="admin@example.com",
+                        dns_provider="route53",
+                        active=False,
+                        env_var_keys=["AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY"],
+                    )
+                ],
+                "update_acme_server.return_value": ACMEServer(
+                    id=5,
+                    name=CHARM_ACME_SERVER_NAME,
+                    directory_url="https://acme.example.com/directory",
+                    email="admin@example.com",
+                    dns_provider="route53",
+                    active=False,
+                    env_var_keys=["AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY"],
+                ),
+                "set_active_acme_server.return_value": True,
+                "list_cluster_members.return_value": [],
+                "sign_certificate_request.return_value": True,
+            }
+        )
+        state = self._base_state(
+            Relation(id=1, endpoint=ACME_CERTIFICATES_RELATION_NAME),
+            config=self._acme_config(),
+            secrets={
+                Secret(
+                    {"aws-access-key-id": "AKIA", "aws-secret-access-key": "shh"},
+                    id="plugin-config",
+                )
+            },
+        )
+        with patch("charm.Notary", return_value=notary_client):
+            context.run(context.on.update_status(), state)
+
+        notary_client.create_acme_server.assert_not_called()
+        update_params = notary_client.update_acme_server.call_args.args[1]
+        assert update_params.directory_url == "https://acme.example.com/directory"
+        notary_client.set_active_acme_server.assert_called_once_with(5, "test-token")
+
+    def test_given_acme_relation_without_config_when_update_status_then_blocked(
+        self, context: Context[NotaryCharm]
+    ):
+        state = self._base_state(Relation(id=1, endpoint=ACME_CERTIFICATES_RELATION_NAME))
+        with patch(
+            "charm.Notary",
+            return_value=Mock(
+                **{
+                    "is_api_available.return_value": True,
+                    "is_initialized.return_value": True,
+                    "token_is_valid.return_value": True,
+                    "get_version.return_value": None,
+                    "list_certificate_requests.return_value": [],
+                },
+            ),
+        ):
+            out = context.run(context.on.update_status(), state)
+
+        assert out.unit_status == ops.BlockedStatus(
+            "missing ACME configuration: email, server, plugin, plugin-config-secret-id"
+        )
+
+    def test_given_acme_relation_and_unreadable_secret_when_update_status_then_blocked(
+        self, context: Context[NotaryCharm]
+    ):
+        state = self._base_state(
+            Relation(id=1, endpoint=ACME_CERTIFICATES_RELATION_NAME),
+            config=self._acme_config(secret_id="secret:nonexistent"),
+        )
+        with patch(
+            "charm.Notary",
+            return_value=Mock(
+                **{
+                    "is_api_available.return_value": True,
+                    "is_initialized.return_value": True,
+                    "token_is_valid.return_value": True,
+                    "get_version.return_value": None,
+                    "list_certificate_requests.return_value": [],
+                },
+            ),
+        ):
+            out = context.run(context.on.update_status(), state)
+
+        assert out.unit_status == ops.BlockedStatus(
+            "plugin-config-secret-id does not reference a readable secret"
+        )
 
 
 SELF_MEMBER_NAME = "notary-k8s-0"
