@@ -1,6 +1,7 @@
 # Copyright 2024 Canonical Ltd.
 # See LICENSE file for licensing details.
 
+import hashlib
 import importlib.util
 import json
 from collections.abc import Callable
@@ -10,7 +11,7 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from threading import Thread
 from types import ModuleType
-from typing import Any
+from typing import Any, Literal
 from unittest.mock import MagicMock, Mock, PropertyMock, patch
 
 import ops
@@ -42,6 +43,7 @@ from scenario import (
 
 from charm import (
     ACME_CERTIFICATES_RELATION_NAME,
+    CERTIFICATE_MODES_SECRET_LABEL,
     CHARM_ACME_SERVER_NAME,
     CHARM_CA_COMMON_NAME,
     CLUSTER_DATA_VERSION_KEY,
@@ -57,6 +59,7 @@ from charm import (
 )
 from notary import (
     ACMEServer,
+    ACMEServerParams,
     CertificateAuthority,
     ClusterMember,
     CreateCertificateAuthorityResponse,
@@ -4034,10 +4037,225 @@ class TestCharm:
 class TestCharmSigningModes:
     """Tests for the managed, self-signed and ACME certificate signing modes."""
 
+    @pytest.mark.parametrize(
+        "endpoint",
+        [
+            MANAGED_CERTIFICATES_RELATION_NAME,
+            SELF_SIGNED_CERTIFICATES_RELATION_NAME,
+            ACME_CERTIFICATES_RELATION_NAME,
+        ],
+    )
+    def test_ca_requests_are_rejected(self, context: Context[NotaryCharm], endpoint: str):
+        csr = generate_csr(generate_private_key(), "intermediate.example")
+        request = RequirerCertificateRequest(1, csr, True)
+        state = self._base_state(Relation(id=1, endpoint=endpoint))
+        client = Mock(list_certificate_requests=Mock(return_value=[]))
+        with patch("charm.Notary", return_value=client):
+            with context(context.on.collect_unit_status(), state) as manager:
+                charm = manager.charm
+                provider = {
+                    MANAGED_CERTIFICATES_RELATION_NAME: charm.tls_managed,
+                    SELF_SIGNED_CERTIFICATES_RELATION_NAME: charm.tls_self_signed,
+                    ACME_CERTIFICATES_RELATION_NAME: charm.tls_acme,
+                }[endpoint]
+                with patch.object(provider, "get_certificate_requests", return_value=[request]):
+                    charm._sync_certificate_requirers(
+                        provider, "token", signing=client.sign_certificate_request
+                    )
+                relation = charm.model.get_relation(endpoint, 1)
+                assert relation is not None
+                assert (
+                    "CA certificate requests are not supported"
+                    in relation.data[charm.app]["request_errors"]
+                )
+                assert provider.get_issued_certificates(1) == []
+                client.create_certificate_request.assert_not_called()
+                client.sign_certificate_request.assert_not_called()
+
+    @pytest.mark.parametrize("status", ["Active", "Outstanding"])
+    @pytest.mark.parametrize(
+        "owner", [None, MANAGED_CERTIFICATES_RELATION_NAME, SELF_SIGNED_CERTIFICATES_RELATION_NAME]
+    )
+    def test_acme_rejects_requests_from_another_mode(
+        self,
+        context: Context[NotaryCharm],
+        status: Literal["Active", "Outstanding"],
+        owner: str | None,
+    ):
+        csr = generate_csr(generate_private_key(), "reuse.example")
+        request = RequirerCertificateRequest(1, csr, False)
+        secrets = set()
+        if owner:
+            secrets.add(
+                Secret(
+                    {"csr-" + hashlib.sha256(str(csr).encode()).hexdigest(): owner},
+                    label=CERTIFICATE_MODES_SECRET_LABEL,
+                    owner="app",
+                )
+            )
+        state = self._base_state(
+            Relation(id=1, endpoint=ACME_CERTIFICATES_RELATION_NAME), secrets=secrets
+        )
+        client = Mock(
+            list_certificate_requests=Mock(
+                return_value=[CertificateRequestEntry(7, str(csr), [], status)]
+            )
+        )
+        with patch("charm.Notary", return_value=client):
+            with context(context.on.collect_unit_status(), state) as manager:
+                charm = manager.charm
+                with patch.object(
+                    charm.tls_acme, "get_certificate_requests", return_value=[request]
+                ):
+                    charm._sync_certificate_requirers(
+                        charm.tls_acme, "token", signing=client.sign_certificate_request
+                    )
+                relation = charm.model.get_relation(ACME_CERTIFICATES_RELATION_NAME, 1)
+                assert relation is not None
+                assert "generate a new CSR" in relation.data[charm.app]["request_errors"]
+                assert charm.tls_acme.get_issued_certificates(1) == []
+                client.sign_certificate_request.assert_not_called()
+                client.create_certificate_request.assert_not_called()
+
+    def test_mode_assignment_survives_hooks_and_rejects_managed_reuse(
+        self, context: Context[NotaryCharm]
+    ):
+        csr = generate_csr(generate_private_key(), "owned.example")
+        request = RequirerCertificateRequest(1, csr, False)
+        state = self._base_state(Relation(id=1, endpoint=SELF_SIGNED_CERTIFICATES_RELATION_NAME))
+        client = Mock(
+            **{
+                "list_certificate_requests.return_value": [],
+                "list_certificate_authorities.return_value": [],
+                "create_certificate_authority.return_value": None,
+                "get_version.return_value": None,
+            }
+        )
+        with (
+            patch("charm.Notary", return_value=client),
+            patch(
+                f"{TLS_LIB_PATH}.TLSCertificatesProvidesV4.get_certificate_requests",
+                autospec=True,
+                side_effect=self._requests_by_endpoint(
+                    SELF_SIGNED_CERTIFICATES_RELATION_NAME, [request]
+                ),
+            ),
+        ):
+            out = context.run(context.on.update_status(), state)
+        out = replace(out, relations={Relation(id=2, endpoint=MANAGED_CERTIFICATES_RELATION_NAME)})
+        with context(context.on.collect_unit_status(), out) as manager:
+            charm = manager.charm
+            assert not charm._claim_certificate_request(
+                charm.tls_managed, replace(request, relation_id=2), exists=True
+            )
+            secret = charm.model.get_secret(label=CERTIFICATE_MODES_SECRET_LABEL)
+            assert set(secret.get_content().values()) == {SELF_SIGNED_CERTIFICATES_RELATION_NAME}
+
+    @pytest.mark.parametrize("enabled,expired", [(True, False), (True, True), (False, False)])
+    def test_ca_lifecycle(self, context: Context[NotaryCharm], enabled: bool, expired: bool):
+        ca = generate_ca(generate_private_key(), timedelta(days=365), CHARM_CA_COMMON_NAME)
+        client = Mock(
+            **{
+                "list_certificate_authorities.return_value": [
+                    CertificateAuthority(3, enabled, str(ca), "", "")
+                ],
+                "create_certificate_authority.return_value": CreateCertificateAuthorityResponse(4),
+            }
+        )
+        state = self._base_state(Relation(id=1, endpoint=SELF_SIGNED_CERTIFICATES_RELATION_NAME))
+        with (
+            patch("charm.Notary", return_value=client),
+            context(context.on.collect_unit_status(), state) as manager,
+        ):
+            with patch("charm.datetime") as clock:
+                clock.now.return_value = (
+                    ca.expiry_time + timedelta(seconds=1)
+                    if expired
+                    else datetime.now(timezone.utc)
+                )
+                result = manager.charm._get_or_provision_certificate_authority("token")
+            if not enabled:
+                assert result is None
+                assert (
+                    manager.charm._certificate_signing_error
+                    == "Notary Charm CA is disabled; enable it in Notary"
+                )
+                client.create_certificate_authority.assert_not_called()
+            elif expired:
+                assert result == 4
+                client.create_certificate_authority.assert_called_once_with(
+                    CHARM_CA_COMMON_NAME, "token"
+                )
+            else:
+                assert result == 3
+                client.create_certificate_authority.assert_not_called()
+
+    @pytest.mark.parametrize(
+        "change",
+        [
+            {},
+            {"directory_url": "https://other.example/directory"},
+            {"email": "other@example.com"},
+            {"dns_provider": "namecheap"},
+            {"env_var_keys": ["OTHER_KEY"]},
+            {"active": False},
+        ],
+    )
+    def test_acme_reconciles_drift_after_initial_configuration(
+        self, context: Context[NotaryCharm], change: dict[str, Any]
+    ):
+        params = ACMEServerParams(
+            CHARM_ACME_SERVER_NAME,
+            "https://acme.example/directory",
+            "admin@example.com",
+            "route53",
+            {"AWS_ACCESS_KEY_ID": "test"},
+        )
+        server = ACMEServer(
+            5,
+            params.name,
+            params.directory_url,
+            params.email,
+            params.dns_provider,
+            True,
+            list(params.env_vars),
+        )
+        client = Mock(
+            **{
+                "list_acme_servers.return_value": [],
+                "create_acme_server.return_value": server,
+                "set_active_acme_server.return_value": True,
+                "update_acme_server.return_value": server,
+            }
+        )
+        state = self._base_state(Relation(id=1, endpoint=ACME_CERTIFICATES_RELATION_NAME))
+        with (
+            patch("charm.Notary", return_value=client),
+            context(context.on.collect_unit_status(), state) as manager,
+        ):
+            assert manager.charm._ensure_acme_server(params, "token") == 5
+            client.reset_mock()
+            client.list_acme_servers.return_value = [replace(server, **change)]
+            assert manager.charm._ensure_acme_server(params, "token") == 5
+            if change:
+                client.update_acme_server.assert_called_once_with(5, params, "token")
+            else:
+                client.update_acme_server.assert_not_called()
+            if change.get("active") is False:
+                client.set_active_acme_server.assert_called_once_with(5, "token")
+
     @pytest.fixture(scope="function")
     def context(self):
         """Exercise application behavior independently of cluster admission."""
-        with patch.object(NotaryCharm, "_cluster_prerequisites_met", return_value=True):
+        with (
+            patch.object(NotaryCharm, "_cluster_prerequisites_met", return_value=True),
+            patch.object(
+                NotaryCharm,
+                "_ca_certificate_path",
+                new_callable=PropertyMock,
+                return_value="/tmp/notary-test-ca.pem",
+            ),
+        ):
             yield Context(NotaryCharm)
 
     def _base_state(self, relation: Relation, **kwargs: Any) -> State:
@@ -4202,7 +4420,21 @@ class TestCharmSigningModes:
                 "sign_certificate_request.return_value": True,
             }
         )
-        state = self._base_state(Relation(id=1, endpoint=SELF_SIGNED_CERTIFICATES_RELATION_NAME))
+        state = self._base_state(
+            Relation(id=1, endpoint=SELF_SIGNED_CERTIFICATES_RELATION_NAME),
+            secrets={
+                Secret(
+                    {
+                        "csr-"
+                        + hashlib.sha256(
+                            str(csr).encode()
+                        ).hexdigest(): SELF_SIGNED_CERTIFICATES_RELATION_NAME
+                    },
+                    label=CERTIFICATE_MODES_SECRET_LABEL,
+                    owner="app",
+                )
+            },
+        )
         with patch("charm.Notary", return_value=notary_client):
             context.run(context.on.update_status(), state)
 

@@ -23,10 +23,13 @@ from botocore.exceptions import BotoCoreError, ClientError
 from charmlibs.interfaces.certificate_transfer import CertificateTransferProvides
 from charmlibs.interfaces.tls_certificates import (
     Certificate,
+    CertificateError,
     CertificateRequestAttributes,
+    CertificateRequestErrorCode,
     Mode,
     PrivateKey,
     ProviderCertificate,
+    ProviderCertificateError,
     RequirerCertificateRequest,
     TLSCertificatesError,
     TLSCertificatesProvidesV4,
@@ -71,6 +74,7 @@ CERTIFICATE_COMMON_NAME = "Notary Self Signed Certificate"
 SELF_SIGNED_CA_COMMON_NAME = "Notary Self Signed Root CA"
 CHARM_CA_COMMON_NAME = "Notary Charm CA"
 CHARM_ACME_SERVER_NAME = "charm-managed"
+CERTIFICATE_MODES_SECRET_LABEL = "Notary Certificate Request Modes"
 ACME_CONFIG_OPTIONS = ("email", "server", "plugin", "plugin-config-secret-id")
 NOTARY_LOGIN_SECRET_LABEL = "Notary Login Details"
 SEND_ACCESS_CA_CERT_RELATION_NAME = "send-access-ca-certificate"
@@ -127,6 +131,7 @@ class NotaryCharm(ops.CharmBase):
         self._stored.set_default(restart_required=False)
         self._stored.set_default(acme_config_hash="")
         self._pebble_unavailable = False
+        self._certificate_signing_error: str | None = None
         self.port = 2111
         self.access_csr = CertificateRequestAttributes(
             common_name="Notary",
@@ -446,6 +451,8 @@ class NotaryCharm(ops.CharmBase):
             return
         try:
             self._collect_status(event)
+            if self._certificate_signing_error:
+                event.add_status(ops.BlockedStatus(self._certificate_signing_error))
         except (TimeoutError, ops.pebble.ConnectionError) as error:
             logger.warning("Workload container temporarily unavailable: %s", error)
             event.add_status(ops.WaitingStatus("waiting for workload container"))
@@ -684,8 +691,15 @@ class NotaryCharm(ops.CharmBase):
             return
         notary_certificate_requests = self.client.list_certificate_requests(token)
         signed_requests = False
+        accepted_requests = []
         for request in databag_csrs:
             matches = self._matching_notary_requests(notary_certificate_requests, request)
+            if request.is_ca:
+                self._set_request_error(tls, request, "CA certificate requests are not supported")
+                continue
+            if not self._claim_certificate_request(tls, request, bool(matches)):
+                continue
+            accepted_requests.append(request)
             if len(matches) < 1:
                 response = self.client.create_certificate_request(
                     str(request.certificate_signing_request), token
@@ -700,7 +714,56 @@ class NotaryCharm(ops.CharmBase):
             # Signing is synchronous upstream; refresh so certificates reach
             # requirers in this hook instead of the next one.
             notary_certificate_requests = self.client.list_certificate_requests(token)
-        self._push_notary_results_to_requirers(tls, databag_csrs, notary_certificate_requests)
+        self._push_notary_results_to_requirers(tls, accepted_requests, notary_certificate_requests)
+
+    def _claim_certificate_request(
+        self,
+        tls: TLSCertificatesProvidesV4,
+        request: RequirerCertificateRequest,
+        exists: bool,
+    ) -> bool:
+        """Persist endpoint ownership before forwarding a CSR to Notary."""
+        try:
+            secret = self.model.get_secret(label=CERTIFICATE_MODES_SECRET_LABEL)
+            modes = secret.get_content(refresh=True)
+        except ops.SecretNotFoundError:
+            secret = None
+            modes = {}
+        key = (
+            "csr-" + hashlib.sha256(str(request.certificate_signing_request).encode()).hexdigest()
+        )
+        owner = modes.get(key)
+        if owner is None and exists:
+            owner = MANAGED_CERTIFICATES_RELATION_NAME
+        if owner is not None and owner != tls.relationship_name:
+            self._set_request_error(
+                tls, request, "CSR belongs to another signing mode; generate a new CSR"
+            )
+            return False
+        if key not in modes:
+            modes[key] = tls.relationship_name
+            if secret is None:
+                self.app.add_secret(modes, label=CERTIFICATE_MODES_SECRET_LABEL)
+            else:
+                secret.set_content(modes)
+        return True
+
+    @staticmethod
+    def _set_request_error(
+        tls: TLSCertificatesProvidesV4, request: RequirerCertificateRequest, message: str
+    ) -> None:
+        """Reject an unsupported request without publishing an incorrect certificate."""
+        tls.set_relation_error(
+            ProviderCertificateError(
+                relation_id=request.relation_id,
+                certificate_signing_request=request.certificate_signing_request,
+                error=CertificateError(
+                    code=CertificateRequestErrorCode.OTHER,
+                    name="UNSUPPORTED_REQUEST",
+                    message=message,
+                ),
+            )
+        )
 
     def _push_notary_results_to_requirers(
         self,
@@ -781,16 +844,33 @@ class NotaryCharm(ops.CharmBase):
         )
 
     def _get_or_provision_certificate_authority(self, token: str) -> int | None:
-        """Return the ID of the charm-provisioned CA in Notary, creating it on first use."""
+        """Reuse a valid enabled CA, replacing expired CAs but respecting explicit disabling."""
+        disabled = False
         for ca in self.client.list_certificate_authorities(token):
             if not ca.certificate:
                 continue
             with suppress(TLSCertificatesError):
-                if Certificate.from_string(ca.certificate).common_name == CHARM_CA_COMMON_NAME:
+                certificate = Certificate.from_string(ca.certificate)
+                if certificate.common_name != CHARM_CA_COMMON_NAME:
+                    continue
+                if not ca.enabled:
+                    disabled = True
+                    continue
+                if (
+                    certificate.validity_start_time
+                    <= datetime.now(timezone.utc)
+                    < certificate.expiry_time
+                ):
                     return ca.id
+        if disabled:
+            self._certificate_signing_error = "Notary Charm CA is disabled; enable it in Notary"
+            return None
         response = self.client.create_certificate_authority(CHARM_CA_COMMON_NAME, token)
         if not response:
             logger.error("failed to provision a certificate authority in Notary")
+            self._certificate_signing_error = (
+                "Failed to provision Notary Charm CA; check Notary logs"
+            )
             return None
         logger.info("Provisioned certificate authority in Notary (id %s)", response.id)
         return response.id
@@ -831,7 +911,15 @@ class NotaryCharm(ops.CharmBase):
         ).hexdigest()
         servers = self.client.list_acme_servers(token)
         existing = next((server for server in servers if server.name == params.name), None)
-        if existing and existing.active and self._stored.acme_config_hash == desired_hash:
+        if (
+            existing
+            and existing.active
+            and existing.directory_url == params.directory_url
+            and existing.email == params.email
+            and existing.dns_provider == params.dns_provider
+            and set(existing.env_var_keys) == set(params.env_vars)
+            and self._stored.acme_config_hash == desired_hash
+        ):
             return existing.id
         if existing:
             if not self.client.update_acme_server(existing.id, params, token):

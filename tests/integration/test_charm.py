@@ -129,6 +129,7 @@ def test_build_and_deploy(juju: jubilant.Juju, request: pytest.FixtureRequest):
         app=SELF_SIGNED_REQUIRER_APPLICATION_NAME,
         channel=TLS_REQUIRER_CHANNEL,
         revision=TLS_REQUIRER_REVISION,
+        config={"common_name": "self-signed.example"},
         trust=True,
     )
     juju.deploy(
@@ -272,7 +273,9 @@ def test_given_self_signed_requirer_when_related_then_certificate_is_automatical
             and jubilant.all_active(status, APP_NAME, SELF_SIGNED_REQUIRER_APPLICATION_NAME)
             and _requirer_has_certificate(juju, SELF_SIGNED_REQUIRER_APPLICATION_NAME)
         ),
-        error=lambda status: jubilant.any_error(status, APP_NAME),
+        error=lambda status: jubilant.any_error(
+            status, APP_NAME, SELF_SIGNED_REQUIRER_APPLICATION_NAME
+        ),
     )
 
     certificates = get_first_certificate_from_requirer(juju, SELF_SIGNED_REQUIRER_APPLICATION_NAME)
