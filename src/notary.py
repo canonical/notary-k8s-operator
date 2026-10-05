@@ -135,6 +135,64 @@ class CreateClusterMemberResponse:
     join_token: str
 
 
+@dataclass(frozen=True)
+class CertificateAuthority:
+    """A certificate authority that's stored in Notary."""
+
+    id: int
+    enabled: bool
+    certificate: str
+    csr: str
+    crl: str
+
+
+@dataclass
+class CreateCertificateAuthorityParams:
+    """Parameters to create a certificate authority in Notary."""
+
+    self_signed: bool
+    common_name: str
+
+
+@dataclass
+class CreateCertificateAuthorityResponse:
+    """Response from Notary when creating a certificate authority."""
+
+    id: int
+
+
+@dataclass
+class SignCertificateRequestParams:
+    """Parameters to sign a certificate request in Notary."""
+
+    certificate_authority_id: str
+    signing_method: str
+
+
+@dataclass(frozen=True)
+class ACMEServer:
+    """An ACME server that's stored in Notary."""
+
+    id: int
+    name: str
+    directory_url: str
+    email: str
+    dns_provider: str
+    active: bool
+    env_var_keys: List[str]
+
+
+@dataclass
+class ACMEServerParams:
+    """Parameters to create or update an ACME server in Notary."""
+
+    name: str
+    directory_url: str
+    email: str
+    dns_provider: str
+    env_vars: dict[str, str]
+
+
 class Notary:
     """Class to interact with Notary."""
 
@@ -391,6 +449,123 @@ class Notary:
             token=token,
         )
         return response is not None
+
+    def list_certificate_authorities(self, token: str) -> List[CertificateAuthority]:
+        """Get all certificate authorities from Notary."""
+        response = self._make_request(
+            "GET", f"/api/{self.API_VERSION}/certificate_authorities", token=token
+        )
+        if response and response.result:
+            return [
+                CertificateAuthority(
+                    id=ca.get("id"),
+                    enabled=ca.get("enabled"),
+                    certificate=ca.get("certificate"),
+                    csr=ca.get("csr"),
+                    crl=ca.get("crl"),
+                )
+                for ca in response.result
+            ]
+        return []
+
+    def create_certificate_authority(
+        self, common_name: str, token: str
+    ) -> CreateCertificateAuthorityResponse | None:
+        """Create a self-signed certificate authority in Notary."""
+        params = CreateCertificateAuthorityParams(self_signed=True, common_name=common_name)
+        response = self._make_request(
+            "POST",
+            f"/api/{self.API_VERSION}/certificate_authorities",
+            token=token,
+            data=asdict(params),
+        )
+        if response and response.result:
+            return CreateCertificateAuthorityResponse(id=response.result.get("id"))
+        return None
+
+    def sign_certificate_request(
+        self,
+        csr_id: int,
+        token: str,
+        certificate_authority_id: str = "",
+        signing_method: str = "ca",
+    ) -> bool:
+        """Sign a certificate request in Notary using a CA or ACME. Return True on success."""
+        params = SignCertificateRequestParams(
+            certificate_authority_id=certificate_authority_id,
+            signing_method=signing_method,
+        )
+        response = self._make_request(
+            "POST",
+            f"/api/{self.API_VERSION}/certificate_requests/{csr_id}/sign",
+            token=token,
+            data=asdict(params),
+        )
+        return response is not None
+
+    def list_acme_servers(self, token: str) -> List[ACMEServer]:
+        """Get all ACME servers from Notary."""
+        response = self._make_request("GET", f"/api/{self.API_VERSION}/acme_servers", token=token)
+        if response and response.result:
+            return [
+                ACMEServer(
+                    id=server.get("id"),
+                    name=server.get("name"),
+                    directory_url=server.get("directory_url"),
+                    email=server.get("email"),
+                    dns_provider=server.get("dns_provider"),
+                    active=server.get("active"),
+                    env_var_keys=server.get("env_var_keys") or [],
+                )
+                for server in response.result
+            ]
+        return []
+
+    def create_acme_server(self, params: ACMEServerParams, token: str) -> ACMEServer | None:
+        """Create an ACME server in Notary."""
+        response = self._make_request(
+            "POST",
+            f"/api/{self.API_VERSION}/acme_servers",
+            token=token,
+            data=asdict(params),
+        )
+        return self._acme_server_from_response(response)
+
+    def update_acme_server(
+        self, server_id: int, params: ACMEServerParams, token: str
+    ) -> ACMEServer | None:
+        """Update an ACME server in Notary."""
+        response = self._make_request(
+            "PUT",
+            f"/api/{self.API_VERSION}/acme_servers/{server_id}",
+            token=token,
+            data=asdict(params),
+        )
+        return self._acme_server_from_response(response)
+
+    def set_active_acme_server(self, server_id: int, token: str) -> bool:
+        """Mark an ACME server as the active one in Notary. Return True on success."""
+        response = self._make_request(
+            "PUT",
+            f"/api/{self.API_VERSION}/acme_servers/{server_id}/active",
+            token=token,
+        )
+        return response is not None
+
+    @staticmethod
+    def _acme_server_from_response(response: Response | None) -> ACMEServer | None:
+        """Build an ACMEServer from an API response."""
+        if response and response.result:
+            return ACMEServer(
+                id=response.result.get("id"),
+                name=response.result.get("name"),
+                directory_url=response.result.get("directory_url"),
+                email=response.result.get("email"),
+                dns_provider=response.result.get("dns_provider"),
+                active=response.result.get("active"),
+                env_var_keys=response.result.get("env_var_keys") or [],
+            )
+        return None
 
 
 def serialize(pem_string: str) -> list[str]:

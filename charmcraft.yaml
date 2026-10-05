@@ -49,12 +49,50 @@ config:
         - the hostname in the CRLDistributionPoint extension in all certificates created by Notary,
         - the hostname in the OIDC integration used by notary.
       type: string
+    email:
+      description: |
+        Account email for Let's Encrypt (or the chosen ACME server).
+        Used to sign CSRs arriving on the acme-certificates integration.
+      type: string
+    server:
+      description: |
+        ACME server directory URL.
+        For example: https://acme-v02.api.letsencrypt.org/directory
+      type: string
+    plugin:
+      description: |
+        The LEGO DNS plugin (dns_provider) used to solve DNS-01 challenges.
+        Choose from https://go-acme.github.io/lego/dns
+      type: string
+    plugin-config-secret-id:
+      description: |
+        The ID of the Juju user secret holding the credentials required by the selected
+        LEGO DNS plugin. Secret keys are the plugin's environment variable names in
+        lowercase with dashes instead of underscores, per the LEGO documentation
+        (https://go-acme.github.io/lego/dns).
+        For example, the route53 plugin needs aws-access-key-id and aws-secret-access-key,
+        which are passed to Notary as AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY.
+      type: string
 
 provides:
-  certificates:
+  managed-certificates:
     interface: tls-certificates
     description: |
       Forwards CSR's from requirers to Notary, and returns the signed certificate back to the requirer.
+      CSRs arriving on this integration remain pending until signed via the Notary API or UI.
+    optional: true
+  self-signed-certificates:
+    interface: tls-certificates
+    description: |
+      On first integration, the charm provisions a CA in Notary.
+      CSRs arriving on this integration are automatically signed by that CA.
+    optional: true
+  acme-certificates:
+    interface: tls-certificates
+    description: |
+      CSRs arriving on this integration are automatically signed by the configured ACME provider.
+      Requires the email, server, plugin and plugin-config-secret-id config options.
+      Only one ACME provider can be configured per application instance.
     optional: true
   send-access-ca-certificate:
     interface: certificate_transfer

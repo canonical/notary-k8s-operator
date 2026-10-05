@@ -4,6 +4,7 @@
 
 """Charm the application."""
 
+import hashlib
 import json
 import logging
 import random
@@ -11,10 +12,10 @@ import socket
 import string
 import time
 from contextlib import suppress
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from datetime import datetime, timedelta, timezone
 from functools import cached_property
-from typing import Iterator
+from typing import Callable, Iterator
 
 import ops
 import yaml
@@ -22,10 +23,15 @@ from botocore.exceptions import BotoCoreError, ClientError
 from charmlibs.interfaces.certificate_transfer import CertificateTransferProvides
 from charmlibs.interfaces.tls_certificates import (
     Certificate,
+    CertificateError,
     CertificateRequestAttributes,
+    CertificateRequestErrorCode,
     Mode,
     PrivateKey,
     ProviderCertificate,
+    ProviderCertificateError,
+    RequirerCertificateRequest,
+    TLSCertificatesError,
     TLSCertificatesProvidesV4,
     TLSCertificatesRequiresV4,
     generate_ca,
@@ -42,13 +48,15 @@ from charms.tempo_coordinator_k8s.v0.tracing import TracingEndpointRequirer, cha
 from charms.traefik_k8s.v2.ingress import IngressPerAppRequirer
 
 from backup import DATABASE_PATH, BackupError, BackupManager
-from notary import ClusterMember, Notary
+from notary import ACMEServerParams, CertificateRequest, ClusterMember, Notary
 from s3 import S3Parameters
 from utils import is_valid_hostname
 
 logger = logging.getLogger(__name__)
 
-CERTIFICATE_PROVIDER_RELATION_NAME = "certificates"
+MANAGED_CERTIFICATES_RELATION_NAME = "managed-certificates"
+SELF_SIGNED_CERTIFICATES_RELATION_NAME = "self-signed-certificates"
+ACME_CERTIFICATES_RELATION_NAME = "acme-certificates"
 
 LOGGING_RELATION_NAME = "logging"
 METRICS_RELATION_NAME = "metrics"
@@ -64,6 +72,10 @@ WORKLOAD_DB_PATH = "/var/lib"
 
 CERTIFICATE_COMMON_NAME = "Notary Self Signed Certificate"
 SELF_SIGNED_CA_COMMON_NAME = "Notary Self Signed Root CA"
+CHARM_CA_COMMON_NAME = "Notary Charm CA"
+CHARM_ACME_SERVER_NAME = "charm-managed"
+CERTIFICATE_MODES_SECRET_LABEL = "Notary Certificate Request Modes"
+ACME_CONFIG_OPTIONS = ("email", "server", "plugin", "plugin-config-secret-id")
 NOTARY_LOGIN_SECRET_LABEL = "Notary Login Details"
 SEND_ACCESS_CA_CERT_RELATION_NAME = "send-access-ca-certificate"
 CLUSTER_JOIN_SECRET_LABEL = "Notary Cluster Join Tokens"
@@ -117,7 +129,9 @@ class NotaryCharm(ops.CharmBase):
     def __init__(self, framework: ops.Framework):
         super().__init__(framework)
         self._stored.set_default(restart_required=False)
+        self._stored.set_default(acme_config_hash="")
         self._pebble_unavailable = False
+        self._certificate_signing_error: str | None = None
         self.port = 2111
         self.access_csr = CertificateRequestAttributes(
             common_name="Notary",
@@ -131,8 +145,14 @@ class NotaryCharm(ops.CharmBase):
         self.unit.set_ports(self.port)
         self.container = self.unit.get_container("notary")
         self.s3_requirer = S3Requirer(self, S3_RELATION_NAME)
-        self.tls = TLSCertificatesProvidesV4(
-            self, relationship_name=CERTIFICATE_PROVIDER_RELATION_NAME
+        self.tls_managed = TLSCertificatesProvidesV4(
+            self, relationship_name=MANAGED_CERTIFICATES_RELATION_NAME
+        )
+        self.tls_self_signed = TLSCertificatesProvidesV4(
+            self, relationship_name=SELF_SIGNED_CERTIFICATES_RELATION_NAME
+        )
+        self.tls_acme = TLSCertificatesProvidesV4(
+            self, relationship_name=ACME_CERTIFICATES_RELATION_NAME
         )
 
         # Observability
@@ -174,9 +194,15 @@ class NotaryCharm(ops.CharmBase):
             for event in [
                 self.on["notary"].pebble_ready,
                 self.on["notary"].pebble_custom_notice,
-                self.on["certificates"].relation_changed,
-                self.on["certificates"].relation_departed,
-                self.on["certificates"].relation_broken,
+                self.on[MANAGED_CERTIFICATES_RELATION_NAME].relation_changed,
+                self.on[MANAGED_CERTIFICATES_RELATION_NAME].relation_departed,
+                self.on[MANAGED_CERTIFICATES_RELATION_NAME].relation_broken,
+                self.on[SELF_SIGNED_CERTIFICATES_RELATION_NAME].relation_changed,
+                self.on[SELF_SIGNED_CERTIFICATES_RELATION_NAME].relation_departed,
+                self.on[SELF_SIGNED_CERTIFICATES_RELATION_NAME].relation_broken,
+                self.on[ACME_CERTIFICATES_RELATION_NAME].relation_changed,
+                self.on[ACME_CERTIFICATES_RELATION_NAME].relation_departed,
+                self.on[ACME_CERTIFICATES_RELATION_NAME].relation_broken,
                 self.on["access-certificates"].relation_changed,
                 self.on["access-certificates"].relation_departed,
                 self.on["access-certificates"].relation_broken,
@@ -425,6 +451,8 @@ class NotaryCharm(ops.CharmBase):
             return
         try:
             self._collect_status(event)
+            if self._certificate_signing_error:
+                event.add_status(ops.BlockedStatus(self._certificate_signing_error))
         except (TimeoutError, ops.pebble.ConnectionError) as error:
             logger.warning("Workload container temporarily unavailable: %s", error)
             event.add_status(ops.WaitingStatus("waiting for workload container"))
@@ -454,7 +482,22 @@ class NotaryCharm(ops.CharmBase):
             except ValueError as error:
                 event.add_status(ops.BlockedStatus(str(error)))
                 return
+        if acme_status := self._acme_config_status():
+            event.add_status(acme_status)
+            return
         event.add_status(ops.ActiveStatus())
+
+    def _acme_config_status(self) -> ops.StatusBase | None:
+        """Return a blocked status when the acme-certificates integration is misconfigured."""
+        if not self.model.relations.get(ACME_CERTIFICATES_RELATION_NAME):
+            return None
+        if missing := self._missing_acme_config_options():
+            return ops.BlockedStatus(f"missing ACME configuration: {', '.join(missing)}")
+        if self._acme_plugin_env_vars(refresh=False) is None:
+            return ops.BlockedStatus(
+                "plugin-config-secret-id does not reference a readable secret"
+            )
+        return None
 
     ## Configure Dependencies ##
     def _configure_pebble_plan(self):
@@ -607,29 +650,136 @@ class NotaryCharm(ops.CharmBase):
         return login_response.token
 
     def _configure_certificate_requirers(self):
-        """Get all CSR's and certs from databags and Notary, compare differences and update requirers if needed."""
+        """Distribute certificates to requirers of each signing mode.
+
+        The integration the requirer relates to selects the signing posture:
+        managed CSRs stay pending in Notary, self-signed CSRs are signed by the
+        charm-provisioned CA, and ACME CSRs are signed by the configured provider.
+        """
         login_details = self._get_or_create_admin_account()
         if not login_details or not login_details.token:
             logger.warning("couldn't distribute certificates: not logged in")
             return
-        databag_csrs = self.tls.get_certificate_requests()
-        notary_certificate_requests = self.client.list_certificate_requests(login_details.token)
+        token = login_details.token
+        self._sync_certificate_requirers(self.tls_managed, token)
+        if self.model.relations.get(SELF_SIGNED_CERTIFICATES_RELATION_NAME):
+            self._sync_certificate_requirers(
+                self.tls_self_signed, token, signing=self._self_signed_signing_callback(token)
+            )
+        if self.model.relations.get(ACME_CERTIFICATES_RELATION_NAME):
+            self._sync_certificate_requirers(
+                self.tls_acme, token, signing=self._acme_signing_callback(token)
+            )
+
+    def _sync_certificate_requirers(
+        self,
+        tls: TLSCertificatesProvidesV4,
+        token: str,
+        signing: Callable[[int], bool] | None = None,
+    ):
+        """Forward requirer CSRs to Notary, sign them if requested, and sync results back.
+
+        Args:
+            tls: The tls-certificates provider for the integration being reconciled.
+            token: A valid Notary admin token.
+            signing: Optional callback that signs the Notary certificate request with the
+                given ID and returns whether signing succeeded. When None, CSRs are only
+                forwarded and remain pending in Notary.
+        """
+        databag_csrs = tls.get_certificate_requests()
+        if not databag_csrs:
+            return
+        notary_certificate_requests = self.client.list_certificate_requests(token)
+        signed_requests = False
+        accepted_requests = []
         for request in databag_csrs:
-            notary_certificate_requests_with_matching_csr = [
-                notary_certificate_request
-                for notary_certificate_request in notary_certificate_requests
-                if notary_certificate_request.csr == str(request.certificate_signing_request)
-            ]
-            if len(notary_certificate_requests_with_matching_csr) < 1:
-                self.client.create_certificate_request(
-                    str(request.certificate_signing_request), login_details.token
-                )
+            matches = self._matching_notary_requests(notary_certificate_requests, request)
+            if request.is_ca:
+                self._set_request_error(tls, request, "CA certificate requests are not supported")
                 continue
-            assert len(notary_certificate_requests_with_matching_csr) < 2
-            request_notary_entry = notary_certificate_requests_with_matching_csr[0]
+            if not self._claim_certificate_request(tls, request, bool(matches)):
+                continue
+            accepted_requests.append(request)
+            if len(matches) < 1:
+                response = self.client.create_certificate_request(
+                    str(request.certificate_signing_request), token
+                )
+                if response and signing and signing(response.id):
+                    signed_requests = True
+                continue
+            assert len(matches) < 2
+            if signing and matches[0].status == "Outstanding" and signing(matches[0].id):
+                signed_requests = True
+        if signed_requests:
+            # Signing is synchronous upstream; refresh so certificates reach
+            # requirers in this hook instead of the next one.
+            notary_certificate_requests = self.client.list_certificate_requests(token)
+        self._push_notary_results_to_requirers(tls, accepted_requests, notary_certificate_requests)
+
+    def _claim_certificate_request(
+        self,
+        tls: TLSCertificatesProvidesV4,
+        request: RequirerCertificateRequest,
+        exists: bool,
+    ) -> bool:
+        """Persist endpoint ownership before forwarding a CSR to Notary."""
+        try:
+            secret = self.model.get_secret(label=CERTIFICATE_MODES_SECRET_LABEL)
+            modes = secret.get_content(refresh=True)
+        except ops.SecretNotFoundError:
+            secret = None
+            modes = {}
+        key = (
+            "csr-" + hashlib.sha256(str(request.certificate_signing_request).encode()).hexdigest()
+        )
+        owner = modes.get(key)
+        if owner is None and exists:
+            owner = MANAGED_CERTIFICATES_RELATION_NAME
+        if owner is not None and owner != tls.relationship_name:
+            self._set_request_error(
+                tls, request, "CSR belongs to another signing mode; generate a new CSR"
+            )
+            return False
+        if key not in modes:
+            modes[key] = tls.relationship_name
+            if secret is None:
+                self.app.add_secret(modes, label=CERTIFICATE_MODES_SECRET_LABEL)
+            else:
+                secret.set_content(modes)
+        return True
+
+    @staticmethod
+    def _set_request_error(
+        tls: TLSCertificatesProvidesV4, request: RequirerCertificateRequest, message: str
+    ) -> None:
+        """Reject an unsupported request without publishing an incorrect certificate."""
+        tls.set_relation_error(
+            ProviderCertificateError(
+                relation_id=request.relation_id,
+                certificate_signing_request=request.certificate_signing_request,
+                error=CertificateError(
+                    code=CertificateRequestErrorCode.OTHER,
+                    name="UNSUPPORTED_REQUEST",
+                    message=message,
+                ),
+            )
+        )
+
+    def _push_notary_results_to_requirers(
+        self,
+        tls: TLSCertificatesProvidesV4,
+        databag_csrs: list[RequirerCertificateRequest],
+        notary_certificate_requests: list[CertificateRequest],
+    ):
+        """Sync Notary certificate request statuses and certificates back to requirers."""
+        for request in databag_csrs:
+            matches = self._matching_notary_requests(notary_certificate_requests, request)
+            if len(matches) < 1:
+                continue
+            request_notary_entry = matches[0]
             certificates_provided_for_csr = [
                 csr
-                for csr in self.tls.get_issued_certificates(request.relation_id)
+                for csr in tls.get_issued_certificates(request.relation_id)
                 if str(csr.certificate_signing_request) == request_notary_entry.csr
             ]
             if (
@@ -639,7 +789,7 @@ class NotaryCharm(ops.CharmBase):
             ):
                 if len(certificates_provided_for_csr) > 0:
                     last_provided_certificate = certificates_provided_for_csr[0]
-                    self.tls.set_relation_certificate(
+                    tls.set_relation_certificate(
                         ProviderCertificate(
                             relation_id=request.relation_id,
                             certificate_signing_request=request.certificate_signing_request,
@@ -662,7 +812,7 @@ class NotaryCharm(ops.CharmBase):
                 and certificate_chain[0] != certificates_provided_for_csr[0].certificate
             )
             if certificate_not_provided_yet or certificate_provided_is_stale:
-                self.tls.set_relation_certificate(
+                tls.set_relation_certificate(
                     ProviderCertificate(
                         relation_id=request.relation_id,
                         certificate_signing_request=request.certificate_signing_request,
@@ -671,6 +821,155 @@ class NotaryCharm(ops.CharmBase):
                         chain=certificate_chain,
                     )
                 )
+
+    @staticmethod
+    def _matching_notary_requests(
+        notary_certificate_requests: list[CertificateRequest],
+        request: RequirerCertificateRequest,
+    ) -> list[CertificateRequest]:
+        """Return Notary certificate requests matching a requirer's CSR."""
+        return [
+            notary_certificate_request
+            for notary_certificate_request in notary_certificate_requests
+            if notary_certificate_request.csr == str(request.certificate_signing_request)
+        ]
+
+    def _self_signed_signing_callback(self, token: str) -> Callable[[int], bool] | None:
+        """Return a callback signing CSRs with the charm-provisioned CA, if available."""
+        ca_id = self._get_or_provision_certificate_authority(token)
+        if ca_id is None:
+            return None
+        return lambda csr_id: self.client.sign_certificate_request(
+            csr_id, token, certificate_authority_id=str(ca_id)
+        )
+
+    def _get_or_provision_certificate_authority(self, token: str) -> int | None:
+        """Reuse a valid enabled CA, replacing expired CAs but respecting explicit disabling."""
+        disabled = False
+        for ca in self.client.list_certificate_authorities(token):
+            if not ca.certificate:
+                continue
+            with suppress(TLSCertificatesError):
+                certificate = Certificate.from_string(ca.certificate)
+                if certificate.common_name != CHARM_CA_COMMON_NAME:
+                    continue
+                if not ca.enabled:
+                    disabled = True
+                    continue
+                if (
+                    certificate.validity_start_time
+                    <= datetime.now(timezone.utc)
+                    < certificate.expiry_time
+                ):
+                    return ca.id
+        if disabled:
+            self._certificate_signing_error = "Notary Charm CA is disabled; enable it in Notary"
+            return None
+        response = self.client.create_certificate_authority(CHARM_CA_COMMON_NAME, token)
+        if not response:
+            logger.error("failed to provision a certificate authority in Notary")
+            self._certificate_signing_error = (
+                "Failed to provision Notary Charm CA; check Notary logs"
+            )
+            return None
+        logger.info("Provisioned certificate authority in Notary (id %s)", response.id)
+        return response.id
+
+    def _acme_signing_callback(self, token: str) -> Callable[[int], bool] | None:
+        """Return a callback signing CSRs via the configured ACME provider, if available."""
+        acme_params = self._acme_server_params()
+        if not acme_params:
+            logger.warning(
+                "ACME certificates relation present but ACME configuration is incomplete"
+            )
+            return None
+        if not self._ensure_acme_server(acme_params, token):
+            return None
+        return lambda csr_id: self._sign_via_acme(csr_id, token)
+
+    def _sign_via_acme(self, csr_id: int, token: str) -> bool:
+        """Sign a CSR via ACME on the dqlite leader, the only node that may start orders."""
+        return self._cluster_leader_client(token).sign_certificate_request(
+            csr_id, token, signing_method="acme"
+        )
+
+    def _cluster_leader_client(self, token: str) -> Notary:
+        """Return a client connected to the dqlite leader's direct API address."""
+        members = self.client.list_cluster_members(token)
+        leader = next(
+            (member for member in members or [] if member.leader and member.address), None
+        )
+        if not leader:
+            return self.client
+        host = leader.address.rsplit(":", 1)[0]
+        return Notary(f"https://{host}:{self.port}", self._ca_certificate_path)
+
+    def _ensure_acme_server(self, params: ACMEServerParams, token: str) -> int | None:
+        """Create or update the charm-managed ACME server in Notary and make it active."""
+        desired_hash = hashlib.sha256(
+            json.dumps(asdict(params), sort_keys=True).encode()
+        ).hexdigest()
+        servers = self.client.list_acme_servers(token)
+        existing = next((server for server in servers if server.name == params.name), None)
+        if (
+            existing
+            and existing.active
+            and existing.directory_url == params.directory_url
+            and existing.email == params.email
+            and existing.dns_provider == params.dns_provider
+            and set(existing.env_var_keys) == set(params.env_vars)
+            and self._stored.acme_config_hash == desired_hash
+        ):
+            return existing.id
+        if existing:
+            if not self.client.update_acme_server(existing.id, params, token):
+                return None
+            server_id = existing.id
+        else:
+            created = self.client.create_acme_server(params, token)
+            if not created:
+                return None
+            server_id = created.id
+        if not existing or not existing.active:
+            if not self.client.set_active_acme_server(server_id, token):
+                return None
+        self._stored.acme_config_hash = desired_hash
+        return server_id
+
+    def _acme_server_params(self) -> ACMEServerParams | None:
+        """Resolve the ACME server configuration from charm config and the credentials secret."""
+        if self._missing_acme_config_options():
+            return None
+        env_vars = self._acme_plugin_env_vars()
+        if env_vars is None:
+            return None
+        return ACMEServerParams(
+            name=CHARM_ACME_SERVER_NAME,
+            directory_url=str(self.model.config["server"]),
+            email=str(self.model.config["email"]),
+            dns_provider=str(self.model.config["plugin"]),
+            env_vars=env_vars,
+        )
+
+    def _missing_acme_config_options(self) -> list[str]:
+        """Return the ACME config options that are not set."""
+        return [option for option in ACME_CONFIG_OPTIONS if not self.model.config.get(option)]
+
+    def _acme_plugin_env_vars(self, refresh: bool = True) -> dict[str, str] | None:
+        """Resolve the plugin credentials secret into LEGO environment variable names.
+
+        Secret keys are lowercase with dashes (e.g. route53's secret-access-key)
+        and map to the environment variables expected by the LEGO DNS provider
+        (e.g. AWS_SECRET_ACCESS_KEY).
+        """
+        secret_id = str(self.model.config.get("plugin-config-secret-id", ""))
+        try:
+            secret = self.model.get_secret(id=secret_id)
+            content = secret.get_content(refresh=True) if refresh else secret.peek_content()
+        except ops.ModelError as error:
+            logger.error("couldn't read the plugin config secret: %s", error)
+            return None
+        return {key.upper().replace("-", "_"): value for key, value in content.items()}
 
     def _send_ca_cert(self):
         """Send the CA certificate in the workload to all requirers of the certificate-transfer interface."""
