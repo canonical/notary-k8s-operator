@@ -34,6 +34,9 @@ jobs:
       - name: Fetch charmcraft libs
         run: charmcraft fetch-libs
 
+      - name: Check shared modules are synchronized
+        run: make check-shared-modules
+
       - uses: canonical/identity-credentials-workflows/.github/actions/code-quality@v3.1.6
         with:
           python-enabled: "true"

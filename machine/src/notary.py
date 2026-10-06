@@ -1,0 +1,581 @@
+# Copyright 2024 Canonical Ltd.
+# See LICENSE file for licensing details.
+
+"""Library for interacting with the Notary application."""
+
+import json
+import logging
+from dataclasses import asdict, dataclass
+from typing import List, Literal, Optional
+
+import requests
+
+logger = logging.getLogger(__name__)
+
+
+class NotaryClientError(Exception):
+    """Base class for exceptions raised by the Notary client."""
+
+
+@dataclass
+class Response:
+    """Response from Notary."""
+
+    result: any  # type: ignore[reportGeneralTypeIssues]
+    error: str
+
+
+@dataclass
+class StatusResponse:
+    """Response from Notary when checking the status."""
+
+    initialized: bool
+    version: str
+
+
+@dataclass
+class LoginParams:
+    """Parameters to login to Notary."""
+
+    email: str
+    password: str
+
+
+@dataclass
+class LoginResponse:
+    """Response from Notary when logging in."""
+
+    token: str
+
+
+@dataclass
+class CreateUserParams:
+    """Parameters to create a user in Notary."""
+
+    email: str
+    password: str
+
+
+@dataclass
+class CreateUserResponse:
+    """Response from Notary when creating a user."""
+
+    id: int
+
+
+@dataclass
+class CreateCertificateRequestParams:
+    """Parameters to create a certificate request in Notary."""
+
+    csr: str
+
+
+@dataclass
+class CreateCertificateRequestResponse:
+    """Response from Notary when creating a certificate request."""
+
+    id: int
+
+
+@dataclass
+class DeleteCertificateRequestResponse:
+    """Response from Notary when deleting a certificate request."""
+
+    id: int
+
+
+@dataclass
+class CreateCertificateParams:
+    """Parameters to create a certificate in Notary."""
+
+    certificate: str
+
+
+@dataclass
+class CreateCertificateResponse:
+    """Response from Notary when creating a certificate."""
+
+    id: int
+
+
+@dataclass(frozen=True)
+class CertificateRequest:
+    """The certificate request that's stored in Notary."""
+
+    id: int
+    csr: str
+    certificate_chain: list[str]
+    status: Literal["Outstanding", "Rejected", "Revoked", "Active"]
+
+
+@dataclass(frozen=True)
+class ClusterMember:
+    """A member of the Notary dqlite cluster."""
+
+    name: str
+    id: int
+    address: str
+    api_address: str
+    role: str
+    leader: bool
+
+
+@dataclass
+class CreateClusterMemberParams:
+    """Parameters to create a cluster join token."""
+
+    server_name: str
+
+
+@dataclass
+class CreateClusterMemberResponse:
+    """Response from Notary when creating a cluster join token."""
+
+    server_name: str
+    join_token: str
+
+
+@dataclass(frozen=True)
+class CertificateAuthority:
+    """A certificate authority that's stored in Notary."""
+
+    id: int
+    enabled: bool
+    certificate: str
+    csr: str
+    crl: str
+
+
+@dataclass
+class CreateCertificateAuthorityParams:
+    """Parameters to create a certificate authority in Notary."""
+
+    self_signed: bool
+    common_name: str
+
+
+@dataclass
+class CreateCertificateAuthorityResponse:
+    """Response from Notary when creating a certificate authority."""
+
+    id: int
+
+
+@dataclass
+class SignCertificateRequestParams:
+    """Parameters to sign a certificate request in Notary."""
+
+    certificate_authority_id: str
+    signing_method: str
+
+
+@dataclass(frozen=True)
+class ACMEServer:
+    """An ACME server that's stored in Notary."""
+
+    id: int
+    name: str
+    directory_url: str
+    email: str
+    dns_provider: str
+    active: bool
+    env_var_keys: List[str]
+
+
+@dataclass
+class ACMEServerParams:
+    """Parameters to create or update an ACME server in Notary."""
+
+    name: str
+    directory_url: str
+    email: str
+    dns_provider: str
+    env_vars: dict[str, str]
+
+
+class Notary:
+    """Class to interact with Notary."""
+
+    API_VERSION = "v1"
+    COOKIE_NAME = "user_token"
+
+    def __init__(self, url: str, ca_path: str | bool = False) -> None:
+        """Initialize a client for interacting with Notary.
+
+        Args:
+            url: the endpoint that notary is listening on e.g https://notary.com:8000
+            ca_path: the file path that contains the ca cert that notary uses for https communication
+        """
+        self.url = url
+        self.ca_path = ca_path
+        self.session = requests.Session()
+
+    def _make_request(
+        self,
+        method: str,
+        endpoint: str,
+        token: Optional[str] = None,
+        data: any = None,  # type: ignore[reportGeneralTypeIssues]
+    ) -> Response | None:
+        """Make an HTTP request and handle common error patterns."""
+        headers = {"Authorization": f"Bearer {token}"} if token else {}
+        if token:
+            # Notary 1.0 authenticates API requests through the session cookie,
+            # not the Authorization header.
+            headers["Cookie"] = f"{self.COOKIE_NAME}={token}"
+        url = f"{self.url}{endpoint}"
+        try:
+            req = self.session.request(
+                method=method,
+                url=url,
+                verify=self.ca_path,
+                headers=headers,
+                json=data,
+                timeout=(5, 60),
+            )
+        except requests.RequestException as e:
+            logger.error("HTTP request failed: %s", e)
+            return None
+        except OSError as e:
+            logger.error("couldn't complete HTTP request: %s", e)
+            return None
+
+        response = self._get_result(req)
+        try:
+            req.raise_for_status()
+        except requests.HTTPError:
+            logger.error(
+                "Request failed: code %s, %s",
+                req.status_code,
+                response.error if response else "unknown",
+            )
+            return None
+        return response
+
+    def _get_result(self, req: requests.Response) -> Response | None:
+        """Return the response from a request."""
+        try:
+            response = req.json()
+        except json.JSONDecodeError:
+            return None
+        return Response(
+            result=response.get("data"),
+            error=response.get("message"),
+        )
+
+    def is_initialized(self) -> bool:
+        """Return if the Notary server is initialized."""
+        status = self.get_status()
+        return status.initialized if status else False
+
+    def is_api_available(self) -> bool:
+        """Return if the Notary server is reachable."""
+        status = self.get_status()
+        return status is not None
+
+    def get_version(self) -> str | None:
+        """Return the version of the Notary server."""
+        status = self.get_status()
+        return status.version if status else None
+
+    def login(self, email: str, password: str) -> LoginResponse | None:
+        """Login to notary by sending the email and password and return a Token."""
+        login_params = LoginParams(email=email, password=password)
+        url = f"{self.url}/login"
+        try:
+            req = self.session.request(
+                method="POST",
+                url=url,
+                verify=self.ca_path,
+                json=asdict(login_params),
+                timeout=(5, 60),
+            )
+        except requests.RequestException as e:
+            logger.error("HTTP request failed: %s", e)
+            return None
+        except OSError as e:
+            logger.error("couldn't complete HTTP request: %s", e)
+            return None
+
+        try:
+            req.raise_for_status()
+        except requests.HTTPError:
+            logger.error("Login failed: code %s", req.status_code)
+            return None
+
+        token = req.cookies.get(self.COOKIE_NAME)
+
+        if not token:
+            logger.error("Login failed: session cookie not found in response")
+            return None
+
+        return LoginResponse(token=token)
+
+    def token_is_valid(self, token: str) -> bool:
+        """Return if the token is still valid by attempting to connect to an endpoint."""
+        response = self._make_request("GET", f"/api/{self.API_VERSION}/accounts/me", token=token)
+        return response is not None
+
+    def get_status(self) -> StatusResponse | None:
+        """Return if the Notary server is initialized."""
+        response = self._make_request("GET", "/status")
+        if response and response.result:
+            return StatusResponse(
+                initialized=response.result.get("initialized"),
+                version=response.result.get("version"),
+            )
+        return None
+
+    def create_first_user(self, email: str, password: str) -> CreateUserResponse | None:
+        """Create the first admin user."""
+        create_user_params = CreateUserParams(email=email, password=password)
+        response = self._make_request(
+            "POST", f"/api/{self.API_VERSION}/accounts", data=asdict(create_user_params)
+        )
+        if response and response.result:
+            return CreateUserResponse(
+                id=response.result.get("id"),
+            )
+        return None
+
+    def list_certificate_requests(self, token: str) -> List[CertificateRequest]:
+        """Get all certificate requests from Notary."""
+        response = self._make_request(
+            "GET", f"/api/{self.API_VERSION}/certificate_requests", token=token
+        )
+        if response and response.result:
+            return [
+                CertificateRequest(
+                    id=cert.get("id"),
+                    csr=cert.get("csr"),
+                    certificate_chain=serialize(cert.get("certificate_chain")),
+                    status=cert.get("status"),
+                )
+                for cert in response.result
+            ]
+        return []
+
+    def create_certificate_request(
+        self, csr: str, token: str
+    ) -> CreateCertificateRequestResponse | None:
+        """Create a new certificate request in Notary."""
+        create_certificate_request_params = CreateCertificateRequestParams(csr=csr)
+        response = self._make_request(
+            "POST",
+            f"/api/{self.API_VERSION}/certificate_requests",
+            token=token,
+            data=asdict(create_certificate_request_params),
+        )
+        if response and response.result:
+            return CreateCertificateRequestResponse(
+                id=response.result.get("id"),
+            )
+        return None
+
+    def create_certificate_from_csr(
+        self, csr: str, cert_chain: list[str], token: str
+    ) -> CreateCertificateResponse | None:
+        """Create a certificate from a CSR in Notary."""
+        certificate_requests = self.list_certificate_requests(token=token)
+        if not certificate_requests:
+            logger.error("couldn't list certificate requests")
+            return None
+        csr_ids = [cert for cert in certificate_requests if cert.csr == csr]
+        if len(csr_ids) != 1:
+            logger.error("given CSR not found in Notary")
+            return None
+        create_certificate_params = CreateCertificateParams(certificate="\n".join(cert_chain))
+        response = self._make_request(
+            "POST",
+            f"/api/{self.API_VERSION}/certificate_requests/{csr_ids[0].id}/certificate",
+            token=token,
+            data=asdict(create_certificate_params),
+        )
+        if response and response.result:
+            return CreateCertificateResponse(
+                id=response.result.get("id"),
+            )
+        return None
+
+    def list_cluster_members(self, token: str) -> Optional[List[ClusterMember]]:
+        """Get all cluster members from Notary.
+
+        Returns:
+            The list of cluster members, or None if the request failed. Callers must
+            treat None as "unknown" and avoid destructive actions such as pruning members.
+        """
+        response = self._make_request(
+            "GET", f"/api/{self.API_VERSION}/cluster/members", token=token
+        )
+        if response is None:
+            return None
+        if not response.result:
+            return []
+        return [
+            ClusterMember(
+                name=member.get("name"),
+                id=member.get("id"),
+                address=member.get("address"),
+                api_address=member.get("api_address"),
+                role=member.get("role"),
+                leader=member.get("leader"),
+            )
+            for member in response.result
+        ]
+
+    def create_cluster_join_token(
+        self, server_name: str, token: str
+    ) -> CreateClusterMemberResponse | None:
+        """Create a one-time join token for a new cluster member."""
+        params = CreateClusterMemberParams(server_name=server_name)
+        response = self._make_request(
+            "POST",
+            f"/api/{self.API_VERSION}/cluster/members",
+            token=token,
+            data=asdict(params),
+        )
+        if response and response.result:
+            return CreateClusterMemberResponse(
+                server_name=response.result.get("server_name"),
+                join_token=response.result.get("join_token"),
+            )
+        return None
+
+    def delete_cluster_member(self, name_or_address: str, token: str) -> bool:
+        """Remove a cluster member by name or dqlite address. Return True on success."""
+        response = self._make_request(
+            "DELETE",
+            f"/api/{self.API_VERSION}/cluster/members/{name_or_address}",
+            token=token,
+        )
+        return response is not None
+
+    def list_certificate_authorities(self, token: str) -> List[CertificateAuthority]:
+        """Get all certificate authorities from Notary."""
+        response = self._make_request(
+            "GET", f"/api/{self.API_VERSION}/certificate_authorities", token=token
+        )
+        if response and response.result:
+            return [
+                CertificateAuthority(
+                    id=ca.get("id"),
+                    enabled=ca.get("enabled"),
+                    certificate=ca.get("certificate"),
+                    csr=ca.get("csr"),
+                    crl=ca.get("crl"),
+                )
+                for ca in response.result
+            ]
+        return []
+
+    def create_certificate_authority(
+        self, common_name: str, token: str
+    ) -> CreateCertificateAuthorityResponse | None:
+        """Create a self-signed certificate authority in Notary."""
+        params = CreateCertificateAuthorityParams(self_signed=True, common_name=common_name)
+        response = self._make_request(
+            "POST",
+            f"/api/{self.API_VERSION}/certificate_authorities",
+            token=token,
+            data=asdict(params),
+        )
+        if response and response.result:
+            return CreateCertificateAuthorityResponse(id=response.result.get("id"))
+        return None
+
+    def sign_certificate_request(
+        self,
+        csr_id: int,
+        token: str,
+        certificate_authority_id: str = "",
+        signing_method: str = "ca",
+    ) -> bool:
+        """Sign a certificate request in Notary using a CA or ACME. Return True on success."""
+        params = SignCertificateRequestParams(
+            certificate_authority_id=certificate_authority_id,
+            signing_method=signing_method,
+        )
+        response = self._make_request(
+            "POST",
+            f"/api/{self.API_VERSION}/certificate_requests/{csr_id}/sign",
+            token=token,
+            data=asdict(params),
+        )
+        return response is not None
+
+    def list_acme_servers(self, token: str) -> List[ACMEServer]:
+        """Get all ACME servers from Notary."""
+        response = self._make_request("GET", f"/api/{self.API_VERSION}/acme_servers", token=token)
+        if response and response.result:
+            return [
+                ACMEServer(
+                    id=server.get("id"),
+                    name=server.get("name"),
+                    directory_url=server.get("directory_url"),
+                    email=server.get("email"),
+                    dns_provider=server.get("dns_provider"),
+                    active=server.get("active"),
+                    env_var_keys=server.get("env_var_keys") or [],
+                )
+                for server in response.result
+            ]
+        return []
+
+    def create_acme_server(self, params: ACMEServerParams, token: str) -> ACMEServer | None:
+        """Create an ACME server in Notary."""
+        response = self._make_request(
+            "POST",
+            f"/api/{self.API_VERSION}/acme_servers",
+            token=token,
+            data=asdict(params),
+        )
+        return self._acme_server_from_response(response)
+
+    def update_acme_server(
+        self, server_id: int, params: ACMEServerParams, token: str
+    ) -> ACMEServer | None:
+        """Update an ACME server in Notary."""
+        response = self._make_request(
+            "PUT",
+            f"/api/{self.API_VERSION}/acme_servers/{server_id}",
+            token=token,
+            data=asdict(params),
+        )
+        return self._acme_server_from_response(response)
+
+    def set_active_acme_server(self, server_id: int, token: str) -> bool:
+        """Mark an ACME server as the active one in Notary. Return True on success."""
+        response = self._make_request(
+            "PUT",
+            f"/api/{self.API_VERSION}/acme_servers/{server_id}/active",
+            token=token,
+        )
+        return response is not None
+
+    @staticmethod
+    def _acme_server_from_response(response: Response | None) -> ACMEServer | None:
+        """Build an ACMEServer from an API response."""
+        if response and response.result:
+            return ACMEServer(
+                id=response.result.get("id"),
+                name=response.result.get("name"),
+                directory_url=response.result.get("directory_url"),
+                email=response.result.get("email"),
+                dns_provider=response.result.get("dns_provider"),
+                active=response.result.get("active"),
+                env_var_keys=response.result.get("env_var_keys") or [],
+            )
+        return None
+
+
+def serialize(pem_string: str) -> list[str]:
+    """Process the certificate entry coming from Notary.
+
+    Returns:
+        a list of pem strings, an empty string or a rejected string.
+    """
+    return [
+        cert.strip() + "-----END CERTIFICATE-----"
+        for cert in pem_string.split("-----END CERTIFICATE-----")
+        if cert.strip()
+    ]
