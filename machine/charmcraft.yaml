@@ -56,11 +56,6 @@ config:
     plugin-config-secret-id:
       description: ID of the Juju secret containing the selected LEGO plugin credentials.
       type: string
-    snap-channel:
-      description: Snap channel used to install and refresh Notary.
-      type: string
-      default: latest/edge
-
 provides:
   managed-certificates:
     interface: tls-certificates

@@ -84,6 +84,7 @@ CLUSTER_JOIN_SECRET_LABEL = "Notary Cluster Join Tokens"
 SELF_SIGNED_CA_SECRET_LABEL = "Notary Self Signed CA"
 CLUSTER_DATA_VERSION_KEY = "cluster_data_version"
 DQLITE_PORT = 9000
+NOTARY_SNAP_CHANNEL = "1/stable"
 
 # How long the leader waits for a unit to join before re-minting its one-time
 # join token. Tokens expire upstream after 3 hours and are spent by failed join
@@ -132,7 +133,7 @@ class NotaryCharm(ops.CharmBase):
         super().__init__(framework)
         self._stored.set_default(restart_required=False)
         self._stored.set_default(acme_config_hash="")
-        self._stored.set_default(snap_channel="")
+        self._stored.set_default(installed_snap_channel="")
         self._workload_unavailable = False
         self._certificate_signing_error: str | None = None
         self.port = 2111
@@ -494,12 +495,11 @@ class NotaryCharm(ops.CharmBase):
 
     ## Configure Dependencies ##
     def _ensure_workload(self) -> None:
-        """Install or refresh Notary only when its configured channel changes."""
-        channel = str(self.model.config["snap-channel"])
-        if channel == self._stored.snap_channel:
+        """Install or refresh Notary from the supported stable channel."""
+        if self._stored.installed_snap_channel == NOTARY_SNAP_CHANNEL:
             return
-        self.workload.install(channel)
-        self._stored.snap_channel = channel
+        self.workload.install(NOTARY_SNAP_CHANNEL)
+        self._stored.installed_snap_channel = NOTARY_SNAP_CHANNEL
 
     def _configure_notary_config_file(self) -> None:
         """Push changed config and record whether the workload needs a restart."""

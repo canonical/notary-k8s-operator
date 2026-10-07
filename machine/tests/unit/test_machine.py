@@ -4,15 +4,15 @@ from unittest.mock import ANY, Mock, patch
 from machine import NotarySnap
 
 
-def test_install_uses_requested_snap_channel_without_starting_daemon():
+def test_install_uses_stable_channel_without_starting_daemon():
     notary_snap = Mock()
     notary_snap.state = Mock()
     cache = {"notary": notary_snap}
 
     with patch("machine.snap.SnapCache", return_value=cache):
-        NotarySnap().install("latest/edge")
+        NotarySnap().install("1/stable")
 
-    notary_snap.ensure.assert_called_once_with(ANY, channel="latest/edge")
+    notary_snap.ensure.assert_called_once_with(ANY, channel="1/stable")
     notary_snap.start.assert_not_called()
 
 
