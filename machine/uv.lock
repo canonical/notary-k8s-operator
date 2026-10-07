@@ -904,6 +904,7 @@ dependencies = [
     { name = "opentelemetry-exporter-otlp-proto-http" },
     { name = "ops" },
     { name = "psutil" },
+    { name = "requests" },
     { name = "rpds-py" },
 ]
 
@@ -931,6 +932,7 @@ requires-dist = [
     { name = "opentelemetry-exporter-otlp-proto-http" },
     { name = "ops" },
     { name = "psutil" },
+    { name = "requests" },
     { name = "rpds-py", specifier = "==0.30.0" },
 ]
 

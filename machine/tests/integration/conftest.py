@@ -1,9 +1,25 @@
 import subprocess
 from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 
 import jubilant
 import pytest
+
+JUJU_DEFAULT_INTERVAL = "5m"
+JUJU_FAST_INTERVAL = "10s"
+
+
+@contextmanager
+def fast_forward(juju: jubilant.Juju, interval: str = JUJU_FAST_INTERVAL) -> Iterator[None]:
+    """Temporarily shorten the model update-status interval."""
+    config = juju.model_config() or {}
+    previous = config.get("update-status-hook-interval", JUJU_DEFAULT_INTERVAL)
+    juju.model_config({"update-status-hook-interval": interval})
+    try:
+        yield
+    finally:
+        juju.model_config({"update-status-hook-interval": previous})
 
 
 def pytest_addoption(parser: pytest.Parser) -> None:
@@ -27,8 +43,11 @@ def juju(request: pytest.FixtureRequest) -> Iterator[jubilant.Juju]:
         yield model
         if request.session.testsfailed:
             Path("juju-debug.log").write_text(model.debug_log())
-            subprocess.run(
-                ["juju-crashdump", "-s", "-m", str(model.model), "-o", "."],
-                check=False,
-                timeout=120,
-            )
+            try:
+                subprocess.run(
+                    ["juju-crashdump", "-s", "-m", str(model.model), "-o", "."],
+                    check=False,
+                    timeout=120,
+                )
+            except FileNotFoundError:
+                pass
