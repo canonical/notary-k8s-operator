@@ -1,0 +1,88 @@
+[project]
+name = "notary-operator"
+version = "1.0.0"
+requires-python = ">=3.10"
+
+dependencies = [
+    "boto3",
+    "cosl",
+    "cryptography",
+    "ops",
+    "psutil",
+    "opentelemetry-exporter-otlp-proto-http",
+    "rpds-py==0.30.0",
+    "requests",
+    "charmlibs-interfaces-tls-certificates>=1.12.0",
+    "charmlibs-interfaces-certificate-transfer>=1.0.0",
+]
+
+[dependency-groups]
+test = [
+    "coverage[toml]",
+    "juju",
+    "pytest",
+    "ops[testing]",
+    "jubilant>=1.14.0",
+]
+dev = [
+    "codespell",
+    "pyright",
+    "ruff",
+]
+
+# Testing tools configuration
+[tool.coverage.run]
+branch = true
+
+[tool.coverage.report]
+show_missing = true
+
+[tool.pytest.ini_options]
+minversion = "6.0"
+log_cli_level = "INFO"
+
+# Linting tools configuration
+[tool.ruff]
+line-length = 99
+extend-exclude = ["__pycache__", "*.egg_info"]
+
+[tool.ruff.lint]
+select = [
+    "E",
+    "W",
+    "F",
+    "C",
+    "N",
+    "D",
+    "I001",
+    "G001",  # Logging statement uses str.format
+    "G002",  # Logging statement uses %
+    "G003",  # Logging statement uses +
+    "G004",  # Logging statement uses an f-string
+]
+ignore = ["E501", "D107"]
+extend-ignore = [
+    "D203",
+    "D204",
+    "D213",
+    "D215",
+    "D400",
+    "D404",
+    "D406",
+    "D407",
+    "D408",
+    "D409",
+    "D413",
+]
+per-file-ignores = {"tests/*" = ["D100","D101","D102","D103","D104"]}
+
+[tool.ruff.lint.mccabe]
+max-complexity = 10
+
+[tool.codespell]
+skip = ["build","lib","venv","icon.svg",".tox",".git",".mypy_cache",".ruff_cache",".coverage"]
+
+[tool.pyright]
+include = ["src/**.py"]
+extraPaths = ["src", "lib"]
+reportMissingParameterType = true

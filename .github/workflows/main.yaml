@@ -2,68 +2,105 @@ name: CI
 
 on:
   pull_request:
-    branches:
-      - main
+    branches: ["main", "release-*"]
   push:
-    branches:
-      - main
+    branches: ["main", "release-*"]
 
 concurrency:
-  group: ${{ github.ref == 'refs/heads/main' && format('ignore-main-{0}', github.run_id) || format('{0}-{1}', github.workflow, github.ref_name) }}
+  group: ${{ (github.ref == 'refs/heads/main' && format('ignore-main-{0}', github.run_id)) || (contains(github.ref, 'refs/heads/release-') && format('ignore-release-{0}', github.run_id)) || format('{0}-{1}', github.workflow, github.ref_name) }}
   cancel-in-progress: true
 
 permissions:
   contents: read
 
 jobs:
-  quality:
-    name: Quality
+  ensure-shared-code-in-sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Check shared modules are synchronized
+        run: make check-shared-modules
+
+  changes:
+    name: Detect changed paths
+    runs-on: ubuntu-latest
+    outputs:
+      k8s: ${{ steps.filter.outputs.k8s }}
+      machine: ${{ steps.filter.outputs.machine }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dorny/paths-filter@v4
+        id: filter
+        with:
+          filters: |
+            k8s:
+              - 'k8s/**'
+              - '.github/workflows/integration-test.yaml'
+            machine:
+              - 'machine/**'
+              - 'src/notary.py'
+              - 'src/s3.py'
+              - 'src/utils.py'
+              - 'src/grafana_dashboards/notary.json'
+              - '.github/workflows/machine-integration-test.yaml'
+
+  k8s-quality:
+    name: K8s Quality
+    needs: [ensure-shared-code-in-sync]
     runs-on: ubuntu-26.04
     steps:
       - uses: canonical/identity-credentials-workflows/.github/actions/prepare@v3.1.6
         with:
           workflows-ref: v3.1.3
-
       - uses: canonical/identity-credentials-workflows/.github/actions/setup-toolchains@v3.1.6
         with:
+          working-directory: k8s
           toolchains: python
-
       - name: Install charmcraft
         run: sudo snap install charmcraft --classic
-
       - name: Fetch charmcraft libs
+        working-directory: k8s
         run: charmcraft fetch-libs
-
       - uses: canonical/identity-credentials-workflows/.github/actions/code-quality@v3.1.6
         with:
+          working-directory: k8s
           python-enabled: "true"
-
       - uses: canonical/identity-credentials-workflows/.github/actions/unit-test@v3.1.6
         with:
+          working-directory: k8s
           python-enabled: "true"
-  lint-grafana:
+
+  k8s-grafana-dashboard-lint-report:
     uses: canonical/identity-credentials-workflows/.github/workflows/grafana-dashboard-lint-report.yaml@v3.1.6
-
-  build:
-    needs:
-      - quality
-    uses: canonical/identity-credentials-workflows/.github/workflows/charm-build.yaml@v3.1.6
     with:
-      path: ""
-      fetch-libs: true
+      path: ./k8s/src/grafana_dashboards/*
 
-  integration-test:
+  k8s-build:
+    needs: [k8s-quality]
+    uses: canonical/identity-credentials-workflows/.github/workflows/charm-build.yaml@v3.1.6
+    secrets: inherit
+    with:
+      path: k8s
+      fetch-libs: true
+      artifact-suffix: k8s
+
+  k8s-integration-test:
+    if: github.event_name == 'push' || needs.changes.outputs.k8s == 'true'
     needs:
-      - build
+      - changes
+      - k8s-build
     uses: ./.github/workflows/integration-test.yaml
     with:
-      artifacts-key: ${{ needs.build.outputs.artifacts-key }}
-      charm-paths: ${{ needs.build.outputs.charm-paths }}
-  publish-charm:
+      path: k8s
+      artifacts-key: ${{ needs.k8s-build.outputs.artifacts-key }}
+      charm-paths: ${{ needs.k8s-build.outputs.charm-paths }}
+
+  k8s-publish-charm:
+    name: Publish K8s Charm
     needs:
-      - quality
-      - integration-test
-      - build
+      - k8s-quality
+      - k8s-integration-test
+      - k8s-build
     if: ${{ github.ref_name == 'main' || startsWith(github.ref_name, 'release-') }}
     permissions:
       contents: write
@@ -71,6 +108,77 @@ jobs:
     secrets:
       CHARMCRAFT_AUTH: ${{ secrets.CHARMCRAFT_AUTH }}
     with:
-      destination_channel: 0/edge
-      artifacts-key: ${{ needs.build.outputs.artifacts-key }}
-      charm-paths: ${{ needs.build.outputs.charm-paths }}
+      destination_channel: 1/edge
+      path: k8s
+      artifacts-key: ${{ needs.k8s-build.outputs.artifacts-key }}
+      charm-paths: ${{ needs.k8s-build.outputs.charm-paths }}
+      tag-prefix: k8s
+
+  machine-quality:
+    name: Machine Quality
+    needs: [ensure-shared-code-in-sync]
+    runs-on: ubuntu-26.04
+    steps:
+      - uses: canonical/identity-credentials-workflows/.github/actions/prepare@v3.1.6
+        with:
+          workflows-ref: v3.1.3
+      - uses: canonical/identity-credentials-workflows/.github/actions/setup-toolchains@v3.1.6
+        with:
+          working-directory: machine
+          toolchains: python
+      - name: Install charmcraft
+        run: sudo snap install charmcraft --classic
+      - name: Fetch charmcraft libs
+        working-directory: machine
+        run: charmcraft fetch-libs
+      - uses: canonical/identity-credentials-workflows/.github/actions/code-quality@v3.1.6
+        with:
+          working-directory: machine
+          python-enabled: "true"
+      - uses: canonical/identity-credentials-workflows/.github/actions/unit-test@v3.1.6
+        with:
+          working-directory: machine
+          python-enabled: "true"
+
+  machine-grafana-dashboard-lint-report:
+    uses: canonical/identity-credentials-workflows/.github/workflows/grafana-dashboard-lint-report.yaml@v3.1.6
+    with:
+      path: ./machine/src/grafana_dashboards/*
+
+  machine-build:
+    needs: [machine-quality]
+    uses: canonical/identity-credentials-workflows/.github/workflows/charm-build.yaml@v3.1.6
+    secrets: inherit
+    with:
+      path: machine
+      fetch-libs: true
+      artifact-suffix: machine
+
+  machine-integration-test:
+    if: github.event_name == 'push' || needs.changes.outputs.machine == 'true'
+    needs:
+      - changes
+      - machine-build
+    uses: ./.github/workflows/machine-integration-test.yaml
+    with:
+      path: machine
+      artifacts-key: ${{ needs.machine-build.outputs.artifacts-key }}
+
+  machine-publish-charm:
+    name: Publish Machine Charm
+    needs:
+      - machine-quality
+      - machine-integration-test
+      - machine-build
+    if: ${{ github.ref_name == 'main' || startsWith(github.ref_name, 'release-') }}
+    permissions:
+      contents: write
+    uses: canonical/identity-credentials-workflows/.github/workflows/charm-publish.yaml@v3.1.6
+    secrets:
+      CHARMCRAFT_AUTH: ${{ secrets.CHARMCRAFT_AUTH }}
+    with:
+      destination_channel: 1/edge
+      path: machine
+      artifacts-key: ${{ needs.machine-build.outputs.artifacts-key }}
+      charm-paths: ${{ needs.machine-build.outputs.charm-paths }}
+      tag-prefix: machine

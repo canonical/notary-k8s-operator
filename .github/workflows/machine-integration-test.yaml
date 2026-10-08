@@ -1,0 +1,80 @@
+name: Machine Integration Tests
+
+on:
+  workflow_call:
+    inputs:
+      path:
+        description: Path to the machine charm root
+        required: true
+        type: string
+      artifacts-key:
+        description: Key used to download the built charm artifact
+        required: true
+        type: string
+
+jobs:
+  integration-matrix:
+    runs-on: ubuntu-latest
+    outputs:
+      suites: ${{ steps.suites.outputs.suites }}
+    steps:
+      - uses: actions/checkout@v7
+      - id: suites
+        working-directory: ${{ inputs.path }}
+        run: |
+          suites="$(find tests/integration -name 'test_*.py' -printf '%f\n' | jq -r -ncR '[inputs]')"
+          echo "suites=$suites" >> "$GITHUB_OUTPUT"
+
+  integration-tests:
+    needs: [integration-matrix]
+    runs-on: [self-hosted, linux, X64, large, noble]
+    strategy:
+      fail-fast: false
+      matrix:
+        suite: ${{ fromJSON(needs.integration-matrix.outputs.suites) }}
+    steps:
+      - uses: actions/checkout@v7
+      - name: Setup operator environment
+        uses: charmed-kubernetes/actions-operator@main
+        with:
+          juju-channel: 3.6/stable
+          provider: lxd
+          lxd-channel: 5.21/stable
+      - name: Install UV and Tox
+        run: |
+          pipx uninstall tox
+          sudo snap install astral-uv --classic
+          uv tool install tox --with tox-uv --force
+      - name: Fetch charm under test
+        uses: actions/download-artifact@v8
+        with:
+          name: ${{ inputs.artifacts-key }}
+          path: ${{ inputs.path }}/built
+      - name: Get charm path
+        id: charm-path
+        working-directory: ${{ inputs.path }}
+        run: echo "charm_path=$(find built -name '*.charm' -print -quit)" >> "$GITHUB_OUTPUT"
+      - name: Run integration tests
+        working-directory: ${{ inputs.path }}
+        run: tox -e integration -- --charm_path=${{ steps.charm-path.outputs.charm_path }} -k "${{ matrix.suite }}"
+      - name: Archive charmcraft logs
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: machine-charmcraft-logs-${{ matrix.suite }}
+          path: /home/runner/.local/state/charmcraft/log/*.log
+          if-no-files-found: ignore
+      - name: Archive Juju crashdump
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: machine-juju-crashdump-${{ matrix.suite }}
+          path: ${{ inputs.path }}/juju-crashdump-*.tar.xz
+          if-no-files-found: ignore
+      - name: Archive Juju debug log
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: machine-juju-debug-log-${{ matrix.suite }}
+          path: ${{ inputs.path }}/juju-debug.log
+          if-no-files-found: ignore

@@ -10,21 +10,27 @@ on:
           - edge -> beta
           - beta -> candidate
           - candidate -> stable
+      charm:
+        type: choice
+        description: Charm to promote
+        options:
+          - k8s
+          - machine
 
 
 env:
   PROMOTE_FROM: ${{ inputs.promotion == 'edge -> beta' && 'edge' || inputs.promotion == 'beta -> candidate' && 'beta' || inputs.promotion == 'candidate -> stable' && 'candidate' || '' }}
   PROMOTE_TO: ${{ inputs.promotion == 'edge -> beta' && 'beta' || inputs.promotion == 'beta -> candidate' && 'candidate' || inputs.promotion == 'candidate -> stable' && 'stable' || '' }}
-  TRACK: "0" # This also needs to be updated in the scan job below
+  TRACK: "1" # This also needs to be updated in the scan job below
 
 jobs:
   scan:
     name: Secscan
     uses: canonical/identity-credentials-workflows/.github/workflows/charm-secscan.yaml@v3.1.6
     with:
-      charm: manual-tls-certificates
+      charm: ${{ inputs.charm == 'k8s' && 'notary-k8s' || inputs.charm == 'machine' && 'notary' || '' }}
       # We have to compute the channel here again because we can't pass env variables to a reusable workflow
-      track: "0"
+      track: "1"
       channel: ${{ inputs.promotion == 'edge -> beta' && 'edge' || inputs.promotion == 'beta -> candidate' && 'beta' || inputs.promotion == 'candidate -> stable' && 'candidate' || '' }}
       arch: amd64
       create-issue: ${{ inputs.promotion == 'candidate -> stable' || inputs.promotion == 'beta -> candidate' }}
@@ -37,9 +43,11 @@ jobs:
       - name: Promote Charm
         uses: canonical/charming-actions/release-charm@2.7.0
         with:
+          charm-path: ${{ inputs.charm == 'k8s' && './k8s' || './machine' }}
           base-channel: 24.04
           credentials: ${{ secrets.CHARMCRAFT_AUTH }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
           destination-channel: ${{ env.TRACK }}/${{ env.PROMOTE_TO }}
           origin-channel: ${{ env.TRACK }}/${{ env.PROMOTE_FROM }}
           charmcraft-channel: latest/stable
+          tag-prefix: ${{ inputs.charm }}
