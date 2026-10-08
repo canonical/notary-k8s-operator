@@ -1,6 +1,9 @@
 # Contributing
 
-To make contributions to this charm, you'll need a working [development setup](https://juju.is/docs/sdk/dev-setup).
+To make contributions to either charm, you'll need a working [development setup](https://juju.is/docs/sdk/dev-setup).
+
+The Kubernetes charm is in `k8s/` and the machine charm is in `machine/`. Run the following
+commands from the directory for the charm you are changing. The examples below use `k8s/`.
 
 This project uses `uv`. You can install it on Ubuntu with:
 
@@ -11,6 +14,7 @@ sudo snap install --classic astral-uv
 You can create an environment for development with `uv`:
 
 ```shell
+cd k8s
 uv sync
 source .venv/bin/activate
 ```

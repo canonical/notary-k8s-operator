@@ -34,11 +34,7 @@ jobs:
         with:
           filters: |
             k8s:
-              - 'src/**'
-              - 'tests/integration/**'
-              - 'charmcraft.yaml'
-              - 'pyproject.toml'
-              - 'uv.lock'
+              - 'k8s/**'
               - '.github/workflows/integration-test.yaml'
             machine:
               - 'machine/**'
@@ -58,29 +54,33 @@ jobs:
           workflows-ref: v3.1.3
       - uses: canonical/identity-credentials-workflows/.github/actions/setup-toolchains@v3.1.6
         with:
+          working-directory: k8s
           toolchains: python
       - name: Install charmcraft
         run: sudo snap install charmcraft --classic
       - name: Fetch charmcraft libs
+        working-directory: k8s
         run: charmcraft fetch-libs
       - uses: canonical/identity-credentials-workflows/.github/actions/code-quality@v3.1.6
         with:
+          working-directory: k8s
           python-enabled: "true"
       - uses: canonical/identity-credentials-workflows/.github/actions/unit-test@v3.1.6
         with:
+          working-directory: k8s
           python-enabled: "true"
 
   k8s-grafana-dashboard-lint-report:
     uses: canonical/identity-credentials-workflows/.github/workflows/grafana-dashboard-lint-report.yaml@v3.1.6
     with:
-      path: ./src/grafana_dashboards/*
+      path: ./k8s/src/grafana_dashboards/*
 
   k8s-build:
     needs: [k8s-quality]
     uses: canonical/identity-credentials-workflows/.github/workflows/charm-build.yaml@v3.1.6
     secrets: inherit
     with:
-      path: ""
+      path: k8s
       fetch-libs: true
       artifact-suffix: k8s
 
@@ -91,6 +91,7 @@ jobs:
       - k8s-build
     uses: ./.github/workflows/integration-test.yaml
     with:
+      path: k8s
       artifacts-key: ${{ needs.k8s-build.outputs.artifacts-key }}
       charm-paths: ${{ needs.k8s-build.outputs.charm-paths }}
 
@@ -108,6 +109,7 @@ jobs:
       CHARMCRAFT_AUTH: ${{ secrets.CHARMCRAFT_AUTH }}
     with:
       destination_channel: 1/edge
+      path: k8s
       artifacts-key: ${{ needs.k8s-build.outputs.artifacts-key }}
       charm-paths: ${{ needs.k8s-build.outputs.charm-paths }}
       tag-prefix: k8s

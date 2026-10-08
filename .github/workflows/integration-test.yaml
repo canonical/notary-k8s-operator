@@ -3,6 +3,10 @@ name: Integration tests
 on:
   workflow_call:
     inputs:
+      path:
+        description: Path to the Kubernetes charm root
+        required: true
+        type: string
       artifacts-key:
         description: Key used to download the charm artifacts
         required: true
@@ -33,7 +37,7 @@ jobs:
         uses: actions/download-artifact@v8
         with:
           name: ${{ inputs.artifacts-key }}
-          path: built/
+          path: ${{ inputs.path }}/built/
 
       - name: Get Charm Under Test Path
         id: charm-path
@@ -41,6 +45,7 @@ jobs:
           CHARM_PATHS: ${{ inputs.charm-paths }}
           BASE: ${{ matrix.arch.base }}
           ARCH: ${{ matrix.arch.arch }}
+        working-directory: ${{ inputs.path }}
         run: |
           IFS=',' read -ra paths <<< "$CHARM_PATHS"
           for charm in "${paths[@]}"; do
@@ -89,6 +94,7 @@ jobs:
           uv tool install tox --with tox-uv --force
 
       - name: Run integration tests
+        working-directory: ${{ inputs.path }}
         run: |
           tox -e integration -- \
             --charm_path=${{ steps.charm-path.outputs.charm_path }}
@@ -105,7 +111,7 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: juju-crashdump-${{ strategy.job-index }}
-          path: juju-crashdump-*.tar.xz
+          path: ${{ inputs.path }}/juju-crashdump-*.tar.xz
 
       - name: Archive juju debug log
         if: failure()
@@ -113,6 +119,6 @@ jobs:
         with:
           name: juju-debug-log-${{ strategy.job-index }}
           path: |
-            juju-debug.log
-            juju-units.yaml
+            ${{ inputs.path }}/juju-debug.log
+            ${{ inputs.path }}/juju-units.yaml
           if-no-files-found: ignore

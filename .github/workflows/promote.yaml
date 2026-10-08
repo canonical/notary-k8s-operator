@@ -43,7 +43,7 @@ jobs:
       - name: Promote Charm
         uses: canonical/charming-actions/release-charm@2.7.0
         with:
-          charm-path: ${{ inputs.charm == 'k8s' && '.' || './machine' }}
+          charm-path: ${{ inputs.charm == 'k8s' && './k8s' || './machine' }}
           base-channel: 24.04
           credentials: ${{ secrets.CHARMCRAFT_AUTH }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
