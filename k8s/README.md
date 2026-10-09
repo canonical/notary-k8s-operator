@@ -6,6 +6,8 @@ The Notary operator for Kubernetes automates the lifecycle operations of Notary.
 
 [Get started with Notary K8s Operator.](https://charmhub.io/notary-k8s)
 
+For Terraform deployments, use the [Kubernetes module](terraform/README.md).
+
 ## Certificate Signing Modes
 
 - `managed-certificates` forwards requests for approval and signing through the Notary API or UI.
