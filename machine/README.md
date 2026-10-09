@@ -1,25 +1,15 @@
-# Notary Machine Charm
+# Notary Operator (Machine)
 
-This charm runs the Notary snap on Juju machines and provides the same certificate-signing
-relations as the Kubernetes charm.
+[Notary](https://github.com/canonical/notary/) is certificate management software.
+
+The machine charm runs the Notary snap and provides certificates through
+the [tls-certificates](https://charmhub.io/integrations/tls-certificates) integration.
+
+For guides, integrations, and configuration options, see
+[Notary on Charmhub](https://charmhub.io/notary).
 
 For Terraform deployments, use the [machine module](terraform/README.md).
 
-## Certificate Updates
-
-When a certificate request is signed outside the charm, for example through the Notary API or
-UI, the machine charm publishes the resulting certificate on its next Juju `update-status` hook.
-The default Juju interval is five minutes.
-
-The Kubernetes charm receives an immediate Pebble custom notice from Notary. That notification
-mechanism is unavailable to the machine charm because the Notary snap does not run under Pebble.
-The machine charm therefore polls Notary during `update-status` reconciliation.
-
-To reduce this delay for a model, set a shorter update-status interval:
-
-```bash
-juju model-config update-status-hook-interval=1m
-```
-
-Choose an interval that balances prompt certificate distribution with the additional API requests
-made by each unit.
+See [Manage certificates](../docs/how-to/manage-certificates.md) for signing modes
+and certificate distribution, and the [repository overview](../README.md) for
+workloads and community links.
