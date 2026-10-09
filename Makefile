@@ -1,6 +1,6 @@
 .PHONY: check-shared-modules
 
-SHARED_MODULES := notary.py s3.py utils.py grafana_dashboards/notary.json
+SHARED_MODULES := notary.py s3.py utils.py grafana_dashboards/notary.json prometheus_alert_rules/certificate_expiry.rules
 
 check-shared-modules:
 	@for module in $(SHARED_MODULES); do \

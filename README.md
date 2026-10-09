@@ -5,6 +5,9 @@ This repository contains two Juju charms for [Notary](https://github.com/canonic
 - [`k8s/`](k8s/README.md): the Kubernetes charm, published as `notary-k8s`.
 - [`machine/`](machine/README.md): the machine charm, published as `notary`.
 
+See the [certificate-expiry alerts reference](docs/reference/certificate-expiry-alerts.md)
+for alert thresholds and limitations.
+
 See [CONTRIBUTING.md](CONTRIBUTING.md) for development and test instructions.# Notary Operator (Kubernetes)
 
 [Notary](https://github.com/canonical/notary/) is a certificate management software. Use it to manage certificate requests in your organization.

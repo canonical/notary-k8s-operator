@@ -1,0 +1,58 @@
+groups:
+  - name: notary_certificate_expiry
+    rules:
+      - alert: NotaryCertificateValidity65Percent
+        expr: |
+          (certificate_not_after_timestamp_seconds - time() > 0)
+          and
+          ((time() - certificate_not_before_timestamp_seconds)
+            / (certificate_not_after_timestamp_seconds - certificate_not_before_timestamp_seconds) >= 0.65)
+          and
+          ((time() - certificate_not_before_timestamp_seconds)
+            / (certificate_not_after_timestamp_seconds - certificate_not_before_timestamp_seconds) < 0.90)
+          and
+          (certificate_not_after_timestamp_seconds - certificate_not_before_timestamp_seconds > 0)
+        labels:
+          severity: warning
+        annotations:
+          summary: 'Certificate request {{ $labels.csr_id }} has consumed 65-90% of its validity'
+          description: 'The certificate recorded in Notary expires in {{ $value | humanizeDuration }}. Check its replacement and the certificate used by the service; this does not confirm a renewal failure.'
+      - alert: NotaryCertificateValidity90Percent
+        expr: |
+          (certificate_not_after_timestamp_seconds - time() > 0)
+          and
+          ((time() - certificate_not_before_timestamp_seconds)
+            / (certificate_not_after_timestamp_seconds - certificate_not_before_timestamp_seconds) >= 0.90)
+          and
+          ((time() - certificate_not_before_timestamp_seconds)
+            / (certificate_not_after_timestamp_seconds - certificate_not_before_timestamp_seconds) < 0.95)
+          and
+          (certificate_not_after_timestamp_seconds - certificate_not_before_timestamp_seconds > 0)
+        labels:
+          severity: critical
+        annotations:
+          summary: 'Certificate request {{ $labels.csr_id }} has consumed 90-95% of its validity'
+          description: 'The certificate recorded in Notary expires in {{ $value | humanizeDuration }}. Urgently check its replacement and the certificate used by the service; this does not confirm a renewal failure.'
+      - alert: NotaryCertificateValidity95Percent
+        expr: |
+          (certificate_not_after_timestamp_seconds - time() > 0)
+          and
+          ((time() - certificate_not_before_timestamp_seconds)
+            / (certificate_not_after_timestamp_seconds - certificate_not_before_timestamp_seconds) >= 0.95)
+          and
+          (certificate_not_after_timestamp_seconds - certificate_not_before_timestamp_seconds > 0)
+        labels:
+          severity: critical
+        annotations:
+          summary: 'Certificate request {{ $labels.csr_id }} has consumed at least 95% of its validity'
+          description: 'The certificate recorded in Notary expires in {{ $value | humanizeDuration }}. Check its replacement and the certificate used by the service immediately; this does not confirm a renewal failure.'
+      - alert: NotaryCertificateExpired
+        expr: |
+          (time() - certificate_not_after_timestamp_seconds >= 0)
+          and
+          (certificate_not_after_timestamp_seconds - certificate_not_before_timestamp_seconds > 0)
+        labels:
+          severity: critical
+        annotations:
+          summary: 'Certificate request {{ $labels.csr_id }} has expired'
+          description: 'The certificate recorded in Notary expired {{ $value | humanizeDuration }} ago. Check its replacement and the certificate used by the service immediately; this does not confirm a renewal failure.'
