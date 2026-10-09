@@ -3,6 +3,8 @@
 This charm runs the Notary snap on Juju machines and provides the same certificate-signing
 relations as the Kubernetes charm.
 
+For Terraform deployments, use the [machine module](terraform/README.md).
+
 ## Certificate Updates
 
 When a certificate request is signed outside the charm, for example through the Notary API or
