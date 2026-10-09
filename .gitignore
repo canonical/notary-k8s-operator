@@ -6,6 +6,12 @@ __pycache__/
 # C extensions
 *.so
 
+.terraform/
+.terraform.lock.hcl
+*.tfstate
+*.tfstate.*
+*.tfplan
+
 # Charmcraft - lib files are fetched with `charmcraft fetch-libs`
 lib/
 
