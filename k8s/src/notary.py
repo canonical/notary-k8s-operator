@@ -216,6 +216,7 @@ class Notary:
         endpoint: str,
         token: Optional[str] = None,
         data: any = None,  # type: ignore[reportGeneralTypeIssues]
+        raise_on_error: bool = False,
     ) -> Response | None:
         """Make an HTTP request and handle common error patterns."""
         headers = {"Authorization": f"Bearer {token}"} if token else {}
@@ -234,22 +235,28 @@ class Notary:
                 timeout=(5, 60),
             )
         except requests.RequestException as e:
-            logger.error("HTTP request failed: %s", e)
+            logger.error("HTTP request failed (%s)", type(e).__name__)
+            if raise_on_error:
+                raise NotaryClientError(f"Unable to contact Notary ({type(e).__name__})") from e
             return None
         except OSError as e:
-            logger.error("couldn't complete HTTP request: %s", e)
+            logger.error("Couldn't complete HTTP request (%s)", type(e).__name__)
+            if raise_on_error:
+                raise NotaryClientError(f"Unable to contact Notary ({type(e).__name__})") from e
             return None
 
         response = self._get_result(req)
         try:
             req.raise_for_status()
-        except requests.HTTPError:
-            logger.error(
-                "Request failed: code %s, %s",
-                req.status_code,
-                response.error if response else "unknown",
-            )
+        except requests.HTTPError as error:
+            logger.error("Request failed: HTTP %s", req.status_code)
+            if raise_on_error:
+                raise NotaryClientError(
+                    response.error if response and response.error else f"HTTP {req.status_code}"
+                ) from error
             return None
+        if raise_on_error and response is None:
+            raise NotaryClientError("Invalid response from Notary")
         return response
 
     def _get_result(self, req: requests.Response) -> Response | None:
@@ -291,10 +298,10 @@ class Notary:
                 timeout=(5, 60),
             )
         except requests.RequestException as e:
-            logger.error("HTTP request failed: %s", e)
+            logger.error("HTTP request failed (%s)", type(e).__name__)
             return None
         except OSError as e:
-            logger.error("couldn't complete HTTP request: %s", e)
+            logger.error("Couldn't complete HTTP request (%s)", type(e).__name__)
             return None
 
         try:
@@ -365,6 +372,7 @@ class Notary:
             f"/api/{self.API_VERSION}/certificate_requests",
             token=token,
             data=asdict(create_certificate_request_params),
+            raise_on_error=True,
         )
         if response and response.result:
             return CreateCertificateRequestResponse(
@@ -500,6 +508,7 @@ class Notary:
             f"/api/{self.API_VERSION}/certificate_requests/{csr_id}/sign",
             token=token,
             data=asdict(params),
+            raise_on_error=True,
         )
         return response is not None
 

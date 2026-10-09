@@ -49,7 +49,7 @@ from charms.traefik_k8s.v2.ingress import IngressPerAppRequirer
 
 from backup import DATABASE_PATH, BackupError, BackupManager
 from machine import NotarySnap, WorkloadError, WorkloadPathError
-from notary import ACMEServerParams, CertificateRequest, ClusterMember, Notary
+from notary import ACMEServerParams, CertificateRequest, ClusterMember, Notary, NotaryClientError
 from s3 import S3Parameters
 from utils import is_valid_hostname
 
@@ -660,8 +660,8 @@ class NotaryCharm(ops.CharmBase):
             tls: The tls-certificates provider for the integration being reconciled.
             token: A valid Notary admin token.
             signing: Optional callback that signs the Notary certificate request with the
-                given ID and returns whether signing succeeded. When None, CSRs are only
-                forwarded and remain pending in Notary.
+                given ID and returns whether signing succeeded. When None, managed CSRs
+                remain pending; automatic requests receive a signer-unavailable error.
         """
         databag_csrs = tls.get_certificate_requests()
         if not databag_csrs:
@@ -678,20 +678,80 @@ class NotaryCharm(ops.CharmBase):
                 continue
             accepted_requests.append(request)
             if len(matches) < 1:
-                response = self.client.create_certificate_request(
-                    str(request.certificate_signing_request), token
-                )
-                if response and signing and signing(response.id):
-                    signed_requests = True
+                request_id = self._submit_requirer_request(tls, request, token)
+                if request_id is None:
+                    continue
+            elif len(matches) == 1 and matches[0].status == "Outstanding":
+                request_id = matches[0].id
+            else:
                 continue
-            assert len(matches) < 2
-            if signing and matches[0].status == "Outstanding" and signing(matches[0].id):
+            if self._sign_requirer_request(tls, request, request_id, signing):
                 signed_requests = True
         if signed_requests:
             # Signing is synchronous upstream; refresh so certificates reach
             # requirers in this hook instead of the next one.
             notary_certificate_requests = self.client.list_certificate_requests(token)
         self._push_notary_results_to_requirers(tls, accepted_requests, notary_certificate_requests)
+
+    def _submit_requirer_request(
+        self,
+        tls: TLSCertificatesProvidesV4,
+        request: RequirerCertificateRequest,
+        token: str,
+    ) -> int | None:
+        """Submit a CSR and publish the underlying failure on its relation."""
+        reason = "Notary returned no certificate request"
+        try:
+            response = self.client.create_certificate_request(
+                str(request.certificate_signing_request), token
+            )
+            if response:
+                return response.id
+        except NotaryClientError as error:
+            reason = str(error)
+        self._set_request_error(
+            tls,
+            request,
+            "Failed to submit certificate request to Notary",
+            name="REQUEST_SUBMISSION_FAILED",
+            reason=reason,
+        )
+        return None
+
+    def _sign_requirer_request(
+        self,
+        tls: TLSCertificatesProvidesV4,
+        request: RequirerCertificateRequest,
+        request_id: int,
+        signing: Callable[[int], bool] | None,
+    ) -> bool:
+        """Sign an automatic request or report why issuance could not complete."""
+        if signing is None:
+            if tls.relationship_name != MANAGED_CERTIFICATES_RELATION_NAME:
+                self._set_request_error(
+                    tls,
+                    request,
+                    "Automatic signing is unavailable",
+                    name="SIGNING_UNAVAILABLE",
+                    code=CertificateRequestErrorCode.SERVER_NOT_AVAILABLE,
+                    reason=self._certificate_signing_error
+                    or "Signing CA or ACME configuration is unavailable",
+                )
+            return False
+        reason = "Notary did not complete certificate signing"
+        try:
+            if signing(request_id):
+                return True
+        except NotaryClientError as error:
+            reason = str(error)
+        self._set_request_error(
+            tls,
+            request,
+            "Failed to sign certificate request in Notary",
+            name="SIGNING_FAILED",
+            reason=reason,
+        )
+        return False
 
     def _claim_certificate_request(
         self,
@@ -727,17 +787,24 @@ class NotaryCharm(ops.CharmBase):
 
     @staticmethod
     def _set_request_error(
-        tls: TLSCertificatesProvidesV4, request: RequirerCertificateRequest, message: str
+        tls: TLSCertificatesProvidesV4,
+        request: RequirerCertificateRequest,
+        message: str,
+        name: str = "UNSUPPORTED_REQUEST",
+        code: CertificateRequestErrorCode = CertificateRequestErrorCode.OTHER,
+        reason: str | None = None,
     ) -> None:
-        """Reject an unsupported request without publishing an incorrect certificate."""
+        """Publish a request error without retaining an unusable certificate."""
         tls.set_relation_error(
-            ProviderCertificateError(
+            provider_error=ProviderCertificateError(
                 relation_id=request.relation_id,
                 certificate_signing_request=request.certificate_signing_request,
                 error=CertificateError(
-                    code=CertificateRequestErrorCode.OTHER,
-                    name="UNSUPPORTED_REQUEST",
+                    code=code,
+                    name=name,
                     message=message,
+                    reason=reason,
+                    provider="notary",
                 ),
             )
         )
@@ -753,17 +820,34 @@ class NotaryCharm(ops.CharmBase):
             matches = self._matching_notary_requests(notary_certificate_requests, request)
             if len(matches) < 1:
                 continue
+            if len(matches) > 1:
+                self._set_request_error(
+                    tls,
+                    request,
+                    "Multiple Notary requests match this CSR; contact the Notary administrator",
+                    name="DUPLICATE_REQUEST",
+                )
+                continue
             request_notary_entry = matches[0]
+            if request_notary_entry.status in ("Rejected", "Revoked"):
+                self._set_request_error(
+                    tls,
+                    request,
+                    f"Certificate request was {request_notary_entry.status.lower()} in Notary; "
+                    "contact the Notary administrator",
+                    name=(
+                        "REQUEST_REJECTED"
+                        if request_notary_entry.status == "Rejected"
+                        else "CERTIFICATE_REVOKED"
+                    ),
+                )
+                continue
             certificates_provided_for_csr = [
                 csr
                 for csr in tls.get_issued_certificates(request.relation_id)
                 if str(csr.certificate_signing_request) == request_notary_entry.csr
             ]
-            if (
-                request_notary_entry.status == "Rejected"
-                or request_notary_entry.status == "Revoked"
-                or request_notary_entry.status == "Outstanding"
-            ):
+            if request_notary_entry.status == "Outstanding":
                 if len(certificates_provided_for_csr) > 0:
                     last_provided_certificate = certificates_provided_for_csr[0]
                     tls.set_relation_certificate(
