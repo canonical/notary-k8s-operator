@@ -7,8 +7,13 @@ on:
 
 jobs:
   scan:
+    strategy:
+      matrix:
+        path: [k8s, machine]
     permissions:
       security-events: write
       actions: read
       contents: read
     uses: canonical/identity-credentials-workflows/.github/workflows/uv-scan.yaml@v3.1.6
+    with:
+      path: ${{ matrix.path }}
