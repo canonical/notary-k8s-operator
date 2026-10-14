@@ -10,6 +10,10 @@ For guides, integrations, and configuration options, see
 
 For Terraform deployments, use the [Kubernetes module](terraform/README.md).
 
+Start with [Deploy Notary on Kubernetes](../docs/how-to/deploy-k8s.md).
+The [documentation index](../docs/index.md) separates Kubernetes and machine
+deployment guidance from shared operations.
+
 See [Manage certificates](../docs/how-to/manage-certificates.md) for signing modes
 and certificate distribution, and the [repository overview](../README.md) for
 workloads and community links.
