@@ -1,12 +1,31 @@
 # S3 storage for Notary backups
 
+This guide applies to both charms. Use the application name for your deployment
+in the commands below; the examples assume the default names.
+
+## Select your platform
+
+### Kubernetes (`notary-k8s`)
+
+```shell
+NOTARY_APP=notary-k8s
+```
+
+### Machine (`notary`)
+
+```shell
+NOTARY_APP=notary
+```
+
+## Configure S3 storage
+
 Relate Notary to an S3 integrator:
 
 ```shell
 juju deploy s3-integrator
 juju config s3-integrator endpoint=https://s3.example.com bucket=notary-backups region=us-east-1 path=notary
 juju run s3-integrator/leader sync-s3-credentials access-key=ACCESS_KEY secret-key=SECRET_KEY
-juju integrate notary-k8s:s3-parameters s3-integrator:s3-credentials
+juju integrate "${NOTARY_APP}:s3-parameters" s3-integrator:s3-credentials
 ```
 
 The credentials need permission to check the bucket and to upload, list, and
@@ -24,7 +43,7 @@ so rotation takes effect without restarting Notary.
 ## Create a backup
 
 ```shell
-juju run notary-k8s/leader create-backup
+juju run "${NOTARY_APP}/leader" create-backup
 ```
 
 Save the returned `backup-id`. Backups are stored beneath the S3 relation's `path`
@@ -46,7 +65,7 @@ any encryption keys alongside your disaster recovery procedures.
 ## List backups
 
 ```shell
-juju run notary-k8s/leader list-backups
+juju run "${NOTARY_APP}/leader" list-backups
 ```
 
 The `backup-ids` result is a JSON array of full object keys, suitable for passing
@@ -58,7 +77,7 @@ Notary workload is unavailable, and does not interrupt service.
 ## Restore a backup
 
 ```shell
-juju run notary-k8s/leader restore-backup backup-id=notary/notary-backup-EXAMPLE.tar.gz
+juju run "${NOTARY_APP}/leader" restore-backup backup-id=notary/notary-backup-EXAMPLE.tar.gz
 ```
 
 Use the exact key from `list-backups`, or an unprefixed Notary backup ID.
@@ -78,9 +97,15 @@ validates its archive paths and cluster identity before stopping Notary. It
 stages files with restrictive permissions and preserves the previous database
 until the restored service passes three consecutive database-backed status checks,
 two seconds apart. These checks require an initialized database. On failure it attempts to
-roll back and restart the original database. If rollback itself fails, the old
-database remains in `/var/lib/notary/database/.pre-restore-*`; inspect logs and
-recover it before retrying. A workload that was stopped before the action is started temporarily for
+roll back and restart the original database. If rollback itself fails, inspect
+logs and recover the old database before retrying. Its location depends on the platform:
+
+| Platform | Rollback directory |
+| --- | --- |
+| Kubernetes | `/var/lib/notary/database/.pre-restore-*` inside the Notary container |
+| Machine | `/var/snap/notary/common/notary/database/.pre-restore-*` on the machine |
+
+A workload that was stopped before the action is started temporarily for
 validation and stopped again afterward. After success, `restored` contains the backup ID.
 
 Ensure the admin credentials in the charm's Juju secret still match the restored
@@ -89,15 +114,18 @@ These actions require the dqlite-aware Notary CLI (`backup` and `restore` with
 `--db-path`); the older API-based backup CLI is incompatible. Allow free disk
 space for the downloaded archive, the restored database, and a rollback copy.
 
-## Integration test
+## Kubernetes integration test
 
 With a bootstrapped Juju Kubernetes controller and a pre-provisioned test bucket,
 set `S3_TEST_ENDPOINT`, `S3_TEST_BUCKET`, `S3_TEST_ACCESS_KEY`, and
-`S3_TEST_SECRET_KEY` (optionally `S3_TEST_REGION`), then run:
+`S3_TEST_SECRET_KEY` (optionally `S3_TEST_REGION`), then run from the repository root:
 
 ```shell
+cd k8s
 PYTHONPATH=lib:src uv run pytest tests/integration/test_backup.py --charm_path=/path/to/notary.charm
 ```
+
+This integration test targets the Kubernetes charm, not the machine charm.
 
 The endpoint must be reachable from the deployed charm, and the runner must be
 able to reach the Notary unit API. The test creates certificate requests before

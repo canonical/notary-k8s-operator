@@ -25,13 +25,20 @@ expose those values for drift detection. Manage credentials through the Juju sec
 
 ## Certificate updates
 
+### Kubernetes (`notary-k8s`)
+
+When a certificate request is signed outside the charm, for example through the
+Notary API or UI, Notary sends a Pebble custom notice to the Kubernetes charm.
+The charm publishes the resulting certificate when it handles that notice.
+
+### Machine (`notary`)
+
 When a certificate request is signed outside the charm, for example through the Notary API or
 UI, the machine charm publishes the resulting certificate on its next Juju `update-status` hook.
 The default Juju interval is five minutes.
 
-The Kubernetes charm receives an immediate Pebble custom notice from Notary. That notification
-mechanism is unavailable to the machine charm because the Notary snap does not run under Pebble.
-The machine charm therefore polls Notary during `update-status` reconciliation.
+The Notary snap does not run under Pebble, so the machine charm polls Notary
+during `update-status` reconciliation instead of receiving custom notices.
 
 To reduce this delay for a model, set a shorter update-status interval:
 

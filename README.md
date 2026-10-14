@@ -7,8 +7,11 @@ provide certificates through the `tls-certificates` integration.
 - [`k8s/`](k8s/README.md): the Kubernetes charm, published as `notary-k8s`.
 - [`machine/`](machine/README.md): the machine charm, published as `notary`.
 
-See the [certificate-expiry alerts reference](docs/reference/certificate-expiry-alerts.md)
-for alert thresholds and limitations.
+## Documentation
+
+- [Deploy on Kubernetes](docs/how-to/deploy-k8s.md) using `notary-k8s`.
+- [Deploy on machines](docs/how-to/deploy-machine.md) using `notary`.
+- [Notary Charms documentation](docs/index.md) for shared operations and reference.
 
 For more information, including guides, integrations, and configuration options,
 see the [Kubernetes charm](https://charmhub.io/notary-k8s) and
