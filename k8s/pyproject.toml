@@ -11,7 +11,7 @@ dependencies = [
     "opentelemetry-exporter-otlp-proto-http",
     "rpds-py==0.30.0",
     "charmlibs-interfaces-tls-certificates>=1.12.0",
-    "charmlibs-interfaces-certificate-transfer>=1.0.0",
+    "charmlibs-interfaces-certificate-transfer>=1.1.0",
 ]
 
 [dependency-groups]
