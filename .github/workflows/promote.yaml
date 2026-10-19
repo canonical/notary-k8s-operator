@@ -26,7 +26,7 @@ env:
 jobs:
   scan:
     name: Secscan
-    uses: canonical/identity-credentials-workflows/.github/workflows/charm-secscan.yaml@v3.1.6
+    uses: canonical/identity-credentials-workflows/.github/workflows/charm-secscan.yaml@v3.1.8
     with:
       charm: ${{ inputs.charm == 'k8s' && 'notary-k8s' || inputs.charm == 'machine' && 'notary' || '' }}
       # We have to compute the channel here again because we can't pass env variables to a reusable workflow
