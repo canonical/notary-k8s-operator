@@ -49,10 +49,10 @@ jobs:
     needs: [ensure-shared-code-in-sync]
     runs-on: ubuntu-26.04
     steps:
-      - uses: canonical/identity-credentials-workflows/.github/actions/prepare@v3.1.6
+      - uses: canonical/identity-credentials-workflows/.github/actions/prepare@v3.1.8
         with:
           workflows-ref: v3.1.3
-      - uses: canonical/identity-credentials-workflows/.github/actions/setup-toolchains@v3.1.6
+      - uses: canonical/identity-credentials-workflows/.github/actions/setup-toolchains@v3.1.8
         with:
           working-directory: k8s
           toolchains: python
@@ -61,23 +61,23 @@ jobs:
       - name: Fetch charmcraft libs
         working-directory: k8s
         run: charmcraft fetch-libs
-      - uses: canonical/identity-credentials-workflows/.github/actions/code-quality@v3.1.6
+      - uses: canonical/identity-credentials-workflows/.github/actions/code-quality@v3.1.8
         with:
           working-directory: k8s
           python-enabled: "true"
-      - uses: canonical/identity-credentials-workflows/.github/actions/unit-test@v3.1.6
+      - uses: canonical/identity-credentials-workflows/.github/actions/unit-test@v3.1.8
         with:
           working-directory: k8s
           python-enabled: "true"
 
   k8s-grafana-dashboard-lint-report:
-    uses: canonical/identity-credentials-workflows/.github/workflows/grafana-dashboard-lint-report.yaml@v3.1.6
+    uses: canonical/identity-credentials-workflows/.github/workflows/grafana-dashboard-lint-report.yaml@v3.1.8
     with:
       path: ./k8s/src/grafana_dashboards/*
 
   k8s-build:
     needs: [k8s-quality]
-    uses: canonical/identity-credentials-workflows/.github/workflows/charm-build.yaml@v3.1.6
+    uses: canonical/identity-credentials-workflows/.github/workflows/charm-build.yaml@v3.1.8
     secrets: inherit
     with:
       path: k8s
@@ -104,7 +104,7 @@ jobs:
     if: ${{ github.ref_name == 'main' || startsWith(github.ref_name, 'release-') }}
     permissions:
       contents: write
-    uses: canonical/identity-credentials-workflows/.github/workflows/charm-publish.yaml@v3.1.6
+    uses: canonical/identity-credentials-workflows/.github/workflows/charm-publish.yaml@v3.1.8
     secrets:
       CHARMCRAFT_AUTH: ${{ secrets.CHARMCRAFT_AUTH }}
     with:
@@ -119,10 +119,10 @@ jobs:
     needs: [ensure-shared-code-in-sync]
     runs-on: ubuntu-26.04
     steps:
-      - uses: canonical/identity-credentials-workflows/.github/actions/prepare@v3.1.6
+      - uses: canonical/identity-credentials-workflows/.github/actions/prepare@v3.1.8
         with:
           workflows-ref: v3.1.3
-      - uses: canonical/identity-credentials-workflows/.github/actions/setup-toolchains@v3.1.6
+      - uses: canonical/identity-credentials-workflows/.github/actions/setup-toolchains@v3.1.8
         with:
           working-directory: machine
           toolchains: python
@@ -131,23 +131,23 @@ jobs:
       - name: Fetch charmcraft libs
         working-directory: machine
         run: charmcraft fetch-libs
-      - uses: canonical/identity-credentials-workflows/.github/actions/code-quality@v3.1.6
+      - uses: canonical/identity-credentials-workflows/.github/actions/code-quality@v3.1.8
         with:
           working-directory: machine
           python-enabled: "true"
-      - uses: canonical/identity-credentials-workflows/.github/actions/unit-test@v3.1.6
+      - uses: canonical/identity-credentials-workflows/.github/actions/unit-test@v3.1.8
         with:
           working-directory: machine
           python-enabled: "true"
 
   machine-grafana-dashboard-lint-report:
-    uses: canonical/identity-credentials-workflows/.github/workflows/grafana-dashboard-lint-report.yaml@v3.1.6
+    uses: canonical/identity-credentials-workflows/.github/workflows/grafana-dashboard-lint-report.yaml@v3.1.8
     with:
       path: ./machine/src/grafana_dashboards/*
 
   machine-build:
     needs: [machine-quality]
-    uses: canonical/identity-credentials-workflows/.github/workflows/charm-build.yaml@v3.1.6
+    uses: canonical/identity-credentials-workflows/.github/workflows/charm-build.yaml@v3.1.8
     secrets: inherit
     with:
       path: machine
@@ -173,7 +173,7 @@ jobs:
     if: ${{ github.ref_name == 'main' || startsWith(github.ref_name, 'release-') }}
     permissions:
       contents: write
-    uses: canonical/identity-credentials-workflows/.github/workflows/charm-publish.yaml@v3.1.6
+    uses: canonical/identity-credentials-workflows/.github/workflows/charm-publish.yaml@v3.1.8
     secrets:
       CHARMCRAFT_AUTH: ${{ secrets.CHARMCRAFT_AUTH }}
     with:
