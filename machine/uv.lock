@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 5
 requires-python = ">=3.10"
 resolution-markers = [
     "python_full_version >= '3.14'",
@@ -278,29 +278,29 @@ wheels = [
 
 [[package]]
 name = "charmlibs-interfaces-certificate-transfer"
-version = "1.0.0"
+version = "1.1.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "ops" },
     { name = "pydantic" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/a8/4b/e815e2c9d8ad8e091b31301af54d1cc626bdaf4f25b6e60f33ed52cf7cd7/charmlibs_interfaces_certificate_transfer-1.0.0.tar.gz", hash = "sha256:53f230abb2b42e7c23929a2d99321b1f0e226f20595609105fbd0528fcc3cf24", size = 42167, upload-time = "2026-02-23T18:34:18.971Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/14/a7/3b221eb0afe89704c79ce1be6ce3975c64a93d0af5d427a7121fdff587ee/charmlibs_interfaces_certificate_transfer-1.1.0.tar.gz", hash = "sha256:eb12e6a802191116d45582f44a46488636b119a21add990c38f839b9ace6f7f0", size = 44863, upload-time = "2026-10-16T15:02:35.588Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/2c/bb/f5ed4a41c154723bd6ea4b983395d6db67d4a3c7dd87bde8ea6848159e63/charmlibs_interfaces_certificate_transfer-1.0.0-py3-none-any.whl", hash = "sha256:21cef05199a9efa459be43207e042be6792605b70e742d8b0fed6f09c0cb232d", size = 8435, upload-time = "2026-02-23T18:34:17.876Z" },
+    { url = "https://files.pythonhosted.org/packages/92/e7/d599686394b6a3d6518de69fb67c43cf19751517d566f526910b8ea0a0d3/charmlibs_interfaces_certificate_transfer-1.1.0-py3-none-any.whl", hash = "sha256:4f9e9c2eba4b0c8f7aabf0d2997a765f40188f0605bd334a76f81ccba7dd7f72", size = 9276, upload-time = "2026-10-16T15:02:34.16Z" },
 ]
 
 [[package]]
 name = "charmlibs-interfaces-tls-certificates"
-version = "1.12.0"
+version = "1.13.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "cryptography" },
     { name = "ops" },
     { name = "pydantic" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/82/e0/0a5fde26b3464cbc156f90ad253239c6e838dc6ebfdf4eae99f353256ae6/charmlibs_interfaces_tls_certificates-1.12.0.tar.gz", hash = "sha256:30ea1ca8cc69c7817415ec82612e519810b271d28314e43a4da416dd2c4570ff", size = 139288, upload-time = "2026-09-29T12:47:56.16Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/f8/a9/bd61c1da7fe60e1e703c57574a36f192f066859bf9dbc28559501b780955/charmlibs_interfaces_tls_certificates-1.13.0.tar.gz", hash = "sha256:2ad2aae496c772bfd895787165a0c92d57fb89534932363db40568632cf8d8ca", size = 142458, upload-time = "2026-11-04T16:31:08.896Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/0a/1e/75c263c0a76ec5a9f7ab769209ff5440fe98b689da88f7db1fc9a13f39be/charmlibs_interfaces_tls_certificates-1.12.0-py3-none-any.whl", hash = "sha256:6fcae560314aab1190e722fcb907bea15a01444c9755ed18ada18f23625814b1", size = 34545, upload-time = "2026-09-29T12:47:54.723Z" },
+    { url = "https://files.pythonhosted.org/packages/12/ed/95644279b9a2816e79725f2dc2d68ad2d456cf88455359639bb90a1e2218/charmlibs_interfaces_tls_certificates-1.13.0-py3-none-any.whl", hash = "sha256:384e3152fec3ac834e72df049313dd681cdbbdd4abeef2f23dba9ed1078107e4", size = 35712, upload-time = "2026-11-04T16:31:07.56Z" },
 ]
 
 [[package]]
@@ -925,8 +925,8 @@ test = [
 [package.metadata]
 requires-dist = [
     { name = "boto3" },
-    { name = "charmlibs-interfaces-certificate-transfer", specifier = ">=1.0.0" },
-    { name = "charmlibs-interfaces-tls-certificates", specifier = ">=1.12.0" },
+    { name = "charmlibs-interfaces-certificate-transfer", specifier = ">=1.1.0" },
+    { name = "charmlibs-interfaces-tls-certificates", specifier = ">=1.13.0" },
     { name = "cosl" },
     { name = "cryptography" },
     { name = "opentelemetry-exporter-otlp-proto-http" },
