@@ -5,7 +5,8 @@ requires-python = ">=3.10"
 
 dependencies = [
     "boto3",
-    "cosl",
+    # Temporarily use the last COSL release without DiskCache (GHSA-w8v5-vhqr-4h9v).
+    "cosl==1.10.1",
     "cryptography",
     "ops",
     "psutil",
