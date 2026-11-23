@@ -16,6 +16,12 @@ on:
         options:
           - k8s
           - machine
+      base:
+        type: choice
+        description: Ubuntu base to promote
+        options:
+          - "24.04"
+          - "26.04"
 
 
 env:
@@ -36,7 +42,7 @@ jobs:
       track: "1"
       channel: ${{ inputs.promotion == 'edge -> beta' && 'edge' || inputs.promotion == 'beta -> candidate' && 'beta' || inputs.promotion == 'candidate -> stable' && 'candidate' || '' }}
       arch: amd64
-      base: ubuntu@24.04
+      base: ubuntu@${{ inputs.base }}
       create-issue: ${{ inputs.promotion == 'candidate -> stable' || inputs.promotion == 'beta -> candidate' }}
       fail-on-cve: ${{ inputs.promotion != 'edge -> beta' }}
 
@@ -52,7 +58,7 @@ jobs:
         uses: canonical/charming-actions/release-charm@2.7.0
         with:
           charm-path: ${{ inputs.charm == 'k8s' && './k8s' || './machine' }}
-          base-channel: 24.04
+          base-channel: ${{ inputs.base }}
           credentials: ${{ secrets.CHARMCRAFT_AUTH }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
           destination-channel: ${{ env.TRACK }}/${{ env.PROMOTE_TO }}
