@@ -26,6 +26,9 @@ def pytest_addoption(parser: pytest.Parser) -> None:
     parser.addoption(
         "--charm_path", action="store", required=True, help="Path to the charm under test"
     )
+    parser.addoption(
+        "--base", action="store", default="ubuntu@24.04", help="Ubuntu base to deploy"
+    )
 
 
 @pytest.fixture(scope="session")
@@ -34,6 +37,11 @@ def charm_path(request: pytest.FixtureRequest) -> Path:
     if not path.exists():
         pytest.exit(f"The path specified for the charm under test does not exist: {path}")
     return path
+
+
+@pytest.fixture(scope="session")
+def base(request: pytest.FixtureRequest) -> str:
+    return str(request.config.getoption("--base"))
 
 
 @pytest.fixture(scope="module")

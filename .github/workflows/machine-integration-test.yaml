@@ -27,11 +27,17 @@ jobs:
 
   integration-tests:
     needs: [integration-matrix]
-    runs-on: [self-hosted, linux, X64, large, noble]
+    runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
       matrix:
         suite: ${{ fromJSON(needs.integration-matrix.outputs.suites) }}
+        base: ["24.04", "26.04"]
+        include:
+          - base: "24.04"
+            runner: [self-hosted, linux, X64, large, noble]
+          - base: "26.04"
+            runner: ubuntu-26.04
     steps:
       - uses: actions/checkout@v7
       - name: Setup operator environment
@@ -52,29 +58,42 @@ jobs:
           path: ${{ inputs.path }}/built
       - name: Get charm path
         id: charm-path
+        env:
+          BASE: ${{ matrix.base }}
         working-directory: ${{ inputs.path }}
-        run: echo "charm_path=$(find built -name '*.charm' -print -quit)" >> "$GITHUB_OUTPUT"
+        run: |
+          shopt -s nullglob
+          charms=(built/*"ubuntu@${BASE}-amd64.charm")
+          if [[ ${#charms[@]} -ne 1 ]]; then
+            echo "Expected exactly one charm artifact for ubuntu@${BASE}-amd64, found ${#charms[@]}" >&2
+            exit 1
+          fi
+          echo "charm_path=${charms[0]}" >> "$GITHUB_OUTPUT"
       - name: Run integration tests
         working-directory: ${{ inputs.path }}
-        run: tox -e integration -- --charm_path=${{ steps.charm-path.outputs.charm_path }} -k "${{ matrix.suite }}"
+        run: |
+          tox -e integration -- \
+            --charm_path=${{ steps.charm-path.outputs.charm_path }} \
+            --base=ubuntu@${{ matrix.base }} \
+            -k "${{ matrix.suite }}"
       - name: Archive charmcraft logs
         if: failure()
         uses: actions/upload-artifact@v7
         with:
-          name: machine-charmcraft-logs-${{ matrix.suite }}
+          name: machine-charmcraft-logs-${{ matrix.suite }}-${{ matrix.base }}
           path: /home/runner/.local/state/charmcraft/log/*.log
           if-no-files-found: ignore
       - name: Archive Juju crashdump
         if: failure()
         uses: actions/upload-artifact@v7
         with:
-          name: machine-juju-crashdump-${{ matrix.suite }}
+          name: machine-juju-crashdump-${{ matrix.suite }}-${{ matrix.base }}
           path: ${{ inputs.path }}/juju-crashdump-*.tar.xz
           if-no-files-found: ignore
       - name: Archive Juju debug log
         if: failure()
         uses: actions/upload-artifact@v7
         with:
-          name: machine-juju-debug-log-${{ matrix.suite }}
+          name: machine-juju-debug-log-${{ matrix.suite }}-${{ matrix.base }}
           path: ${{ inputs.path }}/juju-debug.log
           if-no-files-found: ignore
