@@ -21,9 +21,9 @@ TLS_REQUIRER_REVISION = 143
 
 
 @pytest.fixture(scope="module", autouse=True)
-def deploy_notary(juju: jubilant.Juju, charm_path: Path):
+def deploy_notary(juju: jubilant.Juju, charm_path: Path, base: str):
     """Deploy a ready Notary instance for the module's integration tests."""
-    juju.deploy(charm_path, trust=True)
+    juju.deploy(charm_path, base=base, trust=True)
     juju.wait(
         lambda status: jubilant.all_active(status, APP_NAME),
         error=lambda status: jubilant.any_error(status, APP_NAME),

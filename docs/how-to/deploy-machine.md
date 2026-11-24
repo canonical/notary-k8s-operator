@@ -7,7 +7,7 @@ snap. For a Juju Kubernetes model, follow
 ## Prerequisites
 
 - A bootstrapped Juju controller with access to a machine cloud.
-- A machine model selected with `juju switch`, able to provision Ubuntu 24.04
+- A machine model selected with `juju switch`, able to provision Ubuntu 24.04 or 26.04
   machines and install snaps from the Snap Store.
 
 ## Deploy
@@ -20,6 +20,8 @@ juju status --watch 5s
 Wait for the application to become active before integrating certificate
 requirers. This example uses the edge channel; check the
 [Charmhub listing](https://charmhub.io/notary) for available releases.
+To deploy on Ubuntu 26.04, use `--base ubuntu@26.04` once a release for that base
+is available in your chosen channel.
 
 ## Next steps
 
