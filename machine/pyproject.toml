@@ -6,15 +6,15 @@ requires-python = ">=3.10"
 dependencies = [
     "boto3",
     # Temporarily use the last COSL release without DiskCache (GHSA-w8v5-vhqr-4h9v).
-    "cosl==1.10.1",
+    "cosl==1.12.1",
     "cryptography",
     "ops",
     "psutil",
     "opentelemetry-exporter-otlp-proto-http",
     "rpds-py==0.30.0",
     "requests",
-    "charmlibs-interfaces-tls-certificates>=1.12.0",
-    "charmlibs-interfaces-certificate-transfer>=1.0.0",
+    "charmlibs-interfaces-tls-certificates>=1.13.0",
+    "charmlibs-interfaces-certificate-transfer>=1.1.1",
 ]
 
 [dependency-groups]
@@ -23,7 +23,7 @@ test = [
     "juju",
     "pytest",
     "ops[testing]",
-    "jubilant>=1.14.0",
+    "jubilant>=1.15.0",
 ]
 dev = [
     "codespell",
